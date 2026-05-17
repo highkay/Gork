@@ -258,17 +258,14 @@ async def create(
     # Console 模型路由 — 走 console.x.ai/v1/responses，输出转为 Responses API 格式
     # -------------------------------------------------------------------------
     if spec.is_console_chat():
-        from .console_responses import create as console_responses_create
-        return await console_responses_create(
+        from app.products.openai.console_chat import completions as console_completions
+        return await console_completions(
             model=model,
             messages=messages,
             stream=stream,
             emit_think=emit_think,
             temperature=temperature,
             top_p=top_p,
-            response_id=response_id,
-            reasoning_id=reasoning_id,
-            message_id=message_id,
         )
 
     # -------------------------------------------------------------------------
