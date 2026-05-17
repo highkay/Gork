@@ -125,9 +125,10 @@ async def create(
                         # content_part.added
                         yield format_sse("response.content_part.added", {
                             "type": "response.content_part.added",
+                            "item_id": message_id,
                             "output_index": 0,
                             "content_index": 0,
-                            "part": {"type": "output_text", "text": ""},
+                            "part": {"type": "output_text", "text": "", "annotations": []},
                         })
 
                         event_count = 0
@@ -140,6 +141,7 @@ async def create(
                                 text_buf.append(tok)
                                 yield format_sse("response.output_text.delta", {
                                     "type": "response.output_text.delta",
+                                    "item_id": message_id,
                                     "output_index": 0,
                                     "content_index": 0,
                                     "delta": tok,
@@ -156,6 +158,7 @@ async def create(
                         # output_text.done
                         yield format_sse("response.output_text.done", {
                             "type": "response.output_text.done",
+                            "item_id": message_id,
                             "output_index": 0,
                             "content_index": 0,
                             "text": full_text,
@@ -164,9 +167,10 @@ async def create(
                         # content_part.done
                         yield format_sse("response.content_part.done", {
                             "type": "response.content_part.done",
+                            "item_id": message_id,
                             "output_index": 0,
                             "content_index": 0,
-                            "part": {"type": "output_text", "text": full_text},
+                            "part": {"type": "output_text", "text": full_text, "annotations": []},
                         })
 
                         # output_item.done
