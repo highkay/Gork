@@ -71,6 +71,14 @@ _MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
     "grok-4.20-multi-agent-0309": 2_000_000,
 }
 
+# 支持 web_search / x_search 工具的模型
+_MODELS_WITH_SEARCH_TOOLS: frozenset[str] = frozenset({
+    "grok-4.20-multi-agent-0309",
+    "grok-4.20-0309",
+    "grok-4.20-0309-reasoning",
+    "grok-4-0",
+})
+
 # reasoning effort 映射：OpenAI reasoning_effort → console API effort
 _EFFORT_MAP: dict[str, str] = {
     "none":    "none",
@@ -159,6 +167,14 @@ def build_console_payload(
     # 只有 grok-4.3 需要附带 reasoning 字段，grok-4.20 系列不需要
     if console_model in _MODELS_WITH_REASONING_FIELD:
         payload["reasoning"] = {"effort": effort}
+
+    # 为 multi-agent 和支持搜索的模型添加 tools
+    if console_model in _MODELS_WITH_SEARCH_TOOLS:
+        payload["tools"] = [
+            {"type": "web_search", "enable_image_understanding": True},
+            {"type": "x_search", "enable_video_understanding": True},
+        ]
+        payload["tool_choice"] = "auto"
 
     logger.debug(
         "console payload built: model={} console_model={} input_items={} has_reasoning={}",
