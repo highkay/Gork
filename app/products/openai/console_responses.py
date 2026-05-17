@@ -130,9 +130,11 @@ async def create(
                             "part": {"type": "output_text", "text": ""},
                         })
 
+                        event_count = 0
                         async for event_type, data in stream_console_chat(
                             token, payload, timeout_s=timeout_s
                         ):
+                            event_count += 1
                             tokens = adapter.feed(event_type, data)
                             for tok in tokens:
                                 text_buf.append(tok)
@@ -142,6 +144,11 @@ async def create(
                                     "content_index": 0,
                                     "delta": tok,
                                 })
+
+                        logger.info(
+                            "console responses stream raw: events={} text_tokens={} adapter_text_len={}",
+                            event_count, len(text_buf), len(adapter.full_text),
+                        )
 
                         # 流结束
                         full_text = "".join(text_buf)
