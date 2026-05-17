@@ -44,14 +44,14 @@ from app.platform.config.snapshot import get_config
 # console.x.ai 上可用的模型（通过 grok.com SSO 免费访问）
 # key = grok2api 对外暴露的模型名，value = console.x.ai 实际 model 字段
 CONSOLE_MODELS: dict[str, str] = {
-    "grok-4.3-console":                 "grok-4.3",
-    "grok-4.3-low":                     "grok-4.3",
-    "grok-4.3-medium":                  "grok-4.3",
-    "grok-4.3-high":                    "grok-4.3",
-    "grok-4.20-0309-reasoning-console": "grok-4.20-0309-reasoning",
-    "grok-4.20-0309-console":           "grok-4.20-0309",
-    "grok-4.20-multi-agent-console":    "grok-4.20-multi-agent-0309",
-    "grok-4-console":                   "grok-4-0",
+    "grok-4.3-console":                     "grok-4.3",
+    "grok-4.3-low":                         "grok-4.3",
+    "grok-4.3-medium":                      "grok-4.3",
+    "grok-4.3-high":                        "grok-4.3",
+    "grok-4.20-0309-reasoning-console":     "grok-4.20-0309-reasoning",
+    "grok-4.20-0309-console":               "grok-4.20-0309",
+    "grok-4.20-0309-non-reasoning-console": "grok-4.20-0309-non-reasoning",
+    "grok-4.20-multi-agent-console":        "grok-4.20-multi-agent-0309",
 }
 
 # 需要附带 reasoning 字段的模型（grok-4.3 系列需要，grok-4.20 系列不需要）
@@ -76,7 +76,7 @@ _MODELS_WITH_SEARCH_TOOLS: frozenset[str] = frozenset({
     "grok-4.20-multi-agent-0309",
     "grok-4.20-0309",
     "grok-4.20-0309-reasoning",
-    "grok-4-0",
+    "grok-4.20-0309-non-reasoning",
     "grok-4.3",
 })
 
