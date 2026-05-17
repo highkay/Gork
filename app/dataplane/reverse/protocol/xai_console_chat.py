@@ -77,6 +77,7 @@ _MODELS_WITH_SEARCH_TOOLS: frozenset[str] = frozenset({
     "grok-4.20-0309",
     "grok-4.20-0309-reasoning",
     "grok-4-0",
+    "grok-4.3",
 })
 
 # reasoning effort 映射：OpenAI reasoning_effort → console API effort
