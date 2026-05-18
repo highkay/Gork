@@ -220,7 +220,7 @@ async def completions(
                 )
                 usage = build_usage(prompt_tokens, completion_tokens)
                 result = make_chat_response(
-                    response_id, model, adapter.full_text, usage=usage
+                    model, adapter.full_text, response_id=response_id, usage=usage
                 )
                 success = True
                 logger.info(
