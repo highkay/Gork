@@ -29,6 +29,7 @@ from app.dataplane.reverse.protocol.xai_console_chat import (
     stream_console_chat,
 )
 from app.products._account_selection import reserve_account, selection_max_retries
+from app.products.openai.chat import _configured_retry_codes, _should_retry_upstream
 from ._format import (
     make_response_id,
     make_stream_chunk,
@@ -69,6 +70,7 @@ async def completions(
     effort = _reasoning_effort_from_emit_think(emit_think)
     timeout_s = cfg.get_float("chat.timeout", 120.0)
     max_retries = selection_max_retries()
+    retry_codes = _configured_retry_codes(cfg)
     response_id = make_response_id()
 
     logger.info(
@@ -146,8 +148,7 @@ async def completions(
 
                     except UpstreamError as exc:
                         fail_exc = exc
-                        retry_codes = frozenset({429, 401, 503})
-                        if exc.status in retry_codes and attempt < max_retries:
+                        if _should_retry_upstream(exc, retry_codes) and attempt < max_retries:
                             _retry = True
                             logger.warning(
                                 "console chat retry: attempt={}/{} status={} token={}...",
@@ -230,8 +231,7 @@ async def completions(
 
             except UpstreamError as exc:
                 fail_exc = exc
-                retry_codes = frozenset({429, 401, 503})
-                if exc.status in retry_codes and attempt < max_retries:
+                if _should_retry_upstream(exc, retry_codes) and attempt < max_retries:
                     logger.warning(
                         "console chat non-stream retry: attempt={}/{} status={}",
                         attempt + 1, max_retries, exc.status,
