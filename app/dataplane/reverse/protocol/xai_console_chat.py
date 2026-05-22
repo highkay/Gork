@@ -62,7 +62,6 @@ CONSOLE_MODELS: dict[str, str] = {
 # 需要附带 reasoning 字段的模型（grok-4.3 系列需要，grok-4.20 系列不需要）
 _MODELS_WITH_REASONING_FIELD: frozenset[str] = frozenset({
     "grok-4.3",
-    "grok-4.20-multi-agent-0309",
 })
 
 # 模型名后缀 → 固定 effort 值（优先级高于用户传入的 reasoning_effort）
@@ -78,7 +77,6 @@ _MODEL_FIXED_EFFORT: dict[str, str] = {
 
 # 特殊 max_output_tokens（默认 1_000_000）
 _MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
-    "grok-4.20-multi-agent-0309": 2_000_000,
     "grok-build-0.1": 256_000,
 }
 
