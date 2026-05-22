@@ -64,6 +64,10 @@ MODELS: tuple[ModelSpec, ...] = (
     ModelSpec("grok-4.20-0309-reasoning-console",       ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 0309 Reasoning (Console)"),
     ModelSpec("grok-4.20-0309-console",                 ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 0309 (Console)"),
     ModelSpec("grok-4.20-multi-agent-console",          ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 Multi-Agent (Console)"),
+    ModelSpec("grok-4.20-multi-agent-low-console",      ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 Multi-Agent Low (Console)"),
+    ModelSpec("grok-4.20-multi-agent-medium-console",   ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 Multi-Agent Medium (Console)"),
+    ModelSpec("grok-4.20-multi-agent-high-console",     ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 Multi-Agent High (Console)"),
+    ModelSpec("grok-4.20-multi-agent-xhigh-console",    ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 Multi-Agent XHigh (Console)"),
     ModelSpec("grok-4.20-0309-non-reasoning-console",    ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 0309 Non-Reasoning (Console)"),
     ModelSpec("grok-build-console",                     ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok Build 0.1 (Console)"),
 )

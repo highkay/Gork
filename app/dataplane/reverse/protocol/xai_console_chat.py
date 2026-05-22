@@ -52,12 +52,17 @@ CONSOLE_MODELS: dict[str, str] = {
     "grok-4.20-0309-console":               "grok-4.20-0309",
     "grok-4.20-0309-non-reasoning-console": "grok-4.20-0309-non-reasoning",
     "grok-4.20-multi-agent-console":        "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent-low-console":    "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent-medium-console": "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent-high-console":   "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent-xhigh-console":  "grok-4.20-multi-agent-0309",
     "grok-build-console":                   "grok-build-0.1",
 }
 
 # 需要附带 reasoning 字段的模型（grok-4.3 系列需要，grok-4.20 系列不需要）
 _MODELS_WITH_REASONING_FIELD: frozenset[str] = frozenset({
     "grok-4.3",
+    "grok-4.20-multi-agent-0309",
 })
 
 # 模型名后缀 → 固定 effort 值（优先级高于用户传入的 reasoning_effort）
@@ -65,6 +70,10 @@ _MODEL_FIXED_EFFORT: dict[str, str] = {
     "grok-4.3-low":    "low",
     "grok-4.3-medium": "medium",
     "grok-4.3-high":   "high",
+    "grok-4.20-multi-agent-low-console":    "low",
+    "grok-4.20-multi-agent-medium-console": "medium",
+    "grok-4.20-multi-agent-high-console":   "high",
+    "grok-4.20-multi-agent-xhigh-console":  "xhigh",
 }
 
 # 特殊 max_output_tokens（默认 1_000_000）
@@ -90,7 +99,7 @@ _EFFORT_MAP: dict[str, str] = {
     "low":     "low",
     "medium":  "medium",
     "high":    "high",
-    "xhigh":   "high",
+    "xhigh":   "xhigh",
 }
 
 
