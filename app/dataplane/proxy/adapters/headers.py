@@ -341,6 +341,7 @@ def build_console_headers(
         "Content-Type": content_type,
         "Cookie": cookie,
         "Origin": "https://console.x.ai",
+        "Priority": "u=1, i",
         "Referer": "https://console.x.ai/",
         "Sec-Fetch-Dest": "empty",
         "Sec-Fetch-Mode": "cors",
@@ -350,6 +351,7 @@ def build_console_headers(
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/136.0.0.0 Safari/537.36"
         ),
+        "x-cluster": "https://us-east-1.api.x.ai",
     }
     headers.update(_client_hints(profile.browser, profile.user_agent))
     return headers
