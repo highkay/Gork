@@ -52,10 +52,10 @@ CONSOLE_MODELS: dict[str, str] = {
     "grok-4.20-0309-console":               "grok-4.20-0309",
     "grok-4.20-0309-non-reasoning-console": "grok-4.20-0309-non-reasoning",
     "grok-4.20-multi-agent-console":        "grok-4.20-multi-agent-0309",
-    "grok-4.20-multi-agent-low-console":    "grok-4.20-multi-agent-0309",
-    "grok-4.20-multi-agent-medium-console": "grok-4.20-multi-agent-0309",
-    "grok-4.20-multi-agent-high-console":   "grok-4.20-multi-agent-0309",
-    "grok-4.20-multi-agent-xhigh-console":  "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent-low":            "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent-medium":         "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent-high":           "grok-4.20-multi-agent-0309",
+    "grok-4.20-multi-agent-xhigh":          "grok-4.20-multi-agent-0309",
     "grok-build-console":                   "grok-build-0.1",
 }
 
@@ -70,10 +70,10 @@ _MODEL_FIXED_EFFORT: dict[str, str] = {
     "grok-4.3-low":    "low",
     "grok-4.3-medium": "medium",
     "grok-4.3-high":   "high",
-    "grok-4.20-multi-agent-low-console":    "low",
-    "grok-4.20-multi-agent-medium-console": "medium",
-    "grok-4.20-multi-agent-high-console":   "high",
-    "grok-4.20-multi-agent-xhigh-console":  "xhigh",
+    "grok-4.20-multi-agent-low":    "low",
+    "grok-4.20-multi-agent-medium": "medium",
+    "grok-4.20-multi-agent-high":   "high",
+    "grok-4.20-multi-agent-xhigh":  "xhigh",
 }
 
 # 特殊 max_output_tokens（默认 1_000_000）
