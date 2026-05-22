@@ -68,7 +68,6 @@ _MODEL_FIXED_EFFORT: dict[str, str] = {
 
 # 特殊 max_output_tokens（默认 1_000_000）
 _MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
-    "grok-4.20-multi-agent-0309": 2_000_000,
 }
 
 # 支持 web_search / x_search 工具的模型
