@@ -65,6 +65,7 @@ MODELS: tuple[ModelSpec, ...] = (
     ModelSpec("grok-4.20-0309-console",                 ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 0309 (Console)"),
     ModelSpec("grok-4.20-multi-agent-console",          ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 Multi-Agent (Console)"),
     ModelSpec("grok-4.20-0309-non-reasoning-console",    ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok 4.20 0309 Non-Reasoning (Console)"),
+    ModelSpec("grok-build-console",                     ModeId.FAST,     Tier.BASIC, Capability.CONSOLE_CHAT, True, "Grok Build 0.1 (Console)"),
 )
 # fmt: on
 
