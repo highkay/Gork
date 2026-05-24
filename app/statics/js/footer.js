@@ -34,8 +34,13 @@ window.renderSiteFooter = async function renderSiteFooter() {
 
   footer.appendChild(sep());
 
-  const author = link('@jiu', 'https://github.com/jiujiu532');
+  const author = link('@Chenyme', 'https://blog.cheny.me/');
   footer.appendChild(author);
+
+  footer.appendChild(sep());
+
+  const author2 = link('@jiu', 'https://github.com/jiujiu532');
+  footer.appendChild(author2);
 
   document.body.appendChild(footer);
 };
