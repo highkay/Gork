@@ -153,18 +153,21 @@ uv run granian --interface asgi --host 0.0.0.0 --port 8000 --workers 1 app.main:
 
 无论标准版还是防封版，升级时只需要更新 `grok2api` 主镜像即可。WARP、Privoxy、FlareSolverr 等防封组件基本不需要更新。
 
+### 标准版升级
+
 ```bash
-# 拉取最新 grok2api 镜像
 docker pull ghcr.io/jiujiu532/grok2api:latest
-
-# 重启 grok2api 容器（配置和数据不受影响）
-docker stop grok2api && docker rm grok2api
-
-# 用原来的 docker compose 重新启动
-docker compose up -d
-# 或防封版：
-docker compose -f docker-compose.warp.yml up -d grok2api
+docker compose up -d --no-deps grok2api
 ```
+
+### 防封版升级（只更新 grok2api，不动防封组件）
+
+```bash
+docker pull ghcr.io/jiujiu532/grok2api:latest
+docker compose -f docker-compose.warp.yml up -d --no-deps grok2api
+```
+
+> `--no-deps` 参数确保只重启 grok2api 容器，WARP、Privoxy、FlareSolverr 不受影响，继续运行。
 
 > `./data/` 目录中的配置文件（`config.toml`）和账号数据库（`accounts.db`）挂载在 volume 中，升级不会覆盖。
 
@@ -172,8 +175,32 @@ docker compose -f docker-compose.warp.yml up -d grok2api
 
 ```bash
 # 查看可用版本：https://github.com/jiujiu532/grok2api/pkgs/container/grok2api
-docker run -d ... ghcr.io/jiujiu532/grok2api:<tag>
+docker pull ghcr.io/jiujiu532/grok2api:<tag>
+docker compose up -d --no-deps grok2api
+# 或防封版：
+docker compose -f docker-compose.warp.yml up -d --no-deps grok2api
 ```
+
+### 从标准版迁移到防封版
+
+已有标准版部署的用户，迁移到防封版无需重新配置，数据完全保留：
+
+```bash
+# 1. 停止并删除当前 grok2api 容器（数据不受影响）
+docker stop grok2api && docker rm grok2api
+
+# 2. 进入项目目录（与标准版相同目录）
+cd grok2api/grok2api-main/grok2api-main
+
+# 3. 用防封版 compose 启动（会自动启动 WARP、Privoxy、FlareSolverr）
+docker compose -f docker-compose.warp.yml up -d
+```
+
+> 防封版的 `init-config` 容器会检测 `data/config.toml` 是否已有代理配置：
+> - 若已有配置（如之前手动配过代理）：跳过，不覆盖
+> - 若无代理配置：自动写入 WARP + FlareSolverr 配置
+
+迁移完成后，进入 Admin 后台确认代理配置已生效即可。
 
 <br>
 
