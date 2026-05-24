@@ -489,11 +489,15 @@ class AccountRefreshService:
                             source=QuotaSource.DEFAULT,
                         ).to_dict()
                 else:
+                    # reset_at 为 None 时（首次扣减），设置窗口起始时间
+                    reset_at = existing.reset_at
+                    if reset_at is None and existing.window_seconds > 0:
+                        reset_at = now + existing.window_seconds * 1000
                     quota_patch[mode_key] = QuotaWindow(
                         remaining=max(0, existing.remaining - 1),
                         total=existing.total,
                         window_seconds=existing.window_seconds,
-                        reset_at=existing.reset_at,
+                        reset_at=reset_at,
                         synced_at=existing.synced_at,
                         source=QuotaSource.ESTIMATED,
                     ).to_dict()
