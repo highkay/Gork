@@ -239,8 +239,14 @@ class AccountDirectory:
         remaining: int | None = None,
         reset_at_ms: int | None = None,
         now_s_val: int | None = None,
+        skip_quota: bool = False,
     ) -> None:
-        """Apply upstream response feedback to the account slot."""
+        """Apply upstream response feedback to the account slot.
+
+        skip_quota=True: on SUCCESS, only update health without decrementing
+        quota counters. Used for console models whose quota is tracked
+        independently by console.x.ai, not by grok.com quota windows.
+        """
         table = self._table
         if table is None:
             return
