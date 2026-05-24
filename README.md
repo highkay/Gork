@@ -357,6 +357,14 @@ server {
 
 > multi-agent 模型：`low`/`medium` 使用 4 个 agent（快速研究），`high`/`xhigh` 使用 16 个 agent（深度研究）。
 
+### Console 模型配额
+
+| 配额类型 | 次数 | 窗口 | 说明 |
+| :-- | :-- | :-- | :-- |
+| C（Console） | 30 次 | 15 分钟 | 所有 `*-console` / `*-low` / `*-medium` / `*-high` / `*-xhigh` 模型共享 |
+
+<sub>以上数值基于简单压测得出（单账号约 40-50 次/5 分钟触发服务端限制），设为 30 次/15 分钟留有余量，避免触发上游真实 429。实际限制可能随 xAI 策略调整而变化。</sub>
+
 ### Image / Image Edit / Video
 
 | 模型名 | mode | tier |
