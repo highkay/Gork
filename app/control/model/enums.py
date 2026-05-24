@@ -14,6 +14,7 @@ class ModeId(IntEnum):
     EXPERT = 2  # modeId="expert"
     HEAVY = 3  # modeId="heavy"    — only available on heavy-pool accounts
     GROK_4_3 = 4  # modeId="grok-420-computer-use-sa" — super/heavy only
+    CONSOLE = 5  # console.x.ai 独立配额 — basic pool console 模型专用
 
     def to_api_str(self) -> str:
         _OVERRIDES: dict[int, str] = {
