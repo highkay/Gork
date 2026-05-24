@@ -60,3 +60,4 @@ jobs:
         run: |
           uvx pip-audit -r /tmp/req.txt --progress-spinner off \
             --ignore-vuln PYSEC-2026-161
+          echo "Dependency audit passed"
