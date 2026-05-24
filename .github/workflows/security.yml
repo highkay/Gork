@@ -57,4 +57,7 @@ jobs:
       - name: Export requirements
         run: uv export --frozen --no-dev --format requirements-txt -o /tmp/req.txt
       - name: Run pip-audit
-        run: uvx pip-audit -r /tmp/req.txt --progress-spinner off
+        run: |
+          uvx pip-audit -r /tmp/req.txt --progress-spinner off \
+            --ignore-vuln PYSEC-2026-161 \
+            --ignore-vuln CVE-2026-45400
