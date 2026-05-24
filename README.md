@@ -151,28 +151,27 @@ uv run granian --interface asgi --host 0.0.0.0 --port 8000 --workers 1 app.main:
 
 ## 升级与回滚
 
-### 标准版升级
+无论标准版还是防封版，升级时只需要更新 `grok2api` 主镜像即可。WARP、Privoxy、FlareSolverr 等防封组件基本不需要更新。
 
 ```bash
-docker compose pull
+# 拉取最新 grok2api 镜像
+docker pull ghcr.io/jiujiu532/grok2api:latest
+
+# 重启 grok2api 容器（配置和数据不受影响）
+docker stop grok2api && docker rm grok2api
+
+# 用原来的 docker compose 重新启动
 docker compose up -d
+# 或防封版：
+docker compose -f docker-compose.warp.yml up -d grok2api
 ```
 
-### 防封版升级
-
-```bash
-docker compose -f docker-compose.warp.yml pull
-docker compose -f docker-compose.warp.yml up -d
-```
-
-> 升级只替换容器镜像，`./data/` 目录中的配置文件和账号数据库不受影响。
+> `./data/` 目录中的配置文件（`config.toml`）和账号数据库（`accounts.db`）挂载在 volume 中，升级不会覆盖。
 
 ### 回滚到指定版本
 
 ```bash
-# 查看可用版本（GHCR 页面）
-# https://github.com/jiujiu532/grok2api/pkgs/container/grok2api
-
+# 查看可用版本：https://github.com/jiujiu532/grok2api/pkgs/container/grok2api
 docker run -d ... ghcr.io/jiujiu532/grok2api:<tag>
 ```
 
