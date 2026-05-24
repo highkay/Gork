@@ -28,6 +28,8 @@ Grok2API 是一个基于 **FastAPI** 构建的 Grok 网关，将 Grok Web 能力
 
 本仓库基于上游 [chenyme/grok2api](https://github.com/chenyme/grok2api) 二次构建，提供预编译的 Docker 镜像：
 
+### grok2api 主镜像
+
 | 项 | 值 |
 | :-- | :-- |
 | 镜像地址 | `ghcr.io/jiujiu532/grok2api:latest` |
@@ -37,11 +39,25 @@ Grok2API 是一个基于 **FastAPI** 构建的 Grok 网关，将 Grok Web 能力
 | 默认数据目录 | `/app/data` |
 | 默认日志目录 | `/app/logs` |
 
+### privoxy-warp 镜像（防封版专用）
+
+| 项 | 值 |
+| :-- | :-- |
+| 镜像地址 | `ghcr.io/jiujiu532/privoxy-warp:latest` |
+| 说明 | 预配置好 WARP SOCKS5 转发规则的 Privoxy，与 `caomingjun/warp` 配合使用 |
+
 <br>
 
 ## 快速开始
 
-### 方式一：Docker Compose（推荐）
+本项目提供两种部署方式，按需选择：
+
+| 方式 | 说明 | 适用场景 |
+| :-- | :-- | :-- |
+| **标准版** | 仅 grok2api，直连 Grok | IP 干净、无 Cloudflare 拦截问题 |
+| **防封版** | grok2api + WARP + Privoxy + FlareSolverr | IP 被 Cloudflare 拦截、需要稳定访问 |
+
+### 方式一：标准版（Docker Compose）
 
 ```bash
 git clone https://github.com/jiujiu532/grok2api
@@ -56,9 +72,30 @@ docker compose up -d
 docker compose logs -f grok2api
 ```
 
-> `docker-compose.yml` 已默认拉取 `ghcr.io/jiujiu532/grok2api:latest`，无需本地构建。
+> 使用 `docker-compose.yml`，仅启动 grok2api 容器，代理配置默认为空（直连）。
 
-### 方式二：Docker 单容器
+### 方式二：防封版（WARP + FlareSolverr 一键部署）
+
+> **前置要求**：服务器需支持 `NET_ADMIN` + `SYS_MODULE` 权限（KVM/XEN 虚拟化均支持，OpenVZ/LXC 不支持）。
+
+```bash
+git clone https://github.com/jiujiu532/grok2api
+cd grok2api/grok2api-main/grok2api-main
+docker compose -f docker-compose.warp.yml up -d
+```
+
+防封版会自动启动以下服务并完成配置：
+
+| 服务 | 说明 |
+| :-- | :-- |
+| `warp-proxy` | Cloudflare WARP 出口代理，提供干净的 Cloudflare IP |
+| `privoxy` | HTTP 代理，将流量转发到 WARP（已预配置，无需手动操作） |
+| `flaresolverr` | 自动解 Cloudflare 挑战，获取 cf_clearance |
+| `grok2api` | 主服务，代理配置由 init 容器自动写入 |
+
+启动后代理配置已自动完成，进入 Admin 后台添加账号即可使用。
+
+### 方式三：Docker 单容器
 
 ```bash
 docker run -d \
@@ -88,7 +125,7 @@ docker run -d `
   ghcr.io/jiujiu532/grok2api:latest
 ```
 
-### 方式三：本地源码部署
+### 方式四：本地源码部署
 
 前置：Python 3.13+、[uv](https://docs.astral.sh/uv/getting-started/installation/)。
 
@@ -114,15 +151,28 @@ uv run granian --interface asgi --host 0.0.0.0 --port 8000 --workers 1 app.main:
 
 ## 升级与回滚
 
+### 标准版升级
+
 ```bash
-# 升级到最新
 docker compose pull
 docker compose up -d
+```
 
-# 查看可用版本（也可在 GHCR 页面查看具体 tag）
-docker pull ghcr.io/jiujiu532/grok2api:latest
+### 防封版升级
 
-# 回滚到指定 tag
+```bash
+docker compose -f docker-compose.warp.yml pull
+docker compose -f docker-compose.warp.yml up -d
+```
+
+> 升级只替换容器镜像，`./data/` 目录中的配置文件和账号数据库不受影响。
+
+### 回滚到指定版本
+
+```bash
+# 查看可用版本（GHCR 页面）
+# https://github.com/jiujiu532/grok2api/pkgs/container/grok2api
+
 docker run -d ... ghcr.io/jiujiu532/grok2api:<tag>
 ```
 
@@ -261,16 +311,25 @@ server {
 
 ### Chat（console.x.ai 免费账号）
 
+通过 `console.x.ai` 路由，使用 SSO Token 免费访问，不消耗付费账号额度。
+
 | 模型名 | reasoning effort | 说明 |
 | :-- | :-- | :-- |
-| `grok-4-console` | 默认 | 免费账号 |
-| `grok-4.3-console` | medium | 免费账号 |
-| `grok-4.3-low-console` | low | 免费账号 |
-| `grok-4.3-medium-console` | medium | 免费账号 |
-| `grok-4.3-high-console` | high | 免费账号 |
+| `grok-4.3-console` | 用户传入（默认 medium） | 免费账号 |
+| `grok-4.3-low` | low（固定） | 免费账号 |
+| `grok-4.3-medium` | medium（固定） | 免费账号 |
+| `grok-4.3-high` | high（固定） | 免费账号 |
 | `grok-4.20-0309-console` | 默认 | 免费账号 |
 | `grok-4.20-0309-reasoning-console` | 固定 reasoning | 免费账号 |
-| `grok-4.20-multi-agent-console` | 默认 | 免费账号，多智能体 |
+| `grok-4.20-0309-non-reasoning-console` | 无 reasoning | 免费账号 |
+| `grok-4.20-multi-agent-console` | 用户传入（默认 medium） | 免费账号，多智能体，agent 数量由 effort 决定 |
+| `grok-4.20-multi-agent-low` | low（固定）→ 4 agents | 免费账号，多智能体 |
+| `grok-4.20-multi-agent-medium` | medium（固定）→ 4 agents | 免费账号，多智能体 |
+| `grok-4.20-multi-agent-high` | high（固定）→ 16 agents | 免费账号，多智能体 |
+| `grok-4.20-multi-agent-xhigh` | xhigh（固定）→ 16 agents | 免费账号，多智能体 |
+| `grok-build-console` | 默认 | 免费账号，Grok Build 0.1 |
+
+> multi-agent 模型：`low`/`medium` 使用 4 个 agent（快速研究），`high`/`xhigh` 使用 16 个 agent（深度研究）。
 
 ### Image / Image Edit / Video
 
