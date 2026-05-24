@@ -190,13 +190,14 @@ class LocalAccountRepository:
                     0, 0, 0, :ext, :rev
                 )
                 ON CONFLICT(token) DO UPDATE SET
-                    pool       = excluded.pool,
-                    status     = 'active',
-                    deleted_at = NULL,
-                    updated_at = excluded.updated_at,
-                    tags       = excluded.tags,
-                    ext        = excluded.ext,
-                    revision   = excluded.revision
+                    pool           = excluded.pool,
+                    status         = 'active',
+                    deleted_at     = NULL,
+                    updated_at     = excluded.updated_at,
+                    tags           = excluded.tags,
+                    quota_console  = excluded.quota_console,
+                    ext            = excluded.ext,
+                    revision       = excluded.revision
                 """,
                 {
                     "token": token,

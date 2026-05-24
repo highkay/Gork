@@ -19,7 +19,9 @@ from app.platform.runtime.clock import now_s
 from app.platform.tokens import estimate_prompt_tokens, estimate_tokens
 from app.control.account.enums import FeedbackKind
 from app.control.account.invalid_credentials import feedback_kind_for_error
+from app.control.account.runtime import get_refresh_service
 from app.control.model.registry import resolve as resolve_model
+from app.dataplane.account.selector import current_strategy
 from app.dataplane.reverse.protocol.xai_console_chat import (
     build_console_payload,
     ConsoleStreamAdapter,
@@ -39,6 +41,38 @@ def _log_task_exception(task: "asyncio.Task") -> None:
     exc = task.exception() if not task.cancelled() else None
     if exc:
         logger.warning("background task failed: task={} error={}", task.get_name(), exc)
+
+
+async def _quota_sync(token: str, mode_id: int) -> None:
+    """Fire-and-forget: 成功调用后持久化配额扣减和 usage_use_count。"""
+    try:
+        if current_strategy() != "quota":
+            return
+        svc = get_refresh_service()
+        if svc:
+            await svc.refresh_call_async(token, mode_id)
+    except Exception as exc:
+        logger.warning(
+            "console responses quota sync failed: token={}... mode_id={} error={}",
+            token[:10],
+            mode_id,
+            exc,
+        )
+
+
+async def _fail_sync(token: str, mode_id: int, exc: BaseException | None = None) -> None:
+    """Fire-and-forget: 失败后持久化失败计数。"""
+    try:
+        svc = get_refresh_service()
+        if svc:
+            await svc.record_failure_async(token, mode_id, exc)
+    except Exception as e:
+        logger.warning(
+            "console responses fail sync error: token={}... mode_id={} error={}",
+            token[:10],
+            mode_id,
+            e,
+        )
 
 
 async def create(
@@ -240,6 +274,14 @@ async def create(
                         else FeedbackKind.SERVER_ERROR
                     )
                     await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
+                    if success:
+                        asyncio.create_task(
+                            _quota_sync(token, selected_mode_id)
+                        ).add_done_callback(_log_task_exception)
+                    else:
+                        asyncio.create_task(
+                            _fail_sync(token, selected_mode_id, fail_exc)
+                        ).add_done_callback(_log_task_exception)
 
                 if success or not _retry:
                     return
@@ -326,6 +368,14 @@ async def create(
                 else FeedbackKind.SERVER_ERROR
             )
             await directory.feedback(token, kind, selected_mode_id, now_s_val=now_s())
+            if success:
+                asyncio.create_task(
+                    _quota_sync(token, selected_mode_id)
+                ).add_done_callback(_log_task_exception)
+            else:
+                asyncio.create_task(
+                    _fail_sync(token, selected_mode_id, fail_exc)
+                ).add_done_callback(_log_task_exception)
 
     raise RateLimitError("No available accounts after retries")
 
