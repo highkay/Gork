@@ -37,14 +37,6 @@ window.renderSiteFooter = async function renderSiteFooter() {
   const author = link('@jiu', 'https://github.com/jiujiu532');
   footer.appendChild(author);
 
-  if (version) {
-    footer.appendChild(sep());
-
-    const ver = link(`v${version}`, 'https://github.com/jiujiu532/grok2api/releases');
-    ver.className = 'site-footer-version';
-    footer.appendChild(ver);
-  }
-
   document.body.appendChild(footer);
 };
 
