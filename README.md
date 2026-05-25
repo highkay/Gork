@@ -32,7 +32,7 @@ Grok2API 是一个基于 **FastAPI** 构建的 Grok 网关，将 Grok Web 能力
 | 项 | 值 |
 | :-- | :-- |
 | 镜像地址 | `ghcr.io/jiujiu532/grok2api:latest` |
-| 架构 | `linux/amd64` |
+| 架构 | `linux/amd64`, `linux/arm64` |
 | 基础镜像 | `python:3.13-alpine` |
 | 默认端口 | `8000` |
 | 默认数据目录 | `/app/data` |
@@ -43,6 +43,7 @@ Grok2API 是一个基于 **FastAPI** 构建的 Grok 网关，将 Grok Web 能力
 | 项 | 值 |
 | :-- | :-- |
 | 镜像地址 | `ghcr.io/jiujiu532/privoxy-warp:latest` |
+| 架构 | `linux/amd64`, `linux/arm64` |
 | 说明 | 预配置好 WARP SOCKS5 转发规则的 Privoxy，与 `caomingjun/warp` 配合使用 |
 
 <br>
