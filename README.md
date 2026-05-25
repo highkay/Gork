@@ -482,6 +482,7 @@ curl http://localhost:8000/v1/videos \
 - 上游：[chenyme/grok2api](https://github.com/chenyme/grok2api)
 - DeepWiki：[chenyme/grok2api](https://deepwiki.com/chenyme/grok2api)
 - 项目文档：[blog.cheny.me](https://blog.cheny.me/blog/posts/grok2api)
+- 社区：[Linux.do](https://linux.do)
 
 <br>
 
