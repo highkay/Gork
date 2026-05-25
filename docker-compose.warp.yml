@@ -56,6 +56,9 @@ services:
       SERVER_WORKERS: ${SERVER_WORKERS:-1}
       ACCOUNT_STORAGE: ${ACCOUNT_STORAGE:-local}
       ACCOUNT_LOCAL_PATH: ${ACCOUNT_LOCAL_PATH:-data/accounts.db}
+      ACCOUNT_REDIS_URL: ${ACCOUNT_REDIS_URL:-}
+      ACCOUNT_MYSQL_URL: ${ACCOUNT_MYSQL_URL:-}
+      ACCOUNT_POSTGRESQL_URL: ${ACCOUNT_POSTGRESQL_URL:-}
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
