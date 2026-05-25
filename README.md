@@ -485,6 +485,12 @@ curl http://localhost:8000/v1/videos \
 
 <br>
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=jiujiu532/grok2api&type=Date)](https://star-history.com/#jiujiu532/grok2api&Date)
+
+<br>
+
 ## License
 
 MIT
