@@ -2,4 +2,5 @@ FROM vimagick/privoxy:latest
 
 # 预写入 WARP 转发规则
 # warp-proxy 是 docker compose 网络内的服务名
+# Multi-arch: linux/amd64 + linux/arm64
 RUN echo "forward-socks5 / warp-proxy:1080 ." >> /etc/privoxy/config
