@@ -269,8 +269,6 @@ async def create(
             response_id=response_id,
             reasoning_id=reasoning_id,
             message_id=message_id,
-            tools=tools,
-            tool_choice=tool_choice,
         )
 
     # -------------------------------------------------------------------------
