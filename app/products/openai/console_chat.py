@@ -19,7 +19,7 @@ from app.platform.logging.logger import logger
 from app.platform.config.snapshot import get_config
 from app.platform.errors import RateLimitError, UpstreamError
 from app.platform.runtime.clock import now_s
-from app.platform.tokens import estimate_prompt_tokens, estimate_tokens, estimate_tool_call_tokens
+from app.platform.tokens import estimate_prompt_tokens, estimate_tokens
 from app.control.account.enums import FeedbackKind
 from app.control.account.invalid_credentials import feedback_kind_for_error
 from app.control.account.runtime import get_refresh_service
@@ -27,7 +27,6 @@ from app.control.model.registry import resolve as resolve_model
 from app.dataplane.account.selector import current_strategy
 from app.dataplane.reverse.protocol.xai_console_chat import (
     build_console_payload,
-    client_function_tool_names,
     ConsoleStreamAdapter,
     stream_console_chat,
 )
@@ -38,9 +37,6 @@ from ._format import (
     make_stream_chunk,
     make_thinking_chunk,
     make_chat_response,
-    make_tool_call_chunk,
-    make_tool_call_done_chunk,
-    make_tool_call_response,
     build_usage,
 )
 
@@ -98,8 +94,6 @@ async def completions(
     emit_think: bool | None = None,
     temperature: float = 0.7,
     top_p: float = 0.95,
-    tools: list[dict] | None = None,
-    tool_choice: Any = None,
 ) -> dict | AsyncGenerator[str, None]:
     """Entry point for console.x.ai chat completions.
 
@@ -112,7 +106,6 @@ async def completions(
     max_retries = selection_max_retries()
     retry_codes = _configured_retry_codes(cfg)
     response_id = make_response_id()
-    function_tool_names = client_function_tool_names(tools)
 
     logger.info(
         "console chat request: model={} stream={} messages={}",
@@ -142,7 +135,7 @@ async def completions(
                 success = False
                 fail_exc: BaseException | None = None
                 _retry = False
-                adapter = ConsoleStreamAdapter(function_tool_names=function_tool_names)
+                adapter = ConsoleStreamAdapter()
 
                 try:
                     payload = build_console_payload(
@@ -152,8 +145,6 @@ async def completions(
                         top_p=top_p,
                         reasoning_effort=effort,
                         stream=True,
-                        tools=tools,
-                        tool_choice=tool_choice,
                     )
 
                     try:
@@ -162,8 +153,6 @@ async def completions(
                         ):
                             tokens = adapter.feed(event_type, data)
                             for tok in tokens:
-                                if tools and adapter.parsed_tool_calls:
-                                    continue
                                 chunk = make_stream_chunk(response_id, model, tok)
                                 yield f"data: {orjson.dumps(chunk).decode()}\n\n"
 
@@ -177,33 +166,6 @@ async def completions(
                             usage_data.get("output_tokens", 0) if usage_data else
                             estimate_tokens(adapter.full_text)
                         )
-                        tool_calls = adapter.parsed_tool_calls if tools else []
-                        if tool_calls:
-                            for i, tc in enumerate(tool_calls):
-                                chunk = make_tool_call_chunk(
-                                    response_id,
-                                    model,
-                                    i,
-                                    tc.call_id,
-                                    tc.name,
-                                    tc.arguments,
-                                    is_first=True,
-                                )
-                                yield f"data: {orjson.dumps(chunk).decode()}\n\n"
-                            usage = build_usage(
-                                prompt_tokens,
-                                completion_tokens or estimate_tool_call_tokens(tool_calls),
-                            )
-                            final = make_tool_call_done_chunk(response_id, model, usage=usage)
-                            yield f"data: {orjson.dumps(final).decode()}\n\n"
-                            yield "data: [DONE]\n\n"
-                            success = True
-                            logger.info(
-                                "console chat stream tool_calls: attempt={}/{} model={} calls={}",
-                                attempt + 1, max_retries + 1, model, len(tool_calls),
-                            )
-                            return
-
                         usage = build_usage(prompt_tokens, completion_tokens)
                         final = make_stream_chunk(
                             response_id, model, "", is_final=True
@@ -271,7 +233,7 @@ async def completions(
         token = acct.token
         success = False
         fail_exc: BaseException | None = None
-        adapter = ConsoleStreamAdapter(function_tool_names=function_tool_names)
+        adapter = ConsoleStreamAdapter()
 
         try:
             payload = build_console_payload(
@@ -281,8 +243,6 @@ async def completions(
                 top_p=top_p,
                 reasoning_effort=effort,
                 stream=True,  # 始终用流式，非流式在本地聚合
-                tools=tools,
-                tool_choice=tool_choice,
             )
 
             try:
@@ -301,22 +261,6 @@ async def completions(
                     estimate_tokens(adapter.full_text)
                 )
                 usage = build_usage(prompt_tokens, completion_tokens)
-                tool_calls = adapter.parsed_tool_calls if tools else []
-                if tool_calls:
-                    result = make_tool_call_response(
-                        model,
-                        tool_calls,
-                        prompt_content=messages,
-                        response_id=response_id,
-                        usage=usage,
-                    )
-                    success = True
-                    logger.info(
-                        "console chat non-stream tool_calls: model={} calls={}",
-                        model, len(tool_calls),
-                    )
-                    return result
-
                 result = make_chat_response(
                     model, adapter.full_text, response_id=response_id, usage=usage
                 )
