@@ -20,6 +20,7 @@ Grok2API 是一个基于 **FastAPI** 构建的 Grok 网关，将 Grok Web 能力
 - 支持文生图、图像编辑、文生视频、图生视频
 - 内置 Admin 后台管理、Web Chat、Masonry 生图、ChatKit 语音页面
 - 支持 `console.x.ai` 免费账号，新增 `*-console` 模型系列
+- 已修复 `grok.com` 路由常见 403 问题，内置 `x-statsig-id` 兼容修复，普通场景下无需额外浏览器签名服务
 
 <br>
 
@@ -56,6 +57,10 @@ Grok2API 是一个基于 **FastAPI** 构建的 Grok 网关，将 Grok Web 能力
 | :-- | :-- | :-- |
 | **标准版** | 仅 grok2api，直连 Grok | IP 干净、无 Cloudflare 拦截问题 |
 | **防封版** | grok2api + WARP + Privoxy + FlareSolverr | IP 被 Cloudflare 拦截、需要稳定访问 |
+
+> [!TIP]
+> 当前版本已内置针对 `grok.com` 常见 403 问题的兼容修复，标准版可直接部署验证，无需额外浏览器签名服务。
+> 如果仍然出现 403，通常与出口 IP 被 Cloudflare 风控、`cf_clearance` 失效或代理环境有关，此时建议切换到防封版部署。
 
 ### 方式一：标准版（Docker Compose）
 
@@ -471,6 +476,9 @@ curl http://localhost:8000/v1/videos \
 
 **Q: 提示 Cloudflare 拦截？**
 在 Admin 后台 → 配置管理 → 代理配置，将 `proxy.clearance.mode` 设为 `manual` 并填入有效 `cf_cookies` + `user_agent`，或部署 FlareSolverr 后切到 `flaresolverr` 模式。
+
+**Q: 当前版本是否已经修复 grok.com 403？**
+A: 是。当前版本已内置 `x-statsig-id` 兼容修复，普通场景下无需额外浏览器 sidecar。若仍遇到 403，更多是出口 IP、Cloudflare 风控或 clearance 失效导致，建议优先尝试防封版部署。
 
 **Q: 多 worker 部署？**
 `SERVER_WORKERS` 大于 1 时，账号刷新调度器会通过文件锁选举出唯一 leader，其他 worker 仅做轻量同步，安全可用。Windows 下建议保持单 worker。
