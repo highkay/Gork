@@ -21,7 +21,7 @@ Grok2API 是一个基于 **FastAPI** 构建的 Grok 网关，将 Grok Web 能力
 - 内置 Admin 后台管理、Web Chat、Masonry 生图、ChatKit 语音页面
 - 支持 `console.x.ai` 免费账号，新增 `*-console` 模型系列
 - 已修复 `grok.com` 路由常见 403 问题，内置 `x-statsig-id` 兼容修复，普通场景下无需额外浏览器签名服务
-- 接上文
+- 支持大批量令牌服务端分页、后台导入任务，以及可选 Redis 运行时协调
 
 <br>
 
@@ -304,16 +304,42 @@ server {
 | `LOG_DIR` | 本地日志目录 | `./logs` |
 | `ACCOUNT_STORAGE` | 账号存储后端：`local` / `redis` / `mysql` / `postgresql` | `local` |
 | `ACCOUNT_LOCAL_PATH` | `local` 模式 SQLite 路径 | `${DATA_DIR}/accounts.db` |
-| `ACCOUNT_REDIS_URL` | `redis` 模式 DSN | `""` |
+| `ACCOUNT_REDIS_URL` | `redis` 账号存储 DSN；也可被 Redis runtime 复用 | `""` |
 | `ACCOUNT_MYSQL_URL` | `mysql` 模式 DSN | `""` |
 | `ACCOUNT_POSTGRESQL_URL` | `postgresql` 模式 DSN | `""` |
 | `ACCOUNT_SQL_POOL_SIZE` | SQL 连接池核心连接数 | `5` |
 | `ACCOUNT_SQL_MAX_OVERFLOW` | SQL 连接池最大溢出 | `10` |
 | `ACCOUNT_SQL_POOL_TIMEOUT` | 等待空闲连接超时（秒） | `30` |
 | `ACCOUNT_SQL_POOL_RECYCLE` | 连接最大复用时间（秒） | `1800` |
+| `RUNTIME_REDIS_URL` | 可选 Redis runtime DSN，用于任务快照、调度选主等运行时协调；留空时回退本地行为 | `""` |
+| `RUNTIME_TASK_TTL_S` | Redis task snapshot 保留时间（秒） | `300` |
+| `RUNTIME_REDIS_LOCK_TTL_MS` | Redis scheduler leader 锁租约时间（毫秒） | `300000` |
 | `CONFIG_LOCAL_PATH` | 运行时配置文件路径 | `${DATA_DIR}/config.toml` |
 
 运行时配置也支持 `GROK_` 前缀环境变量覆盖，例如 `GROK_APP_API_KEY` 覆盖 `app.api_key`，`GROK_FEATURES_STREAM` 覆盖 `features.stream`。
+
+### Redis 可选增强
+
+Redis 不是必需依赖。默认 `ACCOUNT_STORAGE=local` 时项目会使用本地 SQLite 账号库和进程内运行时状态，适合单机/单 worker 部署。
+
+需要以下能力时建议启用 Redis：
+
+- 大量账号使用 Redis 存储，并通过二级索引优化 Admin 令牌列表分页、过滤和排序。
+- 多 worker / 多副本部署时，用 Redis task snapshot 查询后台导入、批处理任务进度。
+- 用 Redis leader lock 避免多个 worker 同时运行额度刷新调度器。
+
+Docker Compose 可直接启用内置 Redis profile：
+
+```bash
+cp .env.example .env
+# 编辑 .env：
+# ACCOUNT_STORAGE=redis
+# ACCOUNT_REDIS_URL=redis://redis:6379/0
+# RUNTIME_REDIS_URL=redis://redis:6379/0
+docker compose --profile redis up -d
+```
+
+若账号仍使用 SQLite/MySQL/PostgreSQL，但只想启用运行时协调，可保持 `ACCOUNT_STORAGE` 不变，仅设置 `RUNTIME_REDIS_URL`。
 
 <br>
 

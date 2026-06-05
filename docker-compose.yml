@@ -15,6 +15,9 @@ services:
       ACCOUNT_REDIS_URL: ${ACCOUNT_REDIS_URL:-}
       ACCOUNT_MYSQL_URL: ${ACCOUNT_MYSQL_URL:-}
       ACCOUNT_POSTGRESQL_URL: ${ACCOUNT_POSTGRESQL_URL:-}
+      RUNTIME_REDIS_URL: ${RUNTIME_REDIS_URL:-}
+      RUNTIME_TASK_TTL_S: ${RUNTIME_TASK_TTL_S:-300}
+      RUNTIME_REDIS_LOCK_TTL_MS: ${RUNTIME_REDIS_LOCK_TTL_MS:-300000}
       # 启用 CF 自动刷新: 取消以下三行注释，并取消底部 flaresolverr 服务的注释
       # FLARESOLVERR_URL: http://flaresolverr:8191
       # CF_REFRESH_INTERVAL: "600"
@@ -25,9 +28,19 @@ services:
       # ACCOUNT_REDIS_URL: Redis DSN when ACCOUNT_STORAGE=redis
       # ACCOUNT_MYSQL_URL: MySQL DSN when ACCOUNT_STORAGE=mysql
       # ACCOUNT_POSTGRESQL_URL: PostgreSQL DSN when ACCOUNT_STORAGE=postgresql
+      # RUNTIME_REDIS_URL: optional Redis DSN for task snapshots and scheduler lock
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    restart: unless-stopped
+
+  redis:
+    profiles: ["redis"]
+    container_name: grok2api-redis
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/redis:/data
     restart: unless-stopped
 
   # 如果出口 IP 不干净，可取消以下注释使用 Warp 作为落地代理
