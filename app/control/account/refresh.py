@@ -572,5 +572,63 @@ class AccountRefreshService:
             source="usage refresh",
         )
 
+    # ------------------------------------------------------------------
+    # Console 配额窗口自动重置（后台定时巡检）
+    # ------------------------------------------------------------------
+
+    async def reset_expired_console_windows(self) -> int:
+        """扫描所有账号，将 console 配额窗口已过期的账号重置为默认值。
+
+        在增量同步循环中调用，确保 console 配额能在窗口到期后自动恢复，
+        无需等待下一次请求触发。
+
+        Returns:
+            重置的账号数量。
+        """
+        from .commands import AccountPatch
+
+        now = now_ms()
+        snapshot = await self._repo.runtime_snapshot()
+        patches: list[AccountPatch] = []
+
+        for record in snapshot.items:
+            if record.is_deleted() or record.status != AccountStatus.ACTIVE:
+                continue
+            qs = record.quota_set()
+            console_win = qs.console
+            if console_win is None:
+                continue
+            # 只处理配额已消耗且窗口已过期的账号
+            if not console_win.is_window_expired(now):
+                continue
+            if console_win.remaining >= console_win.total:
+                continue
+
+            default = default_quota_window(record.pool, 5)
+            if default is None:
+                continue
+
+            patches.append(
+                AccountPatch(
+                    token=record.token,
+                    quota_console=QuotaWindow(
+                        remaining=default.total,
+                        total=default.total,
+                        window_seconds=default.window_seconds,
+                        reset_at=None,
+                        synced_at=now,
+                        source=QuotaSource.DEFAULT,
+                    ).to_dict(),
+                )
+            )
+
+        if patches:
+            await self._repo.patch_accounts(patches)
+            logger.debug(
+                "console quota windows auto-reset: count={}",
+                len(patches),
+            )
+        return len(patches)
+
 
 __all__ = ["AccountRefreshService", "RefreshResult"]
