@@ -32,6 +32,8 @@
 > [!NOTE]
 > 本项目仅供学习与研究交流。请务必遵守 Grok 的使用条款及当地法律法规，不得用于非法用途。
 
+本仓库基于上游 [chenyme/grok2api](https://github.com/chenyme/grok2api) 二次开发，新增多账号池管理、Console 免费模型、配额轮换、防封部署等能力。欢迎 PR 和 Fork，二开请保留原作者与前端标识。
+
 ---
 
 ## 核心特性
@@ -134,19 +136,6 @@ docker compose -f docker-compose.warp.yml up -d
 
 ---
 
-### 本地源码部署
-
-前置：Python 3.13+、[uv](https://docs.astral.sh/uv/getting-started/installation/)
-
-```bash
-git clone https://github.com/jiujiu532/grok2api
-cd grok2api/grok2api-main/grok2api-main
-cp .env.example .env && uv sync
-uv run granian --interface asgi --host 0.0.0.0 --port 8000 --workers 1 app.main:app
-```
-
----
-
 <details>
 <summary><strong>升级 / 回滚 / 卸载 / 迁移</strong></summary>
 
@@ -218,6 +207,19 @@ docker compose -f docker-compose.warp.yml up -d
 ```
 
 </details>
+
+---
+
+### 本地源码部署
+
+前置：Python 3.13+、[uv](https://docs.astral.sh/uv/getting-started/installation/)
+
+```bash
+git clone https://github.com/jiujiu532/grok2api
+cd grok2api/grok2api-main/grok2api-main
+cp .env.example .env && uv sync
+uv run granian --interface asgi --host 0.0.0.0 --port 8000 --workers 1 app.main:app
+```
 
 ---
 
@@ -403,7 +405,3 @@ curl http://localhost:8000/v1/chat/completions \
 **MIT License**
 
 </div>
-
-```
-
-```
