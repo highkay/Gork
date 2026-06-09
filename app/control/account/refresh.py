@@ -525,12 +525,20 @@ class AccountRefreshService:
                             source=QuotaSource.DEFAULT,
                         ).to_dict()
                 else:
-                    # reset_at 为 None 时（首次扣减），设置窗口起始时间
+                    # Console 配额轮换策略：remaining 降到阈值时才启动恢复计时器，
+                    # 避免同一批账号被反复选中（评分机制会优先选配额充足的账号）。
+                    new_remaining = max(0, existing.remaining - 1)
                     reset_at = existing.reset_at
-                    if reset_at is None and existing.window_seconds > 0:
-                        reset_at = now + existing.window_seconds * 1000
+                    if mode_id == 5:
+                        # console 配额：remaining <= 15 时才启动15分钟计时器
+                        if reset_at is None and new_remaining <= 15 and existing.window_seconds > 0:
+                            reset_at = now + existing.window_seconds * 1000
+                    else:
+                        # 非 console 模式保持原有逻辑：首次使用即启动计时器
+                        if reset_at is None and existing.window_seconds > 0:
+                            reset_at = now + existing.window_seconds * 1000
                     quota_patch[mode_key] = QuotaWindow(
-                        remaining=max(0, existing.remaining - 1),
+                        remaining=new_remaining,
                         total=existing.total,
                         window_seconds=existing.window_seconds,
                         reset_at=reset_at,
