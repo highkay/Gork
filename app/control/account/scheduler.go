@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/platform/config"
+	"github.com/dslzl/gork/app/platform/config"
 )
 
 var accountRefreshPoolOrder = []string{"basic", "super", "heavy"}

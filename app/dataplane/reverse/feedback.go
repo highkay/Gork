@@ -3,8 +3,8 @@ package reverse
 import (
 	"fmt"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	platformruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 type AccountPatch struct {

@@ -3,8 +3,8 @@ package providers
 import (
 	"fmt"
 
-	"github.com/jiujiu532/grok2api/app/control/proxy"
-	platformconfig "github.com/jiujiu532/grok2api/app/platform/config"
+	"github.com/dslzl/gork/app/control/proxy"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 type ManualClearanceProvider struct {

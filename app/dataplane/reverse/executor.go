@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	controlmodel "github.com/jiujiu532/grok2api/app/control/model"
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	platformruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	controlmodel "github.com/dslzl/gork/app/control/model"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 type AccountLease struct {

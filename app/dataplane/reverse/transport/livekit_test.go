@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 func TestFetchLiveKitTokenPostsPayloadAndReportsSuccess(t *testing.T) {

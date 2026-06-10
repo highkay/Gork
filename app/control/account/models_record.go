@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode"
 
-	appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 var accountRecordNowMS = appruntime.NowMS

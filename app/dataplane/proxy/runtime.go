@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 )
 
 type AcquireOptions struct {

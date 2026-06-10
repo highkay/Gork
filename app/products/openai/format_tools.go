@@ -1,6 +1,6 @@
 package openai
 
-import "github.com/jiujiu532/grok2api/app/platform"
+import "github.com/dslzl/gork/app/platform"
 
 func MakeToolCallChunk(params ToolCallChunkParams) map[string]any {
 	var toolCallDelta map[string]any

@@ -15,9 +15,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/auth"
-	"github.com/jiujiu532/grok2api/app/platform/storage"
+	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/storage"
 )
 
 func TestRouterListModelsFiltersByAvailablePools(t *testing.T) {

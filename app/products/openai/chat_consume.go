@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 )
 
 type consumeChatLinesOptions struct {

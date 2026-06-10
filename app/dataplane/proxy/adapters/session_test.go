@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	platform "github.com/jiujiu532/grok2api/app/platform"
-	platformconfig "github.com/jiujiu532/grok2api/app/platform/config"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	platform "github.com/dslzl/gork/app/platform"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 type fakeSessionGlobalConfigBackend struct {

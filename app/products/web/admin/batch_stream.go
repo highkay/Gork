@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	runtimepkg "github.com/jiujiu532/grok2api/app/platform/runtime"
+	"github.com/dslzl/gork/app/platform"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func handleAdminBatchStream(w http.ResponseWriter, r *http.Request) {

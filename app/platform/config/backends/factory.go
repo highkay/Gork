@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 type BackendConstructor func(path string) (ConfigBackend, error)

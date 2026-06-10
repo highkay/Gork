@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/platform"
 )
 
 type videoGenerateOptions struct {

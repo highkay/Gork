@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	proxyadapters "github.com/jiujiu532/grok2api/app/dataplane/proxy/adapters"
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 const (

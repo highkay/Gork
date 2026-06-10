@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jiujiu532/grok2api/app/platform/config/backends"
+	"github.com/dslzl/gork/app/platform/config/backends"
 )
 
 func TestConfigSnapshotLoadMergesBackendEnvAndCachesByVersion(t *testing.T) {

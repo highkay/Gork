@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"sync"
 
-	platformruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 const defaultClearanceOrigin = "https://grok.com"

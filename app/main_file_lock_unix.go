@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 func acquireAppMainSchedulerFileLock(context.Context) (Hook, error) {

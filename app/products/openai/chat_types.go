@@ -2,8 +2,8 @@ package openai
 
 import (
 	"context"
-	"github.com/jiujiu532/grok2api/app/control/model"
-	dataaccount "github.com/jiujiu532/grok2api/app/dataplane/account"
+	"github.com/dslzl/gork/app/control/model"
+	dataaccount "github.com/dslzl/gork/app/dataplane/account"
 )
 
 type accountFeedbackKind string

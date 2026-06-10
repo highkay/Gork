@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	runtimepkg "github.com/jiujiu532/grok2api/app/platform/runtime"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func adminBatchDispatch(w http.ResponseWriter, tokens []string, handler adminBatchHandler, options adminBatchOptions) {

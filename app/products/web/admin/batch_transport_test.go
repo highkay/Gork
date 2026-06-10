@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 )
 
 func TestDefaultAdminBatchNSFWSequenceUsesHTTPTransport(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 var ConsoleModels = map[string]string{

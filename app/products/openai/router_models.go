@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/control/model"
+	"github.com/dslzl/gork/app/control/model"
 )
 
 var poolIDToName = map[int]string{

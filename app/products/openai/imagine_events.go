@@ -3,8 +3,8 @@ package openai
 import (
 	"context"
 
-	"github.com/jiujiu532/grok2api/app/control/model"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/transport"
+	"github.com/dslzl/gork/app/control/model"
+	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
 
 type ImagineEventOptions struct {

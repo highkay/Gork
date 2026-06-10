@@ -36,7 +36,7 @@ name = "ignored"
 version = "ignored"
 
 [project]
-name = '  grok2api-en  '
+name = '  gork-en  '
 version = "  1.2.3  " # inline comment
 description = "ignored"
 
@@ -44,7 +44,7 @@ description = "ignored"
 version = "ignored"
 `))
 
-	if got, want := values["name"], "  grok2api-en  "; got != want {
+	if got, want := values["name"], "  gork-en  "; got != want {
 		t.Fatalf("name = %q, want %q", got, want)
 	}
 	if got, want := values["version"], "  1.2.3  "; got != want {

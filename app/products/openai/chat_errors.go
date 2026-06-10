@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/platform"
 )
 
 func upstreamBodyExcerpt(err *platform.UpstreamError, limit int) string {

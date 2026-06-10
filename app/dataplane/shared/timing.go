@@ -1,6 +1,6 @@
 package shared
 
-import platformruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+import platformruntime "github.com/dslzl/gork/app/platform/runtime"
 
 // NowMS returns the current wall-clock Unix time in milliseconds.
 func NowMS() int64 {

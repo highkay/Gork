@@ -1,8 +1,8 @@
 package admin
 
 import (
-	"github.com/jiujiu532/grok2api/app/platform/config"
-	"github.com/jiujiu532/grok2api/app/platform/storage"
+	"github.com/dslzl/gork/app/platform/config"
+	"github.com/dslzl/gork/app/platform/storage"
 )
 
 type adminCacheStore interface {

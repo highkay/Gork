@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/platform"
 )
 
 func adminBatchTokensOrAll(ctx context.Context, repo adminAssetsRepository, raw []string, emptyMessage string) ([]string, error) {

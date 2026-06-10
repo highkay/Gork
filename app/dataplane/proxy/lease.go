@@ -1,5 +1,5 @@
 package proxy
 
-import controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
+import controlproxy "github.com/dslzl/gork/app/control/proxy"
 
 type ProxyLease = controlproxy.ProxyLease

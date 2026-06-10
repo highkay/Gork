@@ -78,7 +78,7 @@ func NewValidationError(message, param, code string) *ValidationError {
 	}
 	return &ValidationError{
 		AppError: NewAppError(message, ErrorKindValidation, code, 400, map[string]any{"param": param}),
-		Param:   param,
+		Param:    param,
 	}
 }
 

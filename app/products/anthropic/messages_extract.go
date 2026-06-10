@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 )
 
 var anthropicSourcesStripRE = regexp.MustCompile(`(?is)\n*\s*(?:Sources|Citations):\s*\n(?:[-*]\s+.*(?:\n|$))+`)

@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	account "github.com/jiujiu532/grok2api/app/control/account"
+	account "github.com/dslzl/gork/app/control/account"
 )
 
 func TestLocalAccountRepositoryLifecycle(t *testing.T) {

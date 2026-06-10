@@ -4,10 +4,10 @@ import (
 	"net/http"
 	"time"
 
-	controlmodel "github.com/jiujiu532/grok2api/app/control/model"
-	"github.com/jiujiu532/grok2api/app/platform/auth"
-	"github.com/jiujiu532/grok2api/app/platform/config"
-	"github.com/jiujiu532/grok2api/app/products/openai"
+	controlmodel "github.com/dslzl/gork/app/control/model"
+	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/config"
+	"github.com/dslzl/gork/app/products/openai"
 )
 
 var (

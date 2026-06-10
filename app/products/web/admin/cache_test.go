@@ -23,7 +23,7 @@ func TestAdminCacheStatsAndListLocalFiles(t *testing.T) {
 	writeAdminCacheFile(t, dataDir, "images", "skip.txt", "ignored", time.Unix(30, 0))
 	writeAdminCacheFile(t, dataDir, "videos", "clip.mp4", "video", time.Unix(10, 0))
 
-	rec := adminRequest(http.MethodGet, "/admin/api/cache", "", "Bearer grok2api")
+	rec := adminRequest(http.MethodGet, "/admin/api/cache", "", "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	image := body["local_image"].(map[string]any)
 	if int(image["count"].(float64)) != 1 || int(image["size_bytes"].(float64)) != 4 {
@@ -33,14 +33,14 @@ func TestAdminCacheStatsAndListLocalFiles(t *testing.T) {
 		t.Fatalf("image limit = %#v", image)
 	}
 
-	rec = adminRequest(http.MethodGet, "/admin/api/cache/list?type=image&page=1&page_size=1", "", "Bearer grok2api")
+	rec = adminRequest(http.MethodGet, "/admin/api/cache/list?type=image&page=1&page_size=1", "", "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	items := body["items"].([]any)
 	if body["status"] != "success" || int(body["total"].(float64)) != 1 || items[0].(map[string]any)["name"] != "one.png" {
 		t.Fatalf("list body = %#v", body)
 	}
 
-	rec = adminRequest(http.MethodGet, "/admin/api/cache/list?cache_type=video", "", "Bearer grok2api")
+	rec = adminRequest(http.MethodGet, "/admin/api/cache/list?cache_type=video", "", "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	items = body["items"].([]any)
 	if int(body["total"].(float64)) != 1 || items[0].(map[string]any)["name"] != "clip.mp4" {
@@ -55,13 +55,13 @@ func TestAdminCacheClearAndDeleteItems(t *testing.T) {
 	writeAdminCacheFile(t, dataDir, "images", "one.png", "1", time.Unix(1, 0))
 	writeAdminCacheFile(t, dataDir, "images", "two.png", "2", time.Unix(2, 0))
 
-	rec := adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"type":"image","name":"one.png"}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"type":"image","name":"one.png"}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if body["status"] != "success" || body["result"].(map[string]any)["deleted"] != "one.png" {
 		t.Fatalf("delete body = %#v", body)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/cache/items/delete", `{"type":"image","names":["two.png","missing.png","../bad.png"," "]}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/cache/items/delete", `{"type":"image","names":["two.png","missing.png","../bad.png"," "]}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	result := body["result"].(map[string]any)
 	if int(result["deleted"].(float64)) != 1 || int(result["missing"].(float64)) != 2 {
@@ -69,7 +69,7 @@ func TestAdminCacheClearAndDeleteItems(t *testing.T) {
 	}
 
 	writeAdminCacheFile(t, dataDir, "images", "three.png", "3", time.Unix(3, 0))
-	rec = adminRequest(http.MethodPost, "/admin/api/cache/clear", `{"type":"image"}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/cache/clear", `{"type":"image"}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if int(body["result"].(map[string]any)["removed"].(float64)) != 1 {
 		t.Fatalf("clear body = %#v", body)
@@ -82,37 +82,37 @@ func TestAdminCacheDefaultsAndValidationErrors(t *testing.T) {
 	t.Setenv("DATA_DIR", dataDir)
 	writeAdminCacheFile(t, dataDir, "images", "default.png", "1", time.Unix(1, 0))
 
-	rec := adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"name":"default.png"}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"name":"default.png"}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if body["status"] != "success" || body["result"].(map[string]any)["deleted"] != "default.png" {
 		t.Fatalf("default delete body = %#v", body)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"type":"image","name":" "}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"type":"image","name":" "}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if rec.Code != http.StatusBadRequest || body["error"].(map[string]any)["code"] != "missing_file_name" {
 		t.Fatalf("missing name status/body=%d/%#v", rec.Code, body)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"type":"image","name":"../bad.png"}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"type":"image","name":"../bad.png"}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if rec.Code != http.StatusBadRequest || body["error"].(map[string]any)["code"] != "invalid_file_name" {
 		t.Fatalf("invalid name status/body=%d/%#v", rec.Code, body)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"type":"image","name":"missing.png"}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/cache/item/delete", `{"type":"image","name":"missing.png"}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if rec.Code != http.StatusNotFound || body["error"].(map[string]any)["code"] != "file_not_found" {
 		t.Fatalf("not found status/body=%d/%#v", rec.Code, body)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/cache/items/delete", `{"type":"image","names":[" ",""]}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/cache/items/delete", `{"type":"image","names":[" ",""]}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if rec.Code != http.StatusBadRequest || body["error"].(map[string]any)["code"] != "missing_file_names" {
 		t.Fatalf("missing names status/body=%d/%#v", rec.Code, body)
 	}
 
-	rec = adminRequest(http.MethodGet, "/admin/api/cache/list?type=audio", "", "Bearer grok2api")
+	rec = adminRequest(http.MethodGet, "/admin/api/cache/list?type=audio", "", "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if rec.Code != http.StatusBadRequest || body["error"].(map[string]any)["code"] != "invalid_value" {
 		t.Fatalf("invalid type status/body=%d/%#v", rec.Code, body)
@@ -212,7 +212,7 @@ func TestAdminCacheRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := adminRequest(tt.method, tt.path, tt.body, "Bearer grok2api")
+			rec := adminRequest(tt.method, tt.path, tt.body, "Bearer gork")
 			assertAdminGoldenJSON(t, rec, tt.status, tt.json)
 			if tt.check != nil {
 				tt.check(t, rec)
@@ -220,7 +220,7 @@ func TestAdminCacheRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		})
 	}
 
-	methodGuard := adminRequest(http.MethodDelete, "/admin/api/cache", "", "Bearer grok2api")
+	methodGuard := adminRequest(http.MethodDelete, "/admin/api/cache", "", "Bearer gork")
 	assertAdminGoldenJSON(t, methodGuard, http.StatusMethodNotAllowed, map[string]any{"error.message": "Method not allowed"})
 
 	matrix := []struct {

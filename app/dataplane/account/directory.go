@@ -5,10 +5,10 @@ import (
 	"errors"
 	"sync"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/dataplane/shared"
-	"github.com/jiujiu532/grok2api/app/platform/config"
-	appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	controlaccount "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/dataplane/shared"
+	"github.com/dslzl/gork/app/platform/config"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 type AccountDirectory struct {

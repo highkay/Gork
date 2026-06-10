@@ -1,6 +1,6 @@
-/* Grok2API — i18n */
+/* Gork — i18n */
 (function(){
-  var KEY='grok2api_lang',
+  var KEY='gork_lang',
       LANGS={
         zh:{label:'简体中文', html:'zh-CN'},
         en:{label:'English', html:'en'},

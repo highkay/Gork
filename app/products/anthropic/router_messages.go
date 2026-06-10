@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/jiujiu532/grok2api/app/control/model"
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/control/model"
+	"github.com/dslzl/gork/app/platform"
 )
 
 type AnthropicMessagesRequest struct {

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiujiu532/grok2api/app/platform/auth"
-	"github.com/jiujiu532/grok2api/app/platform/storage"
+	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/storage"
 )
 
 func TestAdminRouterVerifyRequiresAdminKey(t *testing.T) {
@@ -34,16 +34,16 @@ func TestAdminRouterVerifyRequiresAdminKey(t *testing.T) {
 func TestAdminConfigAndStorageEndpointsMatchPythonShape(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	adminRouterConfig = &fakeAdminConfig{raw: map[string]any{
-		"app": map[string]any{"admin_key": "grok2api"},
+		"app": map[string]any{"admin_key": "gork"},
 	}}
 	adminStorageBackend = func() string { return "local" }
 
-	rec := adminRequest(http.MethodGet, "/admin/api/config", "", "Bearer grok2api")
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"admin_key":"grok2api"`) {
+	rec := adminRequest(http.MethodGet, "/admin/api/config", "", "Bearer gork")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"admin_key":"gork"`) {
 		t.Fatalf("config status/body=%d/%s", rec.Code, rec.Body.String())
 	}
 
-	rec = adminRequest(http.MethodGet, "/admin/api/storage", "", "Bearer grok2api")
+	rec = adminRequest(http.MethodGet, "/admin/api/storage", "", "Bearer gork")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"type":"local"`) {
 		t.Fatalf("storage status/body=%d/%s", rec.Code, rec.Body.String())
 	}
@@ -64,7 +64,7 @@ func TestAdminConfigUpdateSanitizesAndRejectsStartupOnly(t *testing.T) {
 	adminReconcileLocalMediaCache = func(context.Context) error { reconciled = true; return nil }
 
 	body := `{"proxy":{"cf_clearance":" a b ","user_agent":" “UA” "},"cache":{"local":{"image_limit_mb":10}}}`
-	rec := adminRequest(http.MethodPost, "/admin/api/config", body, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/config", body, "Bearer gork")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("config status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -76,7 +76,7 @@ func TestAdminConfigUpdateSanitizesAndRejectsStartupOnly(t *testing.T) {
 		t.Fatalf("side effects loaded=%v reconciled=%v reload=%s/%d", cfg.loaded, reconciled, reloadedLevel, reloadedMax)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/config", `{"account":{"storage":"redis"}}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/config", `{"account":{"storage":"redis"}}`, "Bearer gork")
 	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "startup_only_config") {
 		t.Fatalf("startup-only status/body=%d/%s", rec.Code, rec.Body.String())
 	}
@@ -88,11 +88,11 @@ func TestAdminStatusAndSyncUseDirectory(t *testing.T) {
 	adminAccountDirectory = func() adminDirectory { return dir }
 	adminReconcileRefreshRuntime = func() string { return "quota" }
 
-	rec := adminRequest(http.MethodGet, "/admin/api/status", "", "Bearer grok2api")
+	rec := adminRequest(http.MethodGet, "/admin/api/status", "", "Bearer gork")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"size":2`) || !strings.Contains(rec.Body.String(), `"selection_strategy":"quota"`) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	rec = adminRequest(http.MethodPost, "/admin/api/sync", "", "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/sync", "", "Bearer gork")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"changed":true`) || dir.syncs != 1 {
 		t.Fatalf("sync=%d body=%s syncs=%d", rec.Code, rec.Body.String(), dir.syncs)
 	}
@@ -101,7 +101,7 @@ func TestAdminStatusAndSyncUseDirectory(t *testing.T) {
 func TestAdminRouterCoreRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	adminRouterConfig = &fakeAdminConfig{raw: map[string]any{
-		"app": map[string]any{"admin_key": "grok2api"},
+		"app": map[string]any{"admin_key": "gork"},
 	}}
 	adminStorageBackend = func() string { return "local" }
 	dir := &fakeAdminDirectory{size: 2, revision: 7, changed: true}
@@ -117,19 +117,19 @@ func TestAdminRouterCoreRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		json   map[string]any
 	}{
 		{name: "verify", method: http.MethodGet, path: "/admin/api/verify", status: http.StatusOK, json: map[string]any{"status": "success"}},
-		{name: "config get", method: http.MethodGet, path: "/admin/api/config", status: http.StatusOK, json: map[string]any{"app.admin_key": "grok2api"}},
+		{name: "config get", method: http.MethodGet, path: "/admin/api/config", status: http.StatusOK, json: map[string]any{"app.admin_key": "gork"}},
 		{name: "config post", method: http.MethodPost, path: "/admin/api/config", body: `{"cache":{"local":{"image_limit_mb":10}}}`, status: http.StatusOK, json: map[string]any{"status": "success", "selection_strategy": "quota"}},
 		{name: "storage", method: http.MethodGet, path: "/admin/api/storage", status: http.StatusOK, json: map[string]any{"type": "local"}},
 		{name: "status", method: http.MethodGet, path: "/admin/api/status", status: http.StatusOK, json: map[string]any{"status": "ok", "size": float64(2), "revision": float64(7), "selection_strategy": "quota"}},
 		{name: "sync", method: http.MethodPost, path: "/admin/api/sync", status: http.StatusOK, json: map[string]any{"changed": true, "revision": float64(7)}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := adminRequest(tt.method, tt.path, tt.body, "Bearer grok2api")
+			rec := adminRequest(tt.method, tt.path, tt.body, "Bearer gork")
 			assertAdminGoldenJSON(t, rec, tt.status, tt.json)
 		})
 	}
 
-	rec := adminRequest(http.MethodDelete, "/admin/api/config", "", "Bearer grok2api")
+	rec := adminRequest(http.MethodDelete, "/admin/api/config", "", "Bearer gork")
 	assertAdminGoldenJSON(t, rec, http.StatusMethodNotAllowed, map[string]any{"error.message": "Method not allowed"})
 	if rec.Header().Get("Allow") != "" {
 		t.Fatalf("unexpected allow header for multi-method route: %q", rec.Header().Get("Allow"))

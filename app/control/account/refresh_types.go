@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 var refreshNowMS = appruntime.NowMS

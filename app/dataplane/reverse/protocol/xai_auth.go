@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	reverseruntime "github.com/jiujiu532/grok2api/app/dataplane/reverse/runtime"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
 const (

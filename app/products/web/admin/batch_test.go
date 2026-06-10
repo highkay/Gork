@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	runtimepkg "github.com/jiujiu532/grok2api/app/platform/runtime"
+	"github.com/dslzl/gork/app/platform"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func TestAdminBatchNSFWSyncUsesListedTokensAndPatchesTags(t *testing.T) {
@@ -30,7 +30,7 @@ func TestAdminBatchNSFWSyncUsesListedTokensAndPatchesTags(t *testing.T) {
 		return nil
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?enabled=true&concurrency=1", `{"tokens":[]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?enabled=true&concurrency=1", `{"tokens":[]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	summary := body["summary"].(map[string]any)
 	if body["status"] != "success" || int(summary["total"].(float64)) != 2 || int(summary["ok"].(float64)) != 2 {
@@ -55,7 +55,7 @@ func TestAdminBatchNSFWDoesNotPatchTagsWhenUpstreamFails(t *testing.T) {
 		return platform.NewUpstreamError("Upstream returned 403", http.StatusForbidden, "")
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?enabled=true&concurrency=1", `{"tokens":["tok-fail"]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?enabled=true&concurrency=1", `{"tokens":["tok-fail"]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	summary := body["summary"].(map[string]any)
 	results := body["results"].(map[string]any)
@@ -88,7 +88,7 @@ func TestAdminBatchNSFWDisableCallsUpstreamBeforeRemovingTags(t *testing.T) {
 	}
 
 	longToken := "1234567890abcdefghijklmnopqrstuvwxyz"
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?enabled=false&concurrency=1", `{"tokens":["`+longToken+`"]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?enabled=false&concurrency=1", `{"tokens":["`+longToken+`"]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	results := body["results"].(map[string]any)
 	result := results["12345678...stuvwxyz"].(map[string]any)
@@ -105,7 +105,7 @@ func TestAdminBatchNSFWNoTokensAvailableReturnsValidation(t *testing.T) {
 	repo := &fakeAdminBatchRepo{}
 	adminBatchRepoProvider = func() adminBatchRepository { return repo }
 
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw", `{"tokens":[]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw", `{"tokens":[]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status/body=%d/%#v", rec.Code, body)
@@ -122,7 +122,7 @@ func TestAdminBatchRefreshSyncRecordsFailures(t *testing.T) {
 		return fakeAdminBatchRefreshService{refreshed: map[string]int{"tok-ok": 1}}
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/refresh", `{"tokens":["tok-ok","tok-bad"]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/refresh", `{"tokens":["tok-ok","tok-bad"]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	summary := body["summary"].(map[string]any)
 	if int(summary["ok"].(float64)) != 1 || int(summary["fail"].(float64)) != 1 {
@@ -181,7 +181,7 @@ func TestAdminBatchCacheClearUsesAssetDeletionSource(t *testing.T) {
 		return nil
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/cache-clear", `{"tokens":["tok"]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/cache-clear", `{"tokens":["tok"]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	result := body["results"].(map[string]any)["tok"].(map[string]any)
 	if int(result["deleted"].(float64)) != 1 || len(deleted) != 1 || deleted[0] != "tok|asset-1" {
@@ -219,7 +219,7 @@ func TestAdminBatchCacheClearContinuesUntilInvalidCredentialMarked(t *testing.T)
 		return err.Error() == "invalid credentials"
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/cache-clear", `{"tokens":["tok"]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/cache-clear", `{"tokens":["tok"]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	summary := body["summary"].(map[string]any)
 	result := body["results"].(map[string]any)["tok"].(map[string]any)
@@ -239,7 +239,7 @@ func TestAdminBatchCacheClearNoTokensAvailableReturnsValidation(t *testing.T) {
 	repo := &fakeAdminBatchRepo{}
 	adminAssetsRepoProvider = func() adminAssetsRepository { return repo }
 
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/cache-clear", `{"tokens":[]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/cache-clear", `{"tokens":[]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status/body=%d/%#v", rec.Code, body)
@@ -257,14 +257,14 @@ func TestAdminBatchAsyncCreatesTaskAndSSEFinal(t *testing.T) {
 	adminBatchAsyncRunner = func(run func()) { run() }
 	adminBatchSetNSFW = func(context.Context, string, bool) error { return nil }
 
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?async=true&enabled=false", `{"tokens":["tok"]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?async=true&enabled=false", `{"tokens":["tok"]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	taskID := body["task_id"].(string)
 	if taskID == "" || int(body["total"].(float64)) != 1 {
 		t.Fatalf("async body = %#v", body)
 	}
 
-	stream := adminRequest(http.MethodGet, "/admin/api/batch/"+taskID+"/stream?app_key=grok2api", "", "")
+	stream := adminRequest(http.MethodGet, "/admin/api/batch/"+taskID+"/stream?app_key=gork", "", "")
 	text := stream.Body.String()
 	if stream.Code != http.StatusOK {
 		t.Fatalf("stream status/body=%d/%s", stream.Code, text)
@@ -277,13 +277,13 @@ func TestAdminBatchAsyncCreatesTaskAndSSEFinal(t *testing.T) {
 func TestAdminBatchStreamAndCancelMissingTaskReturnNotFound(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 
-	stream := adminRequest(http.MethodGet, "/admin/api/batch/missing/stream", "", "Bearer grok2api")
+	stream := adminRequest(http.MethodGet, "/admin/api/batch/missing/stream", "", "Bearer gork")
 	streamBody := decodeAdminBody(t, stream)
 	if stream.Code != http.StatusNotFound || streamBody["error"].(map[string]any)["code"] != "task_not_found" {
 		t.Fatalf("stream status/body=%d/%#v", stream.Code, streamBody)
 	}
 
-	cancel := adminRequest(http.MethodPost, "/admin/api/batch/missing/cancel", "", "Bearer grok2api")
+	cancel := adminRequest(http.MethodPost, "/admin/api/batch/missing/cancel", "", "Bearer gork")
 	cancelBody := decodeAdminBody(t, cancel)
 	if cancel.Code != http.StatusNotFound || cancelBody["error"].(map[string]any)["code"] != "task_not_found" {
 		t.Fatalf("cancel status/body=%d/%#v", cancel.Code, cancelBody)
@@ -293,7 +293,7 @@ func TestAdminBatchStreamAndCancelMissingTaskReturnNotFound(t *testing.T) {
 func TestAdminBatchCancelMarksTaskCancelled(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	task := runtimepkg.CreateTask(1)
-	rec := adminRequest(http.MethodPost, "/admin/api/batch/"+task.ID+"/cancel", "", "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/batch/"+task.ID+"/cancel", "", "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if body["status"] != "success" || !task.Cancelled {
 		t.Fatalf("body=%#v cancelled=%v", body, task.Cancelled)
@@ -368,19 +368,19 @@ func TestAdminBatchRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := adminRequest(http.MethodPost, tt.path, tt.body, "Bearer grok2api")
+			rec := adminRequest(http.MethodPost, tt.path, tt.body, "Bearer gork")
 			assertAdminGoldenJSON(t, rec, tt.status, tt.json)
 		})
 	}
 
-	async := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?async=true&enabled=false&concurrency=1", `{"tokens":["tok-async"]}`, "Bearer grok2api")
+	async := adminRequest(http.MethodPost, "/admin/api/batch/nsfw?async=true&enabled=false&concurrency=1", `{"tokens":["tok-async"]}`, "Bearer gork")
 	assertAdminGoldenJSON(t, async, http.StatusOK, map[string]any{"status": "success", "total": float64(1)})
 	asyncBody := decodeAdminBody(t, async)
 	taskID, _ := asyncBody["task_id"].(string)
 	if taskID == "" {
 		t.Fatalf("async task_id missing in %#v", asyncBody)
 	}
-	stream := adminRequest(http.MethodGet, "/admin/api/batch/"+taskID+"/stream", "", "Bearer grok2api")
+	stream := adminRequest(http.MethodGet, "/admin/api/batch/"+taskID+"/stream", "", "Bearer gork")
 	if stream.Code != http.StatusOK {
 		t.Fatalf("stream status=%d body=%s", stream.Code, stream.Body.String())
 	}
@@ -393,13 +393,13 @@ func TestAdminBatchRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 	}
 
 	task := runtimepkg.CreateTask(1)
-	cancel := adminRequest(http.MethodPost, "/admin/api/batch/"+task.ID+"/cancel", "", "Bearer grok2api")
+	cancel := adminRequest(http.MethodPost, "/admin/api/batch/"+task.ID+"/cancel", "", "Bearer gork")
 	assertAdminGoldenJSON(t, cancel, http.StatusOK, map[string]any{"status": "success"})
 	if !task.Cancelled {
 		t.Fatalf("task not cancelled")
 	}
 
-	methodGuard := adminRequest(http.MethodGet, "/admin/api/batch/nsfw", "", "Bearer grok2api")
+	methodGuard := adminRequest(http.MethodGet, "/admin/api/batch/nsfw", "", "Bearer gork")
 	assertAdminGoldenJSON(t, methodGuard, http.StatusMethodNotAllowed, map[string]any{"error.message": "Method not allowed"})
 
 	matrix := []struct {

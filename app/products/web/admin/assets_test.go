@@ -49,7 +49,7 @@ func TestAdminAssetsListBuildsRowsAndTotals(t *testing.T) {
 		return nil, nil
 	}
 
-	rec := adminRequest(http.MethodGet, "/admin/api/assets", "", "Bearer grok2api")
+	rec := adminRequest(http.MethodGet, "/admin/api/assets", "", "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	rows := body["tokens"].([]any)
 	if len(rows) != 2 || int(body["total_assets"].(float64)) != 2 {
@@ -85,7 +85,7 @@ func TestAdminAssetsListMarksRowErrors(t *testing.T) {
 		return false
 	}
 
-	rec := adminRequest(http.MethodGet, "/admin/api/assets", "", "Bearer grok2api")
+	rec := adminRequest(http.MethodGet, "/admin/api/assets", "", "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	rows := body["tokens"].([]any)
 	row := rows[0].(map[string]any)
@@ -107,7 +107,7 @@ func TestAdminAssetsDeleteItem(t *testing.T) {
 		return nil
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/assets/delete-item", `{"token":"tok","asset_id":"asset-1"}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/assets/delete-item", `{"token":"tok","asset_id":"asset-1"}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if body["status"] != "success" || gotToken != "tok" || gotAssetID != "asset-1" {
 		t.Fatalf("body=%#v gotToken=%q gotAssetID=%q", body, gotToken, gotAssetID)
@@ -127,7 +127,7 @@ func TestAdminAssetsDeleteItemMarksUpstreamFailures(t *testing.T) {
 		return false
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/assets/delete-item", `{"token":"tok","asset_id":"asset-1"}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/assets/delete-item", `{"token":"tok","asset_id":"asset-1"}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("status/body=%d/%#v", rec.Code, body)
@@ -158,7 +158,7 @@ func TestAdminAssetsClearTokenDeletesKnownIDs(t *testing.T) {
 		return nil
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/assets/clear-token", `{"token":"tok"}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/assets/clear-token", `{"token":"tok"}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if body["status"] != "success" || int(body["deleted"].(float64)) != 2 {
 		t.Fatalf("body = %#v", body)
@@ -198,7 +198,7 @@ func TestAdminAssetsClearTokenContinuesUntilInvalidCredentialMarked(t *testing.T
 		return err.Error() == "invalid credentials"
 	}
 
-	rec := adminRequest(http.MethodPost, "/admin/api/assets/clear-token", `{"token":"tok"}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/assets/clear-token", `{"token":"tok"}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("status/body=%d/%#v", rec.Code, body)
@@ -266,7 +266,7 @@ func TestAdminAssetsRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := adminRequest(tt.method, tt.path, tt.body, "Bearer grok2api")
+			rec := adminRequest(tt.method, tt.path, tt.body, "Bearer gork")
 			assertAdminGoldenJSON(t, rec, tt.status, tt.json)
 			if tt.name == "list assets" {
 				body := decodeAdminBody(t, rec)
@@ -282,7 +282,7 @@ func TestAdminAssetsRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		})
 	}
 
-	methodGuard := adminRequest(http.MethodDelete, "/admin/api/assets", "", "Bearer grok2api")
+	methodGuard := adminRequest(http.MethodDelete, "/admin/api/assets", "", "Bearer gork")
 	assertAdminGoldenJSON(t, methodGuard, http.StatusMethodNotAllowed, map[string]any{"error.message": "Method not allowed"})
 
 	matrix := []struct {

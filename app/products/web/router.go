@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/auth"
-	"github.com/jiujiu532/grok2api/app/platform/config"
-	adminproduct "github.com/jiujiu532/grok2api/app/products/web/admin"
-	webuiapi "github.com/jiujiu532/grok2api/app/products/web/webui"
+	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/config"
+	adminproduct "github.com/dslzl/gork/app/products/web/admin"
+	webuiapi "github.com/dslzl/gork/app/products/web/webui"
 )
 
 var (

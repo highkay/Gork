@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	platformconfig "github.com/jiujiu532/grok2api/app/platform/config"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 type MediaType string

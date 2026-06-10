@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
+	account "github.com/dslzl/gork/app/control/account"
 	mysql "github.com/go-sql-driver/mysql"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	account "github.com/jiujiu532/grok2api/app/control/account"
 )
 
 var (
@@ -574,7 +574,7 @@ func sqlTLSConfigName(options map[string]string, serverName, mode string) string
 		builder.WriteString(options[key])
 	}
 	sum := sha256.Sum256([]byte(builder.String()))
-	return "grok2api_" + hex.EncodeToString(sum[:8])
+	return "gork_" + hex.EncodeToString(sum[:8])
 }
 
 func normalizedQuery(values url.Values) string {

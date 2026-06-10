@@ -8,8 +8,8 @@ import (
 	goruntime "runtime"
 	"strings"
 
-	account "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/platform"
+	account "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/platform"
 )
 
 var supportedBackends = map[string]struct{}{

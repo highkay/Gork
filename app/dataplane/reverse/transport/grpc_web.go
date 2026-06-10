@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	proxyadapters "github.com/jiujiu532/grok2api/app/dataplane/proxy/adapters"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 type GRPCWebOptions struct {

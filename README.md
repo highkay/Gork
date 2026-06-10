@@ -1,16 +1,15 @@
-<img alt="Grok2API" src="https://github.com/user-attachments/assets/037a0a6e-7986-41cc-b4af-04df612ee886" />
+<img alt="Gork" src="https://github.com/user-attachments/assets/037a0a6e-7986-41cc-b4af-04df612ee886" />
 
 [![Go](https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20compatible-111827)](#api-%E7%AB%AF%E7%82%B9)
 [![License](https://img.shields.io/badge/license-MIT-16a34a)](LICENSE)
-[![Docker](https://img.shields.io/badge/ghcr.io-jiujiu532%2Fgrok2api-2496ED?logo=docker&logoColor=white)](https://github.com/jiujiu532/grok2api/pkgs/container/grok2api)
 
 > [!NOTE]
 > 本项目仅供学习与研究交流。请务必遵守 Grok 的使用条款及当地法律法规，不得用于非法用途。二开与 PR 请保留原作者与前端标识。
 
 <br>
 
-Grok2API 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 OpenAI 兼容 API 的方式对外提供。核心特性：
+Gork 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 OpenAI 兼容 API 的方式对外提供。核心特性：
 
 - OpenAI 兼容接口：`/v1/models`、`/v1/chat/completions`、`/v1/responses`、`/v1/images/generations`、`/v1/images/edits`、`/v1/videos`、`/v1/videos/{video_id}`、`/v1/videos/{video_id}/content`
 - Anthropic 兼容接口：`/v1/messages`
@@ -27,13 +26,13 @@ Grok2API 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 O
 
 ## 镜像说明
 
-本仓库基于上游 [chenyme/grok2api](https://github.com/chenyme/grok2api) 二次构建，提供预编译的 Docker 镜像：
+本仓库基于上游 [chenyme/grok2api](https://github.com/chenyme/grok2api) 二次构建的仓库 [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api)三开，提供预编译的 Docker 镜像：
 
-### grok2api 主镜像
+### gork 主镜像
 
 | 项 | 值 |
 | :-- | :-- |
-| 镜像地址 | `ghcr.io/jiujiu532/grok2api:latest` |
+| 镜像地址 | `ghcr.io/dslzl/gork:latest` |
 | 架构 | `linux/amd64`, `linux/arm64` |
 | 基础镜像 | Go 静态二进制运行镜像 |
 | 默认端口 | `8000` |
@@ -56,8 +55,8 @@ Grok2API 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 O
 
 | 方式 | 说明 | 适用场景 |
 | :-- | :-- | :-- |
-| **标准版** | 仅 grok2api，直连 Grok | IP 干净、无 Cloudflare 拦截问题 |
-| **防封版** | grok2api + WARP + Privoxy + FlareSolverr | IP 被 Cloudflare 拦截、需要稳定访问 |
+| **标准版** | 仅 gork，直连 Grok | IP 干净、无 Cloudflare 拦截问题 |
+| **防封版** | gork + WARP + Privoxy + FlareSolverr | IP 被 Cloudflare 拦截、需要稳定访问 |
 
 > [!TIP]
 > 当前版本已内置针对 `grok.com` 常见 403 问题的兼容修复，标准版可直接部署验证，无需额外浏览器签名服务。
@@ -66,8 +65,8 @@ Grok2API 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 O
 ### 方式一：标准版（Docker Compose）
 
 ```bash
-git clone https://github.com/jiujiu532/grok2api
-cd grok2api/grok2api-main/grok2api-main
+git clone https://github.com/dslzl/gork
+cd gork
 cp .env.example .env
 docker compose up -d
 ```
@@ -75,18 +74,18 @@ docker compose up -d
 查看日志：
 
 ```bash
-docker compose logs -f grok2api
+docker compose logs -f gork
 ```
 
-> 使用 `docker-compose.yml`，仅启动 grok2api 容器，代理配置默认为空（直连）。
+> 使用 `docker-compose.yml`，仅启动 gork 容器，代理配置默认为空（直连）。
 
 ### 方式二：防封版（WARP + FlareSolverr 一键部署）
 
 > **前置要求**：服务器需支持 `NET_ADMIN` + `SYS_MODULE` 权限（KVM/XEN 虚拟化均支持，OpenVZ/LXC 不支持）。
 
 ```bash
-git clone https://github.com/jiujiu532/grok2api
-cd grok2api/grok2api-main/grok2api-main
+git clone https://github.com/dslzl/gork
+cd gork
 docker compose -f docker-compose.warp.yml up -d
 ```
 
@@ -97,7 +96,7 @@ docker compose -f docker-compose.warp.yml up -d
 | `warp-proxy` | Cloudflare WARP 出口代理，提供干净的 Cloudflare IP |
 | `privoxy` | HTTP 代理，将流量转发到 WARP（已预配置，无需手动操作） |
 | `flaresolverr` | 自动解 Cloudflare 挑战，获取 cf_clearance |
-| `grok2api` | 主服务，代理配置由 init 容器自动写入 |
+| `gork` | 主服务，代理配置由 init 容器自动写入 |
 
 启动后代理配置已自动完成，进入 Admin 后台添加账号即可使用。
 
@@ -105,7 +104,7 @@ docker compose -f docker-compose.warp.yml up -d
 
 ```bash
 docker run -d \
-  --name grok2api \
+  --name gork \
   -p 8000:8000 \
   -e TZ=Asia/Shanghai \
   -e LOG_LEVEL=INFO \
@@ -113,14 +112,14 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
   --restart unless-stopped \
-  ghcr.io/jiujiu532/grok2api:latest
+  ghcr.io/dslzl/gork:latest
 ```
 
 Windows PowerShell：
 
 ```powershell
 docker run -d `
-  --name grok2api `
+  --name gork `
   -p 8000:8000 `
   -e TZ=Asia/Shanghai `
   -e LOG_LEVEL=INFO `
@@ -128,7 +127,7 @@ docker run -d `
   -v ${PWD}/data:/app/data `
   -v ${PWD}/logs:/app/logs `
   --restart unless-stopped `
-  ghcr.io/jiujiu532/grok2api:latest
+  ghcr.io/dslzl/gork:latest
 ```
 
 ### 方式四：本地源码部署
@@ -136,19 +135,19 @@ docker run -d `
 前置：Go 1.25+。Python 3.13+ 与 `uv` 仅用于迁移期回归测试。
 
 ```bash
-git clone https://github.com/jiujiu532/grok2api
-cd grok2api/grok2api-main/grok2api-main
+git clone https://github.com/dslzl/gork
+cd gork
 cp .env.example .env
-go run ./cmd/grok2api
+go run ./cmd/gork
 
 # 可选：构建本地二进制
-go build -o grok2api ./cmd/grok2api
-./grok2api
+go build -o gork ./cmd/gork
+./gork
 ```
 
 ### 首次启动
 
-服务启动后访问 `http://localhost:8000/admin/login`，默认密码为 `grok2api`，进入后依次完成：
+服务启动后访问 `http://localhost:8000/admin/login`，默认密码为 `gork`，进入后依次完成：
 
 1. 修改 `app.app_key`（Admin 后台登录密码）
 2. 设置 `app.api_key`（API 调用鉴权密钥，留空则不鉴权）
@@ -160,34 +159,34 @@ go build -o grok2api ./cmd/grok2api
 
 ## 升级与回滚
 
-无论标准版还是防封版，升级时只需要更新 `grok2api` 主镜像即可。WARP、Privoxy、FlareSolverr 等防封组件基本不需要更新。
+无论标准版还是防封版，升级时只需要更新 `gork` 主镜像即可。WARP、Privoxy、FlareSolverr 等防封组件基本不需要更新。
 
 ### 标准版升级
 
 ```bash
-docker pull ghcr.io/jiujiu532/grok2api:latest
-docker compose up -d --no-deps grok2api
+docker pull ghcr.io/dslzl/gork:latest
+docker compose up -d --no-deps gork
 ```
 
-### 防封版升级（只更新 grok2api，不动防封组件）
+### 防封版升级（只更新 gork，不动防封组件）
 
 ```bash
-docker pull ghcr.io/jiujiu532/grok2api:latest
-docker compose -f docker-compose.warp.yml up -d --no-deps grok2api
+docker pull ghcr.io/dslzl/gork:latest
+docker compose -f docker-compose.warp.yml up -d --no-deps gork
 ```
 
-> `--no-deps` 参数确保只重启 grok2api 容器，WARP、Privoxy、FlareSolverr 不受影响，继续运行。
+> `--no-deps` 参数确保只重启 gork 容器，WARP、Privoxy、FlareSolverr 不受影响，继续运行。
 
 > `./data/` 目录中的配置文件（`config.toml`）和账号数据库（`accounts.db`）挂载在 volume 中，升级不会覆盖。
 
 ### 回滚到指定版本
 
 ```bash
-# 查看可用版本：https://github.com/jiujiu532/grok2api/pkgs/container/grok2api
-docker pull ghcr.io/jiujiu532/grok2api:<tag>
-docker compose up -d --no-deps grok2api
+# 查看可用版本：https://github.com/dslzl/gork/pkgs/container/gork
+docker pull ghcr.io/dslzl/gork:<tag>
+docker compose up -d --no-deps gork
 # 或防封版：
-docker compose -f docker-compose.warp.yml up -d --no-deps grok2api
+docker compose -f docker-compose.warp.yml up -d --no-deps gork
 ```
 
 ### 从标准版迁移到防封版
@@ -195,11 +194,11 @@ docker compose -f docker-compose.warp.yml up -d --no-deps grok2api
 已有标准版部署的用户，迁移到防封版无需重新配置，数据完全保留：
 
 ```bash
-# 1. 停止并删除当前 grok2api 容器（数据不受影响）
-docker stop grok2api && docker rm grok2api
+# 1. 停止并删除当前 gork 容器（数据不受影响）
+docker stop gork && docker rm gork
 
 # 2. 进入项目目录（与标准版相同目录）
-cd grok2api/grok2api-main/grok2api-main
+cd gork
 
 # 3. 用防封版 compose 启动（会自动启动 WARP、Privoxy、FlareSolverr）
 docker compose -f docker-compose.warp.yml up -d
@@ -259,7 +258,7 @@ server {
 | 范围 | 配置项 | 规则 |
 | :-- | :-- | :-- |
 | `/v1/*` | `app.api_key` | 为空则不额外鉴权 |
-| `/admin/*` | `app.app_key` | 默认值 `grok2api` |
+| `/admin/*` | `app.app_key` | 默认值 `gork` |
 | `/webui/*` | `app.webui_enabled`, `app.webui_key` | 默认关闭；`webui_key` 为空则不额外校验 |
 
 <br>
@@ -441,7 +440,7 @@ Console 账号采用延迟恢复轮换策略：本地调用会扣减剩余额度
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $GROK2API_API_KEY" \
+  -H "Authorization: Bearer $GORK_API_KEY" \
   -d '{
     "model": "grok-4.20-auto",
     "stream": true,
@@ -457,7 +456,7 @@ curl http://localhost:8000/v1/chat/completions \
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $GROK2API_API_KEY" \
+  -H "Authorization: Bearer $GORK_API_KEY" \
   -d '{
     "model": "grok-4.3-high-console",
     "stream": true,
@@ -472,7 +471,7 @@ curl http://localhost:8000/v1/chat/completions \
 ```bash
 curl http://localhost:8000/v1/images/generations \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $GROK2API_API_KEY" \
+  -H "Authorization: Bearer $GORK_API_KEY" \
   -d '{
     "model": "grok-imagine-image",
     "prompt": "一只在太空漂浮的猫",
@@ -486,7 +485,7 @@ curl http://localhost:8000/v1/images/generations \
 
 ```bash
 curl http://localhost:8000/v1/videos \
-  -H "Authorization: Bearer $GROK2API_API_KEY" \
+  -H "Authorization: Bearer $GORK_API_KEY" \
   -F "model=grok-imagine-video" \
   -F "prompt=霓虹雨夜街头，电影感慢镜头追拍" \
   -F "seconds=10" \
@@ -520,17 +519,8 @@ Go 版本当前是单进程 HTTP 服务，容器内不再通过 `SERVER_WORKERS`
 
 ## 致谢
 
-## 更新记录
-
-### 当前 Go 主线
-
-- 移植 Python 上游 `27a1616..7e1d9ae` 中适用于 Go 主线的账号刷新、模型注册和 Console 配额行为。
-- 修复导入/手动刷新时 SuperGrok、heavy 账号可能被本地 basic 默认值卡住的问题，刷新时会从实时 entitlement quota 推断账号池。
-- 新增 `grok-4.3-fast` 模型，行为与 `grok-4.20-fast` 对齐。
-- 修复 Console 模型在 random 选号策略下本地配额不扣减、不恢复的问题，并增加过期 Console 配额窗口后台恢复。
-- Python-only 的 `aiohttp >= 3.14.0` 依赖安全更新不适用于 Go 运行时。
-
-- 上游：[chenyme/grok2api](https://github.com/chenyme/grok2api)
+- 二开上游：[chenyme/grok2api](https://github.com/chenyme/grok2api)
+- 三开上游：[jiujiu532/grok2api](https://github.com/jiujiu532/grok2api)
 - DeepWiki：[chenyme/grok2api](https://deepwiki.com/chenyme/grok2api)
 - 项目文档：[blog.cheny.me](https://blog.cheny.me/blog/posts/grok2api)
 - 社区：[Linux.do](https://linux.do)
@@ -539,7 +529,7 @@ Go 版本当前是单进程 HTTP 服务，容器内不再通过 `SERVER_WORKERS`
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=jiujiu532/grok2api&type=Date)](https://star-history.com/#jiujiu532/grok2api&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=dslzl/gork&type=Date)](https://star-history.com/#dslzl/gork&Date)
 
 <br>
 

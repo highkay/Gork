@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	reverseruntime "github.com/jiujiu532/grok2api/app/dataplane/reverse/runtime"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/transport"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
+	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
 
 var messagesUploadInput = func(ctx context.Context, token string, fileInput string) (string, string, error) {

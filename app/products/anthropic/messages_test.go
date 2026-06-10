@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/control/model"
-	dataaccount "github.com/jiujiu532/grok2api/app/dataplane/account"
-	"github.com/jiujiu532/grok2api/app/platform"
-	platformconfig "github.com/jiujiu532/grok2api/app/platform/config"
+	controlaccount "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/control/model"
+	dataaccount "github.com/dslzl/gork/app/dataplane/account"
+	"github.com/dslzl/gork/app/platform"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 func TestMessagesNonStreamBuildsAnthropicMessage(t *testing.T) {

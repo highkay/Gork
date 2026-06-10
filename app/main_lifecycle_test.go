@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	accountcontrol "github.com/jiujiu532/grok2api/app/control/account"
-	configbackends "github.com/jiujiu532/grok2api/app/platform/config/backends"
-	platformstartup "github.com/jiujiu532/grok2api/app/platform/startup"
+	accountcontrol "github.com/dslzl/gork/app/control/account"
+	configbackends "github.com/dslzl/gork/app/platform/config/backends"
+	platformstartup "github.com/dslzl/gork/app/platform/startup"
 )
 
 func TestDefaultStartupMigrationsUseConfigBackendAndRepositoryAdapter(t *testing.T) {

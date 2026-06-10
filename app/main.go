@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	accountcontrol "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/platform/config"
-	"github.com/jiujiu532/grok2api/app/platform/logging"
-	"github.com/jiujiu532/grok2api/app/products/anthropic"
-	"github.com/jiujiu532/grok2api/app/products/openai"
-	"github.com/jiujiu532/grok2api/app/products/web"
+	accountcontrol "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/platform/config"
+	"github.com/dslzl/gork/app/platform/logging"
+	"github.com/dslzl/gork/app/products/anthropic"
+	"github.com/dslzl/gork/app/products/openai"
+	"github.com/dslzl/gork/app/products/web"
 )
 
 var (

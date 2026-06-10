@@ -1,8 +1,8 @@
 package reverse
 
 import (
-	controlmodel "github.com/jiujiu532/grok2api/app/control/model"
-	reverseruntime "github.com/jiujiu532/grok2api/app/dataplane/reverse/runtime"
+	controlmodel "github.com/dslzl/gork/app/control/model"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
 type BuildPlanOptions struct {

@@ -4,12 +4,12 @@
     "connectionFailed": "Échec de la connexion"
   },
   "login": {
-    "adminPageTitle": "Grok2API - Administration",
+    "adminPageTitle": "Gork - Administration",
     "adminTitle": "Panneau d’administration",
     "adminSubtitle": "Saisissez le mot de passe administrateur pour continuer",
     "adminPlaceholder": "Mot de passe administrateur",
     "continue": "Continuer",
-    "webuiPageTitle": "Grok2API - WebUI",
+    "webuiPageTitle": "Gork - WebUI",
     "webuiTitle": "WebUI",
     "webuiSubtitle": "Saisissez la clé d’accès",
     "webuiPlaceholder": "Clé d’accès",
@@ -23,7 +23,7 @@
       "chatkit": "ChatKit"
     },
     "chat": {
-      "pageTitle": "Grok2API - WebChat",
+      "pageTitle": "Gork - WebChat",
       "sidebarTitle": "Chats",
       "newChat": "Nouveau chat",
       "toggleSidebar": "Basculer la barre latérale",
@@ -71,7 +71,7 @@
       }
     },
     "chatkit": {
-      "pageTitle": "Grok2API - ChatKit",
+      "pageTitle": "Gork - ChatKit",
       "voiceLabel": "Voix",
       "personalityLabel": "Personnalité",
       "speedLabel": "Vitesse",
@@ -97,7 +97,7 @@
       "invalidToken": "Réponse de jeton vocal invalide"
     },
     "masonry": {
-      "pageTitle": "Grok2API - Masonry",
+      "pageTitle": "Gork - Masonry",
       "title": "Masonry",
       "qualitySpeed": "Vitesse",
       "qualityQuality": "Qualité",
@@ -147,9 +147,9 @@
     "versionClose": "Fermer"
   },
   "account": {
-    "pageTitle": "Grok2API - Comptes",
+    "pageTitle": "Gork - Comptes",
     "pageHeading": "Gestion des Comptes",
-    "pageSubtitle": "Gérez le pool de comptes xAI, la posture de quota et l’état d’exécution utilisés par Grok2API.",
+    "pageSubtitle": "Gérez le pool de comptes xAI, la posture de quota et l’état d’exécution utilisés par Gork.",
     "actionImport": "Importer des comptes",
     "actionAdd": "Ajouter un compte",
     "actionImportShort": "Importer",
@@ -309,9 +309,9 @@
     }
   },
   "config": {
-    "pageTitle": "Grok2API - Gestion de la Configuration",
+    "pageTitle": "Gork - Gestion de la Configuration",
     "pageHeading": "Gestion de la Configuration",
-    "pageSubtitle": "Gérez les paramètres d’exécution de Grok2API et le comportement par défaut du service.",
+    "pageSubtitle": "Gérez les paramètres d’exécution de Gork et le comportement par défaut du service.",
     "resetShort": "Réinitialiser",
     "saveShort": "Enregistrer",
     "resetChanges": "Réinitialiser les modifications",
@@ -446,7 +446,7 @@
     }
   },
   "cache": {
-    "pageTitle": "Grok2API - Gestion du Cache",
+    "pageTitle": "Gork - Gestion du Cache",
     "pageHeading": "Gestion du Cache",
     "pageSubtitle": "Consultez et gérez les fichiers de cache locaux, les limites de stockage et les actifs en ligne des comptes.",
     "sectionOverview": "Vue d’ensemble",

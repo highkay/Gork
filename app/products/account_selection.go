@@ -3,10 +3,10 @@ package products
 import (
 	"context"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/control/model"
-	dataaccount "github.com/jiujiu532/grok2api/app/dataplane/account"
-	platformconfig "github.com/jiujiu532/grok2api/app/platform/config"
+	controlaccount "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/control/model"
+	dataaccount "github.com/dslzl/gork/app/dataplane/account"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 const randomMaxRetries = 5
