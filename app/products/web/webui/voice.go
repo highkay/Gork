@@ -7,13 +7,13 @@ import (
 	"net/http"
 	"strings"
 
-	controlmodel "github.com/jiujiu532/grok2api/app/control/model"
-	dataaccount "github.com/jiujiu532/grok2api/app/dataplane/account"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/transport"
-	platform "github.com/jiujiu532/grok2api/app/platform"
-	appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	controlmodel "github.com/dslzl/gork/app/control/model"
+	dataaccount "github.com/dslzl/gork/app/dataplane/account"
+	"github.com/dslzl/gork/app/dataplane/reverse"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/dataplane/reverse/transport"
+	platform "github.com/dslzl/gork/app/platform"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 type webUIVoiceAccountDirectory interface {

@@ -5,10 +5,10 @@ import (
 	"errors"
 	"strings"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/control/model"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	"github.com/jiujiu532/grok2api/app/platform"
+	controlaccount "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/control/model"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/platform"
 )
 
 func Messages(ctx context.Context, options MessagesOptions) (MessagesResult, error) {

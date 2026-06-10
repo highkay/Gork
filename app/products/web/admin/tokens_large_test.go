@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	runtimepkg "github.com/jiujiu532/grok2api/app/platform/runtime"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func TestAdminTokensRepositoryFiltersTagsBeforePagination(t *testing.T) {
@@ -58,7 +58,7 @@ func TestAdminTokensListLargeSetReturnsPageWithGlobalFacets(t *testing.T) {
 	}
 	adminTokensRepoProvider = func() adminTokensRepository { return repo }
 
-	rec := adminRequest(http.MethodGet, "/admin/api/tokens?page=2&page_size=2&sort_by=token&sort_desc=false", "", "Bearer grok2api")
+	rec := adminRequest(http.MethodGet, "/admin/api/tokens?page=2&page_size=2&sort_by=token&sort_desc=false", "", "Bearer gork")
 	body := decodeAdminBody(t, rec)
 
 	tokens := body["tokens"].([]any)
@@ -102,7 +102,7 @@ func TestAdminTokensAsyncTextImportReportsTaskProgress(t *testing.T) {
 	adminTokensRefreshServiceProvider = func() adminTokensRefreshService { return refresh }
 	adminTokensAsyncRunner = func(run func()) { run() }
 
-	rec := adminRequest(http.MethodPost, "/admin/api/tokens/import-async", `{"pool":"basic","tokens_text":"tok-100\ntok-101\ntok-100\n"}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/tokens/import-async", `{"pool":"basic","tokens_text":"tok-100\ntok-101\ntok-100\n"}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 
 	if body["status"] != "success" || int(body["total"].(float64)) != 2 {

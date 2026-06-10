@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/auth"
+	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/auth"
 )
 
 func webUIProtected(method string, handler http.HandlerFunc) http.HandlerFunc {

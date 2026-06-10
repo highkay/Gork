@@ -6,10 +6,10 @@ import (
 	"math"
 	"strconv"
 
-	accountcontrol "github.com/jiujiu532/grok2api/app/control/account"
-	accountbackends "github.com/jiujiu532/grok2api/app/control/account/backends"
-	configbackends "github.com/jiujiu532/grok2api/app/platform/config/backends"
-	platformstartup "github.com/jiujiu532/grok2api/app/platform/startup"
+	accountcontrol "github.com/dslzl/gork/app/control/account"
+	accountbackends "github.com/dslzl/gork/app/control/account/backends"
+	configbackends "github.com/dslzl/gork/app/platform/config/backends"
+	platformstartup "github.com/dslzl/gork/app/platform/startup"
 )
 
 var (

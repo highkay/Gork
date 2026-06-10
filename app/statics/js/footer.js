@@ -29,18 +29,23 @@ window.renderSiteFooter = async function renderSiteFooter() {
     return node;
   };
 
-  const brand = link('Grok2API', 'https://github.com/jiujiu532/grok2api');
+  const brand = link('Gork', 'https://github.com/dslzl/gork');
   footer.appendChild(brand);
 
   footer.appendChild(sep());
 
-  const author = link('@Chenyme', 'https://blog.cheny.me/');
+  const author = link('@DSLZL', 'https://github.com/DSLZL');
   footer.appendChild(author);
 
   footer.appendChild(sep());
 
-  const author2 = link('@jiu', 'https://github.com/jiujiu532');
-  footer.appendChild(author2);
+  const forkAuthor = link('@jiu', 'https://github.com/jiujiu532');
+  footer.appendChild(forkAuthor);
+
+  footer.appendChild(sep());
+
+  const originalAuthor = link('@Chenyme', 'https://blog.cheny.me/');
+  footer.appendChild(originalAuthor);
 
   document.body.appendChild(footer);
 };

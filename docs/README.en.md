@@ -1,10 +1,10 @@
-<img alt="Grok2API" src="https://github.com/user-attachments/assets/037a0a6e-7986-41cc-b4af-04df612ee886" />
+<img alt="Gork" src="https://github.com/user-attachments/assets/037a0a6e-7986-41cc-b4af-04df612ee886" />
 
 [![Go](https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![OpenAI Compatible](https://img.shields.io/badge/API-OpenAI%20compatible-111827)](#api-endpoints)
 [![Version](https://img.shields.io/badge/version-2.0.4.rc4-111827)](../go.mod)
 [![License](https://img.shields.io/badge/license-MIT-16a34a)](../LICENSE)
-[![Docker](https://img.shields.io/badge/ghcr.io-jiujiu532%2Fgrok2api-2496ED?logo=docker&logoColor=white)](https://github.com/jiujiu532/grok2api/pkgs/container/grok2api)
+[![Docker](https://img.shields.io/badge/ghcr.io-dslzl%2Fgork-2496ED?logo=docker&logoColor=white)](https://github.com/dslzl/gork/pkgs/container/gork)
 [![中文](https://img.shields.io/badge/%E4%B8%AD%E6%96%87-DC2626?logo=bookstack&logoColor=white)](../README.md)
 
 > [!NOTE]
@@ -12,7 +12,7 @@
 
 <br>
 
-Grok2API is a **Go**-based Grok gateway that exposes Grok's web capabilities through OpenAI-compatible APIs. Highlights:
+Gork is a **Go**-based Grok gateway that exposes Grok's web capabilities through OpenAI-compatible APIs. Highlights:
 
 - OpenAI-compatible endpoints: `/v1/models`, `/v1/chat/completions`, `/v1/responses`, `/v1/images/generations`, `/v1/images/edits`, `/v1/videos`, `/v1/videos/{video_id}`, `/v1/videos/{video_id}/content`
 - Anthropic-compatible endpoint: `/v1/messages`
@@ -27,11 +27,11 @@ Grok2API is a **Go**-based Grok gateway that exposes Grok's web capabilities thr
 
 ## Image Info
 
-This repository builds on top of [chenyme/grok2api](https://github.com/chenyme/grok2api) and ships a prebuilt Docker image:
+This repository is a fork based on [chenyme/grok2api](https://github.com/chenyme/grok2api) and [jiujiu532/grok2api](https://github.com/jiujiu532/grok2api), and ships a prebuilt Docker image:
 
 | Field | Value |
 | :-- | :-- |
-| Image | `ghcr.io/jiujiu532/grok2api:latest` |
+| Image | `ghcr.io/dslzl/gork:latest` |
 | Architecture | `linux/amd64` |
 | Base image | `python:3.13-alpine` |
 | Default port | `8000` |
@@ -45,8 +45,8 @@ This repository builds on top of [chenyme/grok2api](https://github.com/chenyme/g
 ### Option 1: Docker Compose (recommended)
 
 ```bash
-git clone https://github.com/jiujiu532/grok2api
-cd grok2api/grok2api-main/grok2api-main
+git clone https://github.com/dslzl/gork
+cd gork
 cp .env.example .env
 docker compose up -d
 ```
@@ -54,16 +54,16 @@ docker compose up -d
 Tail logs:
 
 ```bash
-docker compose logs -f grok2api
+docker compose logs -f gork
 ```
 
-> The included `docker-compose.yml` already pulls `ghcr.io/jiujiu532/grok2api:latest`. No local build is required.
+> The included `docker-compose.yml` already pulls `ghcr.io/dslzl/gork:latest`. No local build is required.
 
 ### Option 2: Plain Docker
 
 ```bash
 docker run -d \
-  --name grok2api \
+  --name gork \
   -p 8000:8000 \
   -e TZ=Asia/Shanghai \
   -e LOG_LEVEL=INFO \
@@ -71,14 +71,14 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
   --restart unless-stopped \
-  ghcr.io/jiujiu532/grok2api:latest
+  ghcr.io/dslzl/gork:latest
 ```
 
 Windows PowerShell:
 
 ```powershell
 docker run -d `
-  --name grok2api `
+  --name gork `
   -p 8000:8000 `
   -e TZ=Asia/Shanghai `
   -e LOG_LEVEL=INFO `
@@ -86,7 +86,7 @@ docker run -d `
   -v ${PWD}/data:/app/data `
   -v ${PWD}/logs:/app/logs `
   --restart unless-stopped `
-  ghcr.io/jiujiu532/grok2api:latest
+  ghcr.io/dslzl/gork:latest
 ```
 
 ### Option 3: From source
@@ -94,19 +94,19 @@ docker run -d `
 Prerequisites: Go 1.25+. Python 3.13+ and `uv` are only needed for migration-period regression tests.
 
 ```bash
-git clone https://github.com/jiujiu532/grok2api
-cd grok2api/grok2api-main/grok2api-main
+git clone https://github.com/dslzl/gork
+cd gork
 cp .env.example .env
-go run ./cmd/grok2api
+go run ./cmd/gork
 
 # Optional: build a local binary
-go build -o grok2api ./cmd/grok2api
-./grok2api
+go build -o gork ./cmd/gork
+./gork
 ```
 
 ### First-time setup
 
-After the service is up, open `http://localhost:8000/admin/login`. Default password is `grok2api`. Then:
+After the service is up, open `http://localhost:8000/admin/login`. Default password is `gork`. Then:
 
 1. Change `app.app_key` (Admin console password)
 2. Set `app.api_key` (API auth key; leave empty to disable auth)
@@ -124,10 +124,10 @@ docker compose pull
 docker compose up -d
 
 # Pull a specific tag (see GHCR for available versions)
-docker pull ghcr.io/jiujiu532/grok2api:latest
+docker pull ghcr.io/dslzl/gork:latest
 
 # Rollback
-docker run -d ... ghcr.io/jiujiu532/grok2api:<tag>
+docker run -d ... ghcr.io/dslzl/gork:<tag>
 ```
 
 <br>
@@ -178,7 +178,7 @@ After enabling the reverse proxy, set `app.app_url` to `https://your.domain.com`
 | Scope | Config | Rule |
 | :-- | :-- | :-- |
 | `/v1/*` | `app.api_key` | No auth when empty |
-| `/admin/*` | `app.app_key` | Default `grok2api` |
+| `/admin/*` | `app.app_key` | Default `gork` |
 | `/webui/*` | `app.webui_enabled`, `app.webui_key` | Disabled by default; no extra check when `webui_key` is empty |
 
 <br>
@@ -314,7 +314,7 @@ Runtime config can also be overridden via `GROK_`-prefixed env vars, e.g. `GROK_
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $GROK2API_API_KEY" \
+  -H "Authorization: Bearer $GORK_API_KEY" \
   -d '{
     "model": "grok-4.20-auto",
     "stream": true,
@@ -330,7 +330,7 @@ curl http://localhost:8000/v1/chat/completions \
 ```bash
 curl http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $GROK2API_API_KEY" \
+  -H "Authorization: Bearer $GORK_API_KEY" \
   -d '{
     "model": "grok-4.3-high-console",
     "stream": true,
@@ -345,7 +345,7 @@ curl http://localhost:8000/v1/chat/completions \
 ```bash
 curl http://localhost:8000/v1/images/generations \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $GROK2API_API_KEY" \
+  -H "Authorization: Bearer $GORK_API_KEY" \
   -d '{
     "model": "grok-imagine-image",
     "prompt": "A cat floating in outer space",
@@ -359,7 +359,7 @@ curl http://localhost:8000/v1/images/generations \
 
 ```bash
 curl http://localhost:8000/v1/videos \
-  -H "Authorization: Bearer $GROK2API_API_KEY" \
+  -H "Authorization: Bearer $GORK_API_KEY" \
   -F "model=grok-imagine-video" \
   -F "prompt=Neon rainy night street, cinematic slow-motion tracking shot" \
   -F "seconds=10" \

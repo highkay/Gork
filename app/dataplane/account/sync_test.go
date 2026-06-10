@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
+	controlaccount "github.com/dslzl/gork/app/control/account"
 )
 
 type syncFakeRepository struct {

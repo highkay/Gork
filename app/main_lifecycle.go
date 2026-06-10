@@ -7,13 +7,13 @@ import (
 	"strings"
 	"time"
 
-	accountcontrol "github.com/jiujiu532/grok2api/app/control/account"
-	accountbackends "github.com/jiujiu532/grok2api/app/control/account/backends"
-	proxycontrol "github.com/jiujiu532/grok2api/app/control/proxy"
-	accountdataplane "github.com/jiujiu532/grok2api/app/dataplane/account"
-	platformruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
-	platformstorage "github.com/jiujiu532/grok2api/app/platform/storage"
-	adminproduct "github.com/jiujiu532/grok2api/app/products/web/admin"
+	accountcontrol "github.com/dslzl/gork/app/control/account"
+	accountbackends "github.com/dslzl/gork/app/control/account/backends"
+	proxycontrol "github.com/dslzl/gork/app/control/proxy"
+	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
+	platformruntime "github.com/dslzl/gork/app/platform/runtime"
+	platformstorage "github.com/dslzl/gork/app/platform/storage"
+	adminproduct "github.com/dslzl/gork/app/products/web/admin"
 )
 
 type appMainLifecycleState struct {

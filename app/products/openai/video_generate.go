@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/control/model"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	reverseruntime "github.com/jiujiu532/grok2api/app/dataplane/reverse/runtime"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/transport"
-	"github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/config"
-	"github.com/jiujiu532/grok2api/app/platform/storage"
+	"github.com/dslzl/gork/app/control/model"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
+	"github.com/dslzl/gork/app/dataplane/reverse/transport"
+	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/config"
+	"github.com/dslzl/gork/app/platform/storage"
 )
 
 const (

@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	platformpaths "github.com/jiujiu532/grok2api/app/platform"
-	platformconfig "github.com/jiujiu532/grok2api/app/platform/config"
+	platformpaths "github.com/dslzl/gork/app/platform"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 const defaultMigrationBatch = 500

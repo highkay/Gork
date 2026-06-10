@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	proxyadapters "github.com/jiujiu532/grok2api/app/dataplane/proxy/adapters"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	platform "github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/config"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	platform "github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/config"
 )
 
 const AssetUploadURL = "https://grok.com/rest/app-chat/upload-file"

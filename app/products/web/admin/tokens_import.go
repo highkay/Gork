@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	runtimepkg "github.com/jiujiu532/grok2api/app/platform/runtime"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func handleAdminTokensImportAsync(w http.ResponseWriter, r *http.Request) {

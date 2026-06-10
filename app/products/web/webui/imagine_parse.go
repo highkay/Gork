@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/platform/auth"
-	"github.com/jiujiu532/grok2api/app/platform/config"
-	"github.com/jiujiu532/grok2api/app/products/openai"
+	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/config"
+	"github.com/dslzl/gork/app/products/openai"
 )
 
 func parseWebUIImagineStart(payload map[string]any) (webUIImagineStart, bool) {

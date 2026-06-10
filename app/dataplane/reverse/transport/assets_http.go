@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"net/url"
 
-	proxyadapters "github.com/jiujiu532/grok2api/app/dataplane/proxy/adapters"
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 type netHTTPAssetsClient struct{}

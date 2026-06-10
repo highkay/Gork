@@ -3,7 +3,7 @@ package admin
 import (
 	"context"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/transport"
+	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
 
 func defaultAdminListAssets(ctx context.Context, token string) (map[string]any, error) {

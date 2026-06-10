@@ -90,7 +90,7 @@ func TestDefaultLifecycleWiresAdminAccountRuntime(t *testing.T) {
 		}
 	})
 
-	status := appJSONRequest(t, app.Handler(), http.MethodGet, "/admin/api/status", "", "Bearer grok2api")
+	status := appJSONRequest(t, app.Handler(), http.MethodGet, "/admin/api/status", "", "Bearer gork")
 	if code := adminErrorCode(status); code == "directory_not_initialised" {
 		t.Fatalf("admin status returned directory_not_initialised: %#v", status)
 	}
@@ -98,7 +98,7 @@ func TestDefaultLifecycleWiresAdminAccountRuntime(t *testing.T) {
 		t.Fatalf("admin status response = %#v", status)
 	}
 
-	tokens := appJSONRequest(t, app.Handler(), http.MethodGet, "/admin/api/tokens?page=1&page_size=50&sort_by=updated_at&sort_desc=true", "", "Bearer grok2api")
+	tokens := appJSONRequest(t, app.Handler(), http.MethodGet, "/admin/api/tokens?page=1&page_size=50&sort_by=updated_at&sort_desc=true", "", "Bearer gork")
 	if code := adminErrorCode(tokens); code == "account_repository_not_initialised" {
 		t.Fatalf("admin tokens returned account_repository_not_initialised: %#v", tokens)
 	}

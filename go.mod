@@ -1,4 +1,4 @@
-module github.com/jiujiu532/grok2api
+module github.com/dslzl/gork
 
 go 1.25.0
 

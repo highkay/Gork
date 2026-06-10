@@ -97,11 +97,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build local image
-        run: docker build -t grok2api-security-scan:${{ github.sha }} .
+        run: docker build -t gork-security-scan:${{ github.sha }} .
       - name: Scan local image
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: grok2api-security-scan:${{ github.sha }}
+          image-ref: gork-security-scan:${{ github.sha }}
           vuln-type: os,library
           scanners: vuln,secret,misconfig
           severity: HIGH,CRITICAL

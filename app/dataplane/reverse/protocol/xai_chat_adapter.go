@@ -69,7 +69,7 @@ func (a *StreamAdapter) ReferencesSuffix() string {
 	if len(a.webSearchResults) == 0 || !a.showSearchSources {
 		return ""
 	}
-	lines := []string{"\n\n## Sources", "[grok2api-sources]: #"}
+	lines := []string{"\n\n## Sources", "[gork-sources]: #"}
 	for _, item := range a.webSearchResults {
 		title := stringFromAny(item["title"])
 		if title == "" {

@@ -3,7 +3,7 @@ package openai
 import (
 	"context"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 )
 
 type responseStreamResult struct {

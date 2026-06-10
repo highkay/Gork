@@ -10,8 +10,8 @@ window.renderAdminHeader = async function renderAdminHeader() {
       return 'v1';
     }
   })();
-  const HEADER_HTML_CACHE_KEY = `grok2api.admin_header_html.${scriptVersion}`;
-  const META_VERSION_CACHE_KEY = `grok2api.meta_version.${scriptVersion}`;
+  const HEADER_HTML_CACHE_KEY = `gork.admin_header_html.${scriptVersion}`;
+  const META_VERSION_CACHE_KEY = `gork.meta_version.${scriptVersion}`;
   let appVersion = '';
   let updateInfo = null;
   let updateStatus = 'idle';
@@ -54,7 +54,7 @@ window.renderAdminHeader = async function renderAdminHeader() {
     };
 
     const sync = () => {
-      const current = window.I18n?.getLang?.() || localStorage.getItem('grok2api_lang') || 'zh';
+      const current = window.I18n?.getLang?.() || localStorage.getItem('gork_lang') || 'zh';
       code.textContent = languageCodes[current] || current.toUpperCase();
       options.forEach((option) => {
         option.classList.toggle('active', option.dataset.lang === current);
@@ -76,7 +76,7 @@ window.renderAdminHeader = async function renderAdminHeader() {
         if (window.I18n?.setLang) {
           I18n.setLang(lang);
         } else {
-          localStorage.setItem('grok2api_lang', lang);
+          localStorage.setItem('gork_lang', lang);
           location.reload();
         }
       });
@@ -111,10 +111,10 @@ window.renderAdminHeader = async function renderAdminHeader() {
   };
 
   const loadVersion = async () => {
-    const cachedVersion = window.__grok2apiMetaVersion || readSessionCache(META_VERSION_CACHE_KEY);
+    const cachedVersion = window.__gorkMetaVersion || readSessionCache(META_VERSION_CACHE_KEY);
     if (cachedVersion) {
       appVersion = String(cachedVersion).trim();
-      window.__grok2apiMetaVersion = appVersion;
+      window.__gorkMetaVersion = appVersion;
       return;
     }
     try {
@@ -122,7 +122,7 @@ window.renderAdminHeader = async function renderAdminHeader() {
       if (!res.ok) throw new Error('meta unavailable');
       const data = await res.json();
       appVersion = String(data?.version || '').trim();
-      window.__grok2apiMetaVersion = appVersion;
+      window.__gorkMetaVersion = appVersion;
       writeSessionCache(META_VERSION_CACHE_KEY, appVersion);
     } catch {
       appVersion = '';
@@ -538,7 +538,7 @@ window.renderAdminHeader = async function renderAdminHeader() {
   await loadVersion();
 
   try {
-    const cachedHtml = window.__grok2apiAdminHeaderHtml || readSessionCache(HEADER_HTML_CACHE_KEY);
+    const cachedHtml = window.__gorkAdminHeaderHtml || readSessionCache(HEADER_HTML_CACHE_KEY);
     if (cachedHtml) {
       mount.innerHTML = cachedHtml;
     } else {
@@ -546,7 +546,7 @@ window.renderAdminHeader = async function renderAdminHeader() {
       if (!res.ok) throw new Error('header unavailable');
       const html = await res.text();
       mount.innerHTML = html;
-      window.__grok2apiAdminHeaderHtml = html;
+      window.__gorkAdminHeaderHtml = html;
       writeSessionCache(HEADER_HTML_CACHE_KEY, html);
     }
   } catch {
@@ -554,9 +554,11 @@ window.renderAdminHeader = async function renderAdminHeader() {
       <header class="admin-header">
         <div class="admin-header-inner">
           <div class="admin-brand-wrap">
-            <a href="https://github.com/chenyme/grok2api" target="_blank" rel="noopener" class="admin-brand-link">
-              <span class="admin-brand">Grok2API</span>
+            <a href="https://github.com/dslzl/gork" target="_blank" rel="noopener" class="admin-brand-link">
+              <span class="admin-brand">Gork</span>
             </a>
+            <a href="https://github.com/DSLZL" target="_blank" rel="noopener" class="admin-username">@DSLZL</a>
+            <a href="https://github.com/jiujiu532" target="_blank" rel="noopener" class="admin-username">@jiu</a>
             <a href="https://blog.cheny.me/" target="_blank" rel="noopener" class="admin-username" id="hd-user">@Chenyme</a>
           </div>
           <nav class="admin-nav">

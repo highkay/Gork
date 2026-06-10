@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiujiu532/grok2api/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/auth"
 )
 
 func TestAnthropicRouterMessagesDefaultsAndJSONResponse(t *testing.T) {

@@ -1,6 +1,6 @@
 package admin
 
-import "github.com/jiujiu532/grok2api/app/platform"
+import "github.com/dslzl/gork/app/platform"
 
 type adminTokensReplacePoolRequest struct {
 	Pool   string   `json:"pool"`

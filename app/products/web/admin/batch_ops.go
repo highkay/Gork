@@ -3,7 +3,7 @@ package admin
 import (
 	"context"
 
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/platform"
 )
 
 func adminBatchNSFWOne(ctx context.Context, repo adminBatchRepository, token string, enabled bool) (map[string]any, error) {

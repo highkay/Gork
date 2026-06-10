@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/auth"
-	"github.com/jiujiu532/grok2api/app/platform/config"
-	"github.com/jiujiu532/grok2api/app/platform/logging"
-	"github.com/jiujiu532/grok2api/app/platform/storage"
+	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/config"
+	"github.com/dslzl/gork/app/platform/logging"
+	"github.com/dslzl/gork/app/platform/storage"
 )
 
 type adminConfigStore interface {

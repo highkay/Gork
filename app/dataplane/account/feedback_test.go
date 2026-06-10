@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func TestApplySuccessAndRateLimitFeedbackMatchesPythonStrategies(t *testing.T) {

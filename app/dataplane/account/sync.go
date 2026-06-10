@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/dataplane/shared"
-	appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	controlaccount "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/dataplane/shared"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 const defaultSyncBatchLimit = controlaccount.AccountScanChangesDefaultLimit

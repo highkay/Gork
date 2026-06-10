@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/storage"
+	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/storage"
 )
 
 func handleAdminCacheStats(w http.ResponseWriter, _ *http.Request) {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/transport"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
 
 func defaultAdminBatchNSFWSequence(ctx context.Context, token string) error {

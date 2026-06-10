@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 var grokRenderRe = regexp.MustCompile(`(?s)<grok:render\s+card_id="([^"]+)"\s+card_type="([^"]+)"\s+type="([^"]+)"[^>]*>.*?</grok:render>`)

@@ -1,6 +1,6 @@
 package backends
 
-import account "github.com/jiujiu532/grok2api/app/control/account"
+import account "github.com/dslzl/gork/app/control/account"
 
 func appendRedisBasicUpdates(updates map[string]string, patch account.AccountPatch) {
 	if patch.Status != nil {

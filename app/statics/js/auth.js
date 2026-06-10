@@ -1,9 +1,9 @@
-/* Grok2API — Auth module */
+/* Gork — Auth module */
 const ADMIN_API = '/admin/api';
 const WEBUI_API = '/webui/api';
 
 const _ENC = new TextEncoder(), _DEC = new TextDecoder();
-const _SECRET = 'grok2api-admin-key';
+const _SECRET = 'gork-admin-key';
 const _XOR_P = 'enc:xor:', _AES_P = 'enc:v1:';
 
 function _toB64(b) { let s=''; b.forEach(v=>s+=String.fromCharCode(v)); return btoa(s); }
@@ -41,8 +41,8 @@ function _keyStore(k) {
   };
 }
 
-const adminKey = _keyStore('grok2api_admin_key');
-const webuiKey = _keyStore('grok2api_webui_key');
+const adminKey = _keyStore('gork_admin_key');
+const webuiKey = _keyStore('gork_webui_key');
 
 async function verifyKey(url, key) {
   return (await fetch(url, { headers: key ? { Authorization: `Bearer ${key}` } : {} })).ok;

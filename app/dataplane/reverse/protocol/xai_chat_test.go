@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	controlmodel "github.com/jiujiu532/grok2api/app/control/model"
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	controlmodel "github.com/dslzl/gork/app/control/model"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 func TestBuildChatPayloadMatchesPythonFixture(t *testing.T) {
@@ -193,7 +193,7 @@ func TestStreamAdapterMatchesPythonCardSourceAndToolEdges(t *testing.T) {
 		{Kind: "annotation", AnnotationData: map[string]any{"type": "url_citation", "url": "https://a", "title": "A [one]", "start_index": 3, "end_index": 20}},
 	})
 	assertAnyMaps(t, adapter.SearchSourcesList(), []map[string]any{{"url": "https://a", "title": "A [one]", "type": "web"}})
-	if got, want := adapter.ReferencesSuffix(), "\n\n## Sources\n[grok2api-sources]: #\n- [A \\[one\\]](https://a)\n"; got != want {
+	if got, want := adapter.ReferencesSuffix(), "\n\n## Sources\n[gork-sources]: #\n- [A \\[one\\]](https://a)\n"; got != want {
 		t.Fatalf("sources suffix mismatch\nwant: %q\n got: %q", want, got)
 	}
 

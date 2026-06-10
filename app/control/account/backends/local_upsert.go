@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	account "github.com/jiujiu532/grok2api/app/control/account"
-	platformruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	account "github.com/dslzl/gork/app/control/account"
+	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func upsertLocalAccounts(

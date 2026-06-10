@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	"github.com/jiujiu532/grok2api/app/platform/config"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	"github.com/dslzl/gork/app/platform/config"
 )
 
 const defaultWebSocketTimeout = 120 * time.Second

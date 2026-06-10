@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	ProjectName    = "grok2api"
+	ProjectName    = "gork"
 	ProjectVersion = "2.0.4.rc4"
 )
 

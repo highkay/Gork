@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/platform/config/backends"
+	"github.com/dslzl/gork/app/platform/config/backends"
 )
 
 type ConfigSnapshotOptions struct {

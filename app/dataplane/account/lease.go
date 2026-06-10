@@ -1,6 +1,6 @@
 package account
 
-import appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+import appruntime "github.com/dslzl/gork/app/platform/runtime"
 
 type AccountLease struct {
 	LeaseID    int64

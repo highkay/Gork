@@ -10,12 +10,12 @@ import (
 	"strings"
 	"testing"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/control/model"
-	dataaccount "github.com/jiujiu532/grok2api/app/dataplane/account"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	"github.com/jiujiu532/grok2api/app/platform"
-	platformconfig "github.com/jiujiu532/grok2api/app/platform/config"
+	controlaccount "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/control/model"
+	dataaccount "github.com/dslzl/gork/app/dataplane/account"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/platform"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 func TestChatRetryCodeParsingMatchesPython(t *testing.T) {
@@ -400,7 +400,7 @@ func TestChatBuildNonStreamResponseAppendsImagesReferencesThinkingAndAnnotations
 		Text:       "answer",
 		Thinking:   "reason",
 		ImageTexts: []string{"![image](local)"},
-		References: "\n\n## Sources\n[grok2api-sources]: #\n- [Example](https://example.test)\n",
+		References: "\n\n## Sources\n[gork-sources]: #\n- [Example](https://example.test)\n",
 		Annotations: []map[string]any{{
 			"url":         "https://example.test",
 			"title":       "Example",

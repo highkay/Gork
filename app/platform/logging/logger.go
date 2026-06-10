@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/platform"
 )
 
 const (

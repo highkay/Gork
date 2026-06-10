@@ -3,7 +3,7 @@ package admin
 import (
 	"net/http"
 
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/platform"
 )
 
 func adminTokensNewOnly(tokens []string, records []adminAssetsAccount) []string {

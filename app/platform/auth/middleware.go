@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 type AuthSettings struct {
@@ -37,7 +37,7 @@ func GetAPIKeys(settings AuthSettings) []string {
 
 func GetAdminKey(settings AuthSettings) string {
 	if settings.AdminKey == nil {
-		return "grok2api"
+		return "gork"
 	}
 	return fmt.Sprint(settings.AdminKey)
 }

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 )
 
 func TestNormalizeSocksProxyMatchesPython(t *testing.T) {

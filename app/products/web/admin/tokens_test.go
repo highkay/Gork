@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	runtimepkg "github.com/jiujiu532/grok2api/app/platform/runtime"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
@@ -26,7 +26,7 @@ func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
 	}
 	adminTokensRepoProvider = func() adminTokensRepository { return repo }
 
-	rec := adminRequest(http.MethodGet, "/admin/api/tokens?page=2&page_size=10&pool=basic&status=invalid&nsfw=enabled&sort_by=last_use_at&sort_desc=false", "", "Bearer grok2api")
+	rec := adminRequest(http.MethodGet, "/admin/api/tokens?page=2&page_size=10&pool=basic&status=invalid&nsfw=enabled&sort_by=last_use_at&sort_desc=false", "", "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if repo.queries[0].Pool != "basic" || repo.queries[0].Status != "expired" || repo.queries[0].SortDesc {
 		t.Fatalf("query = %#v", repo.queries[0])
@@ -70,13 +70,13 @@ func TestAdminTokensSaveAddAndDelete(t *testing.T) {
 	adminTokensRefreshServiceProvider = func() adminTokensRefreshService { return refresh }
 	adminTokensAsyncRunner = func(run func()) { run() }
 
-	rec := adminRequest(http.MethodPost, "/admin/api/tokens", `{"basic":[" sso=tok-a ","tok-b"],"super":[{"token":"tok-c","tags":["x"]}]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/tokens", `{"basic":[" sso=tok-a ","tok-b"],"super":[{"token":"tok-c","tags":["x"]}]}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if int(body["count"].(float64)) != 3 || len(repo.replaced) != 2 {
 		t.Fatalf("save body=%#v replaced=%#v", body, repo.replaced)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/tokens/add", `{"tokens":["existing","new","new"],"pool":"auto","tags":["t"]}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/tokens/add", `{"tokens":["existing","new","new"],"pool":"auto","tags":["t"]}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if int(body["count"].(float64)) != 1 || int(body["skipped"].(float64)) != 1 || body["synced"] != true {
 		t.Fatalf("add body = %#v", body)
@@ -85,7 +85,7 @@ func TestAdminTokensSaveAddAndDelete(t *testing.T) {
 		t.Fatalf("upserts=%#v refresh=%#v", repo.upserts, refresh.imported)
 	}
 
-	rec = adminRequest(http.MethodDelete, "/admin/api/tokens", `[" new ",""]`, "Bearer grok2api")
+	rec = adminRequest(http.MethodDelete, "/admin/api/tokens", `[" new ",""]`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if int(body["deleted"].(float64)) != 1 || repo.deleted[0][0] != "new" {
 		t.Fatalf("delete body=%#v deleted=%#v", body, repo.deleted)
@@ -105,26 +105,26 @@ func TestAdminTokensEditToggleAndReplacePool(t *testing.T) {
 	adminTokensAsyncRunner = func(run func()) { run() }
 	adminTokensNowMS = func() int64 { return 456 }
 
-	rec := adminRequest(http.MethodPut, "/admin/api/tokens/edit", `{"old_token":"old","token":"new","pool":"super"}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPut, "/admin/api/tokens/edit", `{"old_token":"old","token":"new","pool":"super"}`, "Bearer gork")
 	body := decodeAdminBody(t, rec)
 	if body["token"] != "new" || repo.deleted[0][0] != "old" || repo.upserts[0][0].Token != "new" {
 		t.Fatalf("edit body=%#v upserts=%#v deleted=%#v", body, repo.upserts, repo.deleted)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/tokens/disabled", `{"token":"one","disabled":true}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/tokens/disabled", `{"token":"one","disabled":true}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if body["disabled"] != true || repo.patches[len(repo.patches)-1][0].Status != "disabled" {
 		t.Fatalf("disable body=%#v patches=%#v", body, repo.patches)
 	}
 
-	rec = adminRequest(http.MethodPost, "/admin/api/tokens/disabled/batch", `{"tokens":["one","two","one"],"disabled":false}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/tokens/disabled/batch", `{"tokens":["one","two","one"],"disabled":false}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	summary := body["summary"].(map[string]any)
 	if int(summary["ok"].(float64)) != 2 || repo.patches[len(repo.patches)-1][0].ClearFailures != true {
 		t.Fatalf("batch disable body=%#v patches=%#v", body, repo.patches)
 	}
 
-	rec = adminRequest(http.MethodPut, "/admin/api/tokens/pool", `{"pool":"heavy","tokens":["one","two"],"tags":["pool-tag"]}`, "Bearer grok2api")
+	rec = adminRequest(http.MethodPut, "/admin/api/tokens/pool", `{"pool":"heavy","tokens":["one","two"],"tags":["pool-tag"]}`, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if body["pool"] != "heavy" || int(body["count"].(float64)) != 2 || repo.replaced[len(repo.replaced)-1].Pool != "heavy" {
 		t.Fatalf("pool body=%#v replaced=%#v", body, repo.replaced)
@@ -139,7 +139,7 @@ func TestAdminTokensImportAsyncAddAndReplace(t *testing.T) {
 	adminTokensRefreshServiceProvider = func() adminTokensRefreshService { return refresh }
 	adminTokensAsyncRunner = func(run func()) { run() }
 
-	rec := adminRequest(http.MethodPost, "/admin/api/tokens/import-async", `{"pool":"basic","mode":"add","tokens":["existing","new-import"],"tags":["a,b"]}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPost, "/admin/api/tokens/import-async", `{"pool":"basic","mode":"add","tokens":["existing","new-import"],"tags":["a,b"]}`, "Bearer gork")
 	rec.Result().Header.Set("Content-Type", "application/json")
 	body := decodeAdminBody(t, rec)
 	task := runtimepkg.GetTask(body["task_id"].(string))
@@ -151,7 +151,7 @@ func TestAdminTokensImportAsyncAddAndReplace(t *testing.T) {
 	}
 
 	replaceJSON := `{"mode":"replace","tokens_text":"{\"basic\":[\"r1\"],\"super\":[{\"token\":\"r2\",\"tags\":[\"x\"]}]}"}`
-	rec = adminRequest(http.MethodPost, "/admin/api/tokens/import-async", replaceJSON, "Bearer grok2api")
+	rec = adminRequest(http.MethodPost, "/admin/api/tokens/import-async", replaceJSON, "Bearer gork")
 	body = decodeAdminBody(t, rec)
 	if int(body["total"].(float64)) != 2 || len(repo.replaced) < 2 {
 		t.Fatalf("replace import body=%#v replaced=%#v", body, repo.replaced)
@@ -169,7 +169,7 @@ func TestAdminTokensImportAsyncSurvivesRequestContextCancellation(t *testing.T) 
 
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodPost, "/admin/api/tokens/import-async", strings.NewReader(`{"pool":"basic","mode":"add","tokens":["new-import"]}`)).WithContext(ctx)
-	req.Header.Set("Authorization", "Bearer grok2api")
+	req.Header.Set("Authorization", "Bearer gork")
 	rec := httptest.NewRecorder()
 	NewRouter().ServeHTTP(rec, req)
 	body := decodeAdminBody(t, rec)
@@ -233,12 +233,12 @@ func TestAdminTokensRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		{name: "pool", method: http.MethodPut, path: "/admin/api/tokens/pool", body: `{"pool":"heavy","tokens":["one","two"],"tags":["pool-tag"]}`, status: http.StatusOK, json: map[string]any{"pool": "heavy", "count": float64(2)}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			rec := adminRequest(tt.method, tt.path, tt.body, "Bearer grok2api")
+			rec := adminRequest(tt.method, tt.path, tt.body, "Bearer gork")
 			assertAdminTokensGoldenJSON(t, rec, tt.status, tt.json)
 		})
 	}
 
-	rec := adminRequest(http.MethodPatch, "/admin/api/tokens", `{}`, "Bearer grok2api")
+	rec := adminRequest(http.MethodPatch, "/admin/api/tokens", `{}`, "Bearer gork")
 	assertAdminTokensGoldenJSON(t, rec, http.StatusMethodNotAllowed, map[string]any{"error.message": "Method not allowed"})
 }
 

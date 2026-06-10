@@ -3,8 +3,8 @@
   const MODELS_ENDPOINT = '/webui/api/models';
   const CHAT_ENDPOINT = '/webui/api/chat/completions';
   const PREFERRED_MODEL = 'grok-4.20-0309-non-reasoning';
-  const STORE_KEY = 'grok2api_webui_chat_sessions_v1';
-  const SIDEBAR_STORE_KEY = 'grok2api_webui_sidebar_collapsed_v1';
+  const STORE_KEY = 'gork_webui_chat_sessions_v1';
+  const SIDEBAR_STORE_KEY = 'gork_webui_sidebar_collapsed_v1';
 
   const chatLayout = document.getElementById('chatLayout');
   const modelSelect = document.getElementById('modelSelect');

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiujiu532/grok2api/app/control/model"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/control/model"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 )
 
 func TestConsoleReasoningEffortFromEmitThink(t *testing.T) {

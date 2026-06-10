@@ -3,7 +3,7 @@ package account
 import (
 	"sync"
 
-	"github.com/jiujiu532/grok2api/app/platform/config"
+	"github.com/dslzl/gork/app/platform/config"
 )
 
 var refreshRuntimeState = struct {

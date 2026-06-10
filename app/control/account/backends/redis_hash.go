@@ -3,8 +3,8 @@ package backends
 import (
 	"strconv"
 
-	account "github.com/jiujiu532/grok2api/app/control/account"
-	platformruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	account "github.com/dslzl/gork/app/control/account"
+	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func redisHashFromRecord(record account.AccountRecord, revision int) (map[string]string, error) {

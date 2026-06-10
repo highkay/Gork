@@ -14,8 +14,8 @@ COPY cmd ./cmd
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -trimpath \
     -ldflags="-s -w" \
-    -o /out/grok2api \
-    ./cmd/grok2api
+    -o /out/gork \
+    ./cmd/gork
 
 # Runtime
 FROM alpine:3.22
@@ -35,13 +35,13 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-COPY --from=builder /out/grok2api /app/grok2api
+COPY --from=builder /out/gork /app/gork
 COPY pyproject.toml config.defaults.toml ./
 COPY app/statics ./app/statics
 COPY scripts/entrypoint.sh scripts/init_storage.sh ./scripts/
 
 RUN mkdir -p /app/data /app/logs \
-    && chmod +x /app/grok2api /app/scripts/entrypoint.sh /app/scripts/init_storage.sh
+    && chmod +x /app/gork /app/scripts/entrypoint.sh /app/scripts/init_storage.sh
 
 EXPOSE 8000
 
@@ -49,4 +49,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD ["sh", "-c", "wget -qO /dev/null http://127.0.0.1:${PORT:-${SERVER_PORT:-8000}}/health || exit 1"]
 
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
-CMD ["sh", "-c", "HOST=${HOST:-${SERVER_HOST:-0.0.0.0}} PORT=${PORT:-${SERVER_PORT:-8000}} exec /app/grok2api"]
+CMD ["sh", "-c", "HOST=${HOST:-${SERVER_HOST:-0.0.0.0}} PORT=${PORT:-${SERVER_PORT:-8000}} exec /app/gork"]

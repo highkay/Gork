@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 func TestAuthSettingsHelpersMatchPython(t *testing.T) {
@@ -15,7 +15,7 @@ func TestAuthSettingsHelpersMatchPython(t *testing.T) {
 	if got := GetAPIKeys(AuthSettings{APIKey: []any{" a ", "", 2}}); !reflect.DeepEqual(got, []string{"a", "2"}) {
 		t.Fatalf("list API keys = %#v", got)
 	}
-	if GetAdminKey(AuthSettings{}) != "grok2api" || GetAdminKey(AuthSettings{AdminKey: ""}) != "" {
+	if GetAdminKey(AuthSettings{}) != "gork" || GetAdminKey(AuthSettings{AdminKey: ""}) != "" {
 		t.Fatalf("admin key defaults mismatch")
 	}
 	if GetWebUIKey(AuthSettings{WebUIKey: 123}) != "123" {

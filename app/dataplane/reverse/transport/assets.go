@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	platform "github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/config"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	platform "github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/config"
 )
 
 const (

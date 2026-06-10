@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	runtimepkg "github.com/jiujiu532/grok2api/app/platform/runtime"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func adminTokensRunAddImport(ctx context.Context, repo adminTokensRepository, refresh adminTokensRefreshService, task *runtimepkg.AsyncTask, pool string, tokens []string, tags []string) {

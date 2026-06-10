@@ -4,9 +4,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	"github.com/jiujiu532/grok2api/app/platform"
-	productopenai "github.com/jiujiu532/grok2api/app/products/openai"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/platform"
+	productopenai "github.com/dslzl/gork/app/products/openai"
 )
 
 type messagesStreamState struct {

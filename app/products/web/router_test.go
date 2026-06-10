@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/auth"
+	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/auth"
 )
 
 func TestWebRouterRedirectsAndMeta(t *testing.T) {
@@ -198,7 +198,7 @@ func TestWebRouterMountsWebUIAPI(t *testing.T) {
 
 func TestWebRouterMountsAdminAPI(t *testing.T) {
 	resetWebRouterDepsForTest(t)
-	rec := getWeb("/admin/api/verify", "Bearer grok2api")
+	rec := getWeb("/admin/api/verify", "Bearer gork")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"success"`) {
 		t.Fatalf("admin api status=%d body=%s", rec.Code, rec.Body.String())
 	}

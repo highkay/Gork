@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/platform"
 )
 
 func messagesFromStream(ctx context.Context, options MessagesOptions, plan messagesPlan, account messagesAccount) (MessagesResult, error) {

@@ -7,7 +7,7 @@ export HOST="${HOST:-${SERVER_HOST:-0.0.0.0}}"
 export PORT="${PORT:-${SERVER_PORT:-8000}}"
 
 if [ "$#" -eq 0 ]; then
-  set -- /app/grok2api
+  set -- /app/gork
 fi
 
 exec "$@"

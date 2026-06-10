@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
-	appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
+	controlaccount "github.com/dslzl/gork/app/control/account"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func TestAccountDirectoryBootstrapSyncAndDiagnosticsMatchPython(t *testing.T) {

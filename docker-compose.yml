@@ -1,7 +1,7 @@
 services:
-  grok2api:
-    container_name: grok2api
-    image: ghcr.io/jiujiu532/grok2api:latest
+  gork:
+    container_name: gork
+    image: ghcr.io/dslzl/gork:latest
     ports:
       - "${HOST_PORT:-8000}:${PORT:-${SERVER_PORT:-8000}}"
     environment:
@@ -45,7 +45,7 @@ services:
 
   redis:
     profiles: ["redis"]
-    container_name: grok2api-redis
+    container_name: gork-redis
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     volumes:

@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	controlmodel "github.com/jiujiu532/grok2api/app/control/model"
-	controlproxy "github.com/jiujiu532/grok2api/app/control/proxy"
+	controlmodel "github.com/dslzl/gork/app/control/model"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 )
 
 func TestExecuteReturnsRateLimitedWhenNoAccountLease(t *testing.T) {

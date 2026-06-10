@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	account "github.com/jiujiu532/grok2api/app/control/account"
+	account "github.com/dslzl/gork/app/control/account"
 	_ "modernc.org/sqlite"
 )
 
@@ -235,7 +235,7 @@ func TestSQLDriverMySQLSSLURLParity(t *testing.T) {
 			t.Fatalf("mysql dsn still contains stripped SSL parameter %q: %s", unexpected, mysqlDSN)
 		}
 	}
-	for _, expected := range []string{"tls=grok2api_", "parseTime=true"} {
+	for _, expected := range []string{"tls=gork_", "parseTime=true"} {
 		if !strings.Contains(mysqlDSN, expected) {
 			t.Fatalf("mysql dsn missing %q: %s", expected, mysqlDSN)
 		}

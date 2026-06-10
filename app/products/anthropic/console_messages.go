@@ -8,14 +8,14 @@ import (
 	"strconv"
 	"strings"
 
-	controlaccount "github.com/jiujiu532/grok2api/app/control/account"
-	"github.com/jiujiu532/grok2api/app/control/model"
-	dataaccount "github.com/jiujiu532/grok2api/app/dataplane/account"
-	"github.com/jiujiu532/grok2api/app/dataplane/reverse/protocol"
-	"github.com/jiujiu532/grok2api/app/platform"
-	platformconfig "github.com/jiujiu532/grok2api/app/platform/config"
-	appruntime "github.com/jiujiu532/grok2api/app/platform/runtime"
-	"github.com/jiujiu532/grok2api/app/products"
+	controlaccount "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/control/model"
+	dataaccount "github.com/dslzl/gork/app/dataplane/account"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/platform"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
+	"github.com/dslzl/gork/app/products"
 )
 
 type consoleMessagesFeedbackKind string

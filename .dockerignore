@@ -22,8 +22,8 @@ build
 *.test
 *.out
 *.prof
-grok2api
-grok2api.exe
+gork
+gork.exe
 /data
 /data/*
 /data/tmp

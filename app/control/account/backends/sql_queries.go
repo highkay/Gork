@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	account "github.com/jiujiu532/grok2api/app/control/account"
+	account "github.com/dslzl/gork/app/control/account"
 )
 
 func (r *SQLAccountRepository) RuntimeSnapshot(ctx context.Context) (account.RuntimeSnapshot, error) {

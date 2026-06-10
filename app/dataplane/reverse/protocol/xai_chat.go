@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	controlmodel "github.com/jiujiu532/grok2api/app/control/model"
-	platform "github.com/jiujiu532/grok2api/app/platform"
+	controlmodel "github.com/dslzl/gork/app/control/model"
+	platform "github.com/dslzl/gork/app/platform"
 )
 
 type ChatPayloadOptions struct {

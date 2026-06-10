@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	account "github.com/jiujiu532/grok2api/app/control/account"
+	account "github.com/dslzl/gork/app/control/account"
 	_ "modernc.org/sqlite"
 )
 

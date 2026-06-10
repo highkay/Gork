@@ -20,7 +20,7 @@ const (
 )
 
 var (
-	updateReleasesURL = "https://api.github.com/repos/jiujiu532/grok2api/releases"
+	updateReleasesURL = "https://api.github.com/repos/dslzl/gork/releases"
 	updateHTTPClient  = &http.Client{Timeout: 10 * time.Second}
 	updateNow         = time.Now
 	updateMutex       sync.Mutex
@@ -90,7 +90,7 @@ func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "grok2api-update-check")
+	req.Header.Set("User-Agent", "gork-update-check")
 	query := req.URL.Query()
 	query.Set("per_page", "100")
 	req.URL.RawQuery = query.Encode()

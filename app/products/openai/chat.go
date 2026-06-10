@@ -2,7 +2,7 @@ package openai
 
 import (
 	"context"
-	"github.com/jiujiu532/grok2api/app/platform"
+	"github.com/dslzl/gork/app/platform"
 )
 
 func Completions(ctx context.Context, options chatCompletionOptions) (chatCompletionResult, error) {

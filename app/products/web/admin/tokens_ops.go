@@ -3,8 +3,8 @@ package admin
 import (
 	"net/http"
 
-	"github.com/jiujiu532/grok2api/app/platform"
-	"github.com/jiujiu532/grok2api/app/platform/logging"
+	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/logging"
 )
 
 func adminTokensSavePayload(r *http.Request, repo adminTokensRepository, payload map[string][]any) (int, []string, error) {

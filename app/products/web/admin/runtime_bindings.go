@@ -3,8 +3,8 @@ package admin
 import (
 	"context"
 
-	accountcontrol "github.com/jiujiu532/grok2api/app/control/account"
-	accountdataplane "github.com/jiujiu532/grok2api/app/dataplane/account"
+	accountcontrol "github.com/dslzl/gork/app/control/account"
+	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 )
 
 type accountRuntimeRepository struct {

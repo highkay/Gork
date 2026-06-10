@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode"
 
-	proxyadapters "github.com/jiujiu532/grok2api/app/dataplane/proxy/adapters"
+	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
 )
 
 func isAssetURL(value string) bool {
