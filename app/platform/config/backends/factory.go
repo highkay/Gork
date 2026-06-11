@@ -130,6 +130,10 @@ func (b UnsupportedConfigBackend) ApplyPatch(context.Context, map[string]any) er
 	return errors.New(b.Reason)
 }
 
+func (b UnsupportedConfigBackend) Clear(context.Context) error {
+	return errors.New(b.Reason)
+}
+
 func (b UnsupportedConfigBackend) Version(context.Context) (any, error) {
 	return nil, errors.New(b.Reason)
 }
