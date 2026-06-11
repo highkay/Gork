@@ -99,6 +99,33 @@ func TestConfigSnapshotUpdateInvalidatesVersionAndTypedGetters(t *testing.T) {
 	}
 }
 
+func TestConfigSnapshotResetClearsOverridesAndReloadsDefaults(t *testing.T) {
+	defaults := writeSnapshotDefaults(t)
+	backend := &fakeConfigBackend{
+		data:    map[string]any{"proxy": map[string]any{"timeout": int64(20), "mode": "pool"}},
+		version: "v1",
+	}
+	snapshot := NewConfigSnapshot(backend, ConfigSnapshotOptions{})
+	if err := snapshot.Load(context.Background(), defaults); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	if err := snapshot.Reset(context.Background()); err != nil {
+		t.Fatalf("Reset returned error: %v", err)
+	}
+	if !backend.cleared {
+		t.Fatalf("backend was not cleared")
+	}
+	backend.data = map[string]any{}
+	backend.version = "v2"
+	if err := snapshot.Load(context.Background(), defaults); err != nil {
+		t.Fatalf("Load after Reset returned error: %v", err)
+	}
+	if snapshot.GetInt("proxy.timeout", 0) != 10 || snapshot.GetStr("proxy.mode", "") != "" {
+		t.Fatalf("reset should expose defaults only: %#v", snapshot.Raw())
+	}
+}
+
 func TestConfigSnapshotLoadMissingDefaultsReturnsErrorAndRawIsShallowCopy(t *testing.T) {
 	snapshot := NewConfigSnapshot(&fakeConfigBackend{}, ConfigSnapshotOptions{})
 	err := snapshot.Load(context.Background(), filepath.Join(t.TempDir(), "missing.toml"))
@@ -196,6 +223,7 @@ type fakeConfigBackend struct {
 	loadCalls    int
 	versionCalls int
 	patches      []map[string]any
+	cleared      bool
 }
 
 func (b *fakeConfigBackend) Load(context.Context) (map[string]any, error) {
@@ -205,6 +233,11 @@ func (b *fakeConfigBackend) Load(context.Context) (map[string]any, error) {
 
 func (b *fakeConfigBackend) ApplyPatch(_ context.Context, patch map[string]any) error {
 	b.patches = append(b.patches, patch)
+	return nil
+}
+
+func (b *fakeConfigBackend) Clear(context.Context) error {
+	b.cleared = true
 	return nil
 }
 

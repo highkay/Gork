@@ -123,6 +123,15 @@ func (e *databaseSQLConfigEngine) placeholder(position int) string {
 	return "?"
 }
 
+func (tx *databaseSQLConfigTx) DeleteConfigValues(ctx context.Context, dialect, tableName, excludeKey string) error {
+	statement, err := configSQLDeleteValuesStatement(dialect, tableName)
+	if err != nil {
+		return err
+	}
+	_, err = tx.tx.ExecContext(ctx, statement, excludeKey)
+	return err
+}
+
 func (tx *databaseSQLConfigTx) UpsertConfigValue(ctx context.Context, dialect, tableName, key, value string) error {
 	statement, err := configSQLUpsertStatement(dialect, tableName)
 	if err != nil {

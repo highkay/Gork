@@ -225,6 +225,7 @@ type fakeFactoryBackend struct{}
 
 func (fakeFactoryBackend) Load(context.Context) (map[string]any, error)     { return map[string]any{}, nil }
 func (fakeFactoryBackend) ApplyPatch(context.Context, map[string]any) error { return nil }
+func (fakeFactoryBackend) Clear(context.Context) error                      { return nil }
 func (fakeFactoryBackend) Version(context.Context) (any, error)             { return nil, nil }
 func (fakeFactoryBackend) Close(context.Context) error                      { return nil }
 

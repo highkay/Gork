@@ -64,6 +64,18 @@ func configSQLUpsertStatement(dialect, tableName string) (string, error) {
 	), nil
 }
 
+func configSQLDeleteValuesStatement(dialect, tableName string) (string, error) {
+	table, keyColumn, _, err := configSQLStoreIdentifiers(dialect, tableName)
+	if err != nil {
+		return "", err
+	}
+	placeholder := "?"
+	if dialect == "postgresql" {
+		placeholder = "$1"
+	}
+	return fmt.Sprintf("DELETE FROM %s WHERE %s <> %s", table, keyColumn, placeholder), nil
+}
+
 func configSQLIncrementVersionStatement(dialect, tableName string) (string, error) {
 	table, keyColumn, valueColumn, err := configSQLStoreIdentifiers(dialect, tableName)
 	if err != nil {

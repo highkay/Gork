@@ -49,6 +49,10 @@ func (c *goRedisConfigClient) AClose(context.Context) error {
 	return c.client.Close()
 }
 
+func (p *goRedisConfigPipeline) Del(ctx context.Context, key string) {
+	p.pipe.Del(ctx, key)
+}
+
 func (p *goRedisConfigPipeline) HSet(ctx context.Context, key string, mapping map[string]string) {
 	p.pipe.HSet(ctx, key, redisConfigHashArgs(mapping)...)
 }

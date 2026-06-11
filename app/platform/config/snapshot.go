@@ -232,6 +232,22 @@ func (s *ConfigSnapshot) Update(ctx context.Context, patch map[string]any) error
 	return nil
 }
 
+func (s *ConfigSnapshot) Reset(ctx context.Context) error {
+	backend, err := s.getBackend()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := backend.Clear(ctx); err != nil {
+		return err
+	}
+	s.data = map[string]any{}
+	s.loaded = false
+	s.version = nil
+	return nil
+}
+
 func (s *ConfigSnapshot) Raw() map[string]any {
 	out := map[string]any{}
 	for key, value := range s.data {
@@ -293,6 +309,10 @@ func (noopConfigBackend) Load(context.Context) (map[string]any, error) {
 }
 
 func (noopConfigBackend) ApplyPatch(context.Context, map[string]any) error {
+	return nil
+}
+
+func (noopConfigBackend) Clear(context.Context) error {
 	return nil
 }
 
