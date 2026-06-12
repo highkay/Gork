@@ -138,10 +138,6 @@ def _json(data) -> Response:
     return Response(content=orjson.dumps(data), media_type="application/json")
 
 
-def _auto_nsfw_on_import_enabled() -> bool:
-    return get_config().get_bool("account.auto_nsfw_on_import", False)
-
-
 def _fire_and_forget(coro) -> asyncio.Task:
     # Keep a strong reference so import maintenance tasks cannot disappear before completion.
     task = asyncio.create_task(coro)
@@ -162,10 +158,8 @@ def _schedule_auto_nsfw(
     repo: "AccountRepository",
     tokens: list[str],
     *,
-    enabled: bool | None = None,
+    enabled: bool,
 ) -> None:
-    if enabled is None:
-        enabled = _auto_nsfw_on_import_enabled()
     if not tokens or not enabled:
         return
     unique_tokens = list(dict.fromkeys(tokens))
@@ -194,6 +188,7 @@ async def list_tokens(repo: "AccountRepository" = Depends(get_repo)):
 @router.post("/tokens")
 async def save_tokens(
     req: SaveTokensRequest,
+    auto_nsfw: bool = Query(False),
     repo: "AccountRepository" = Depends(get_repo),
     refresh_svc: "AccountRefreshService" = Depends(get_refresh_svc),
 ):
@@ -220,7 +215,7 @@ async def save_tokens(
             refresh_svc,
             repo,
             all_tokens,
-            auto_nsfw_enabled=_auto_nsfw_on_import_enabled(),
+            auto_nsfw_enabled=auto_nsfw,
         ))
     return _json({"status": "success", "count": total_upserted})
 
@@ -228,6 +223,7 @@ async def save_tokens(
 @router.post("/tokens/add")
 async def add_tokens(
     req: AddTokensRequest,
+    auto_nsfw: bool = Query(False),
     repo: "AccountRepository" = Depends(get_repo),
     refresh_svc: "AccountRefreshService" = Depends(get_refresh_svc),
 ):
@@ -262,7 +258,6 @@ async def add_tokens(
         len(existing),
     )
 
-    auto_nsfw_enabled = _auto_nsfw_on_import_enabled()
     if sync_auto_detect:
         auto_nsfw_ready = False
         try:
@@ -275,13 +270,13 @@ async def add_tokens(
         except Exception as exc:
             logger.warning("admin auto-detect quota sync failed: token_count={} error={}", len(new_tokens), exc)
         if auto_nsfw_ready:
-            _schedule_auto_nsfw(repo, new_tokens, enabled=auto_nsfw_enabled)
+            _schedule_auto_nsfw(repo, new_tokens, enabled=auto_nsfw)
     else:
         _fire_and_forget(_refresh_then_auto_nsfw(
             refresh_svc,
             repo,
             new_tokens,
-            auto_nsfw_enabled=auto_nsfw_enabled,
+            auto_nsfw_enabled=auto_nsfw,
         ))
 
     return _json({
@@ -508,6 +503,7 @@ async def toggle_tokens_disabled(
 @router.put("/tokens/pool")
 async def replace_pool(
     req: ReplacePoolRequest,
+    auto_nsfw: bool = Query(False),
     repo: "AccountRepository" = Depends(get_repo),
     refresh_svc: "AccountRefreshService" = Depends(get_refresh_svc),
 ):
@@ -520,7 +516,7 @@ async def replace_pool(
             refresh_svc,
             repo,
             cleaned,
-            auto_nsfw_enabled=_auto_nsfw_on_import_enabled(),
+            auto_nsfw_enabled=auto_nsfw,
         ))
     return _json({"pool": req.pool, "count": len(cleaned)})
 
