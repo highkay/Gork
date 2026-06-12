@@ -1064,8 +1064,11 @@ function renderInput(field, section, value) {
   }
 
   if (field.type === 'number') {
-    const inp = _el('input', { class: 'cfg-number', type: 'number',
-      id: `field-${section}-${field.key}`, value: value ?? '' });
+    const attrs = { class: 'cfg-number', type: 'number',
+      id: `field-${section}-${field.key}`, value: value ?? '' };
+    if (field.min != null) attrs.min = field.min;
+    if (field.max != null) attrs.max = field.max;
+    const inp = _el('input', attrs);
     inp.addEventListener('input', () => {
       const n = inp.value === '' ? '' : Number(inp.value);
       onChange(n);
