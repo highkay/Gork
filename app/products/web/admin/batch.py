@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 from . import get_refresh_svc, get_repo
 
 router = APIRouter(prefix="/batch", tags=["Admin - Batch"])
-_MAX_BATCH_CONCURRENCY = 50
+_MAX_BATCH_CONCURRENCY = 80
 
 # ---------------------------------------------------------------------------
 # Helpers

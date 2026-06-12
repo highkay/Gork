@@ -307,7 +307,9 @@
       "disabled": "Disabled",
       "expired": "Expired",
       "invalid": "Abnormal"
-    }
+    },
+    "autoNsfwOnImport": "Auto-enable NSFW after import",
+    "autoNsfwHint": "Requires additional time to detect account status"
   },
   "config": {
     "pageTitle": "Grok2API - Configuration Management",
@@ -433,10 +435,6 @@
         "enableNsfw": {
           "label": "Allow NSFW Generation",
           "desc": "Permits the image generation endpoint to bypass NSFW content filtering."
-        },
-        "autoNsfwOnImport": {
-          "label": "Auto-enable NSFW for Imported Accounts",
-          "desc": "When enabled, imported, newly added, or pool-replaced accounts are refreshed first, then NSFW is enabled only for active or cooling accounts."
         },
         "showSearchSources": {
           "label": "Append Sources to Content",

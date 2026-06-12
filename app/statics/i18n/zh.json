@@ -307,7 +307,9 @@
       "disabled": "禁用",
       "expired": "过期",
       "invalid": "异常"
-    }
+    },
+    "autoNsfwOnImport": "导入后自动开启 NSFW",
+    "autoNsfwHint": "需要额外时间检测账户状态"
   },
   "config": {
     "pageTitle": "Grok2API - 配置管理",
@@ -433,10 +435,6 @@
         "enableNsfw": {
           "label": "允许 NSFW 生成",
           "desc": "允许图像生成接口绕过 NSFW 内容过滤。"
-        },
-        "autoNsfwOnImport": {
-          "label": "导入账户自动开启 NSFW",
-          "desc": "开启后，导入、新增或替换账户池时会先刷新检测，再仅为正常/限流账户开启 NSFW。"
         },
         "showSearchSources": {
           "label": "正文追加信源",
