@@ -182,12 +182,7 @@ func BuildSSOCookie(ssoToken string, options ...CookieOptions) string {
 		opts = options[0]
 	}
 
-	token := ssoToken
-	if strings.HasPrefix(token, "sso=") {
-		token = token[4:]
-	}
-	token = sanitize(&token, "sso_token", true)
-	cookie := fmt.Sprintf("sso=%s; sso-rw=%s", token, token)
+	cookie := normalizeSSOCookieInput(ssoToken)
 
 	profile := resolveProfile(opts.Lease)
 	cfCookies := profile.CFCookies
@@ -212,9 +207,95 @@ func BuildSSOCookie(ssoToken string, options ...CookieOptions) string {
 	}
 
 	if effectiveCookies != "" {
-		cookie += "; " + effectiveCookies
+		cookie = mergeCookieStrings(cookie, effectiveCookies)
 	}
 	return cookie
+}
+
+func normalizeSSOCookieInput(ssoToken string) string {
+	raw := sanitize(&ssoToken, "sso_token", false)
+	if hasCookiePair(raw, "sso") || hasCookiePair(raw, "sso-rw") {
+		return normalizeStoredSSOCookie(raw)
+	}
+	token := sanitize(&ssoToken, "sso_token", true)
+	return fmt.Sprintf("sso=%s; sso-rw=%s", token, token)
+}
+
+func normalizeStoredSSOCookie(raw string) string {
+	pairs := splitCookiePairs(raw)
+	normalized := make([]string, 0, len(pairs)+1)
+	ssoValue := ""
+	hasSSORW := false
+	for _, pair := range pairs {
+		name, value, ok := splitCookiePair(pair)
+		if !ok {
+			continue
+		}
+		switch strings.ToLower(name) {
+		case "sso":
+			value = sanitize(&value, "sso_token", true)
+			ssoValue = value
+		case "sso-rw":
+			value = sanitize(&value, "sso_token", true)
+			hasSSORW = true
+		}
+		normalized = append(normalized, name+"="+value)
+	}
+	if ssoValue != "" && !hasSSORW {
+		normalized = append(normalized, "sso-rw="+ssoValue)
+	}
+	return strings.Join(normalized, "; ")
+}
+
+func hasCookiePair(cookies string, name string) bool {
+	pattern := `(?:^|;\s*)` + regexp.QuoteMeta(name) + `=`
+	return regexp.MustCompile(pattern).MatchString(cookies)
+}
+
+func splitCookiePairs(cookies string) []string {
+	rawPairs := strings.Split(cookies, ";")
+	pairs := make([]string, 0, len(rawPairs))
+	for _, pair := range rawPairs {
+		pair = strings.TrimSpace(pair)
+		if pair != "" {
+			pairs = append(pairs, pair)
+		}
+	}
+	return pairs
+}
+
+func splitCookiePair(pair string) (string, string, bool) {
+	name, value, ok := strings.Cut(pair, "=")
+	name = strings.TrimSpace(name)
+	value = strings.TrimSpace(value)
+	if !ok || name == "" {
+		return "", "", false
+	}
+	return name, value, true
+}
+
+func mergeCookieStrings(base string, extra string) string {
+	merged := base
+	for _, pair := range splitCookiePairs(extra) {
+		name, value, ok := splitCookiePair(pair)
+		if !ok {
+			continue
+		}
+		merged = upsertCookiePair(merged, name, value)
+	}
+	return merged
+}
+
+func upsertCookiePair(cookies string, name string, value string) string {
+	if cookies == "" {
+		return name + "=" + value
+	}
+	pattern := `(^|;\s*)` + regexp.QuoteMeta(name) + `=[^;]*`
+	re := regexp.MustCompile(pattern)
+	if re.MatchString(cookies) {
+		return re.ReplaceAllString(cookies, "${1}"+name+"="+escapeReplacement(value))
+	}
+	return strings.TrimRight(cookies, "; ") + "; " + name + "=" + value
 }
 
 func BuildHTTPHeaders(cookieToken string, options ...HTTPHeaderOptions) map[string]string {
@@ -318,19 +399,8 @@ func BuildConsoleHeaders(ssoToken string, options ...ConsoleHeaderOptions) map[s
 			opts.ContentType = "application/json"
 		}
 	}
-	token := ssoToken
-	if strings.HasPrefix(token, "sso=") {
-		token = token[4:]
-	}
-	token = sanitize(&token, "sso_token", true)
 	profile := resolveProfile(opts.Lease)
 	ua := sanitize(&profile.UserAgent, "user_agent", false)
-	cfClearance := sanitize(&profile.CFClearance, "cf_clearance", true)
-
-	cookie := fmt.Sprintf("sso=%s; sso-rw=%s", token, token)
-	if cfClearance != "" {
-		cookie += "; cf_clearance=" + cfClearance
-	}
 	if ua == "" {
 		ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 	}
@@ -340,7 +410,7 @@ func BuildConsoleHeaders(ssoToken string, options ...ConsoleHeaderOptions) map[s
 		"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
 		"Authorization":   "Bearer anonymous",
 		"Content-Type":    opts.ContentType,
-		"Cookie":          cookie,
+		"Cookie":          BuildSSOCookie(ssoToken, CookieOptions{Lease: opts.Lease}),
 		"Origin":          "https://console.x.ai",
 		"Priority":        "u=1, i",
 		"Referer":         "https://console.x.ai/",

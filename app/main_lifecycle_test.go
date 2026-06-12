@@ -8,6 +8,7 @@ import (
 	"time"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
+	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	configbackends "github.com/dslzl/gork/app/platform/config/backends"
 	platformstartup "github.com/dslzl/gork/app/platform/startup"
 )
@@ -257,6 +258,13 @@ func TestDefaultAccountDirectoryLifecycleBootstrapsAndSyncsLikePython(t *testing
 	}
 	if state.directory == nil {
 		t.Fatalf("account directory lifecycle did not bind directory")
+	}
+	globalDirectory, err := accountdataplane.GetAccountDirectory(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("account directory lifecycle did not initialise global directory: %v", err)
+	}
+	if globalDirectory != state.directory {
+		t.Fatalf("global directory was not lifecycle directory")
 	}
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) && state.directory.Revision() != 2 {

@@ -20,6 +20,30 @@ import (
 	"github.com/dslzl/gork/app/platform/storage"
 )
 
+func TestRouterListModelsDefaultsToEnabledModels(t *testing.T) {
+	resetRouterDepsForTest(t)
+
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	ids := routerResponseModelIDs(t, decodeRouterJSON(t, rec))
+	if len(ids) == 0 {
+		t.Fatal("default model list is empty")
+	}
+	if !containsString(ids, "grok-4.20-fast") {
+		t.Fatalf("default ids missing basic fast model: %v", ids)
+	}
+	if !containsString(ids, "grok-4.20-auto") {
+		t.Fatalf("default ids missing super auto model: %v", ids)
+	}
+	if !containsString(ids, "grok-4.20-heavy") {
+		t.Fatalf("default ids missing heavy model: %v", ids)
+	}
+}
+
 func TestRouterListModelsFiltersByAvailablePools(t *testing.T) {
 	resetRouterDepsForTest(t)
 	routerAvailablePools = func(*http.Request) map[string]struct{} {
@@ -200,6 +224,23 @@ func TestRouterChatCompletionsDispatchesOptions(t *testing.T) {
 	if got.Temperature != 0.2 || got.TopP != 0.3 {
 		t.Fatalf("sampling=%v/%v", got.Temperature, got.TopP)
 	}
+}
+
+func TestRouterUpstreamErrorPreservesStatus(t *testing.T) {
+	resetRouterDepsForTest(t)
+	routerCompletions = func(context.Context, chatCompletionOptions) (chatCompletionResult, error) {
+		return chatCompletionResult{}, platform.NewUpstreamError("Console API returned 403", http.StatusForbidden, "token expired")
+	}
+
+	body := `{"model":"grok-4.3-console","messages":[{"role":"user","content":"hello"}]}`
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+
+	assertRouterGoldenJSON(t, rec, http.StatusForbidden, map[string]any{
+		"error.type":    "upstream_error",
+		"error.code":    "upstream_error",
+		"error.message": "Console API returned 403",
+	})
 }
 
 func TestRouterResponsesDispatchesOptions(t *testing.T) {

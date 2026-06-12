@@ -59,6 +59,9 @@ func modelAvailableForPools(spec model.ModelSpec, pools map[string]struct{}) boo
 	if !spec.Enabled {
 		return false
 	}
+	if len(pools) == 0 {
+		return true
+	}
 	for _, poolID := range spec.PoolCandidates() {
 		pool := poolIDToName[poolID]
 		if _, ok := pools[pool]; ok && routerSupportsMode(pool, int(spec.ModeID)) {

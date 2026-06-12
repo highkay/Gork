@@ -62,6 +62,22 @@ func NewAccountDirectory(repository controlaccount.AccountRepository) *AccountDi
 	return &AccountDirectory{repository: repository}
 }
 
+// RegisterAccountDirectory makes a lifecycle-managed directory available to request handlers.
+func RegisterAccountDirectory(directory *AccountDirectory) func() {
+	accountDirectoryMu.Lock()
+	previous := accountDirectorySingleton
+	accountDirectorySingleton = directory
+	accountDirectoryMu.Unlock()
+
+	return func() {
+		accountDirectoryMu.Lock()
+		if accountDirectorySingleton == directory {
+			accountDirectorySingleton = previous
+		}
+		accountDirectoryMu.Unlock()
+	}
+}
+
 func (d *AccountDirectory) Bootstrap(ctx context.Context) error {
 	table, err := Bootstrap(ctx, d.repository)
 	if err != nil {

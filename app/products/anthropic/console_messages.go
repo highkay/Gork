@@ -72,7 +72,7 @@ type consoleMessagesRefreshProvider interface {
 var (
 	consoleMessagesDirectoryProvider = defaultConsoleMessagesDirectoryProvider
 	consoleMessagesStream            = func(ctx context.Context, token string, payload map[string]any, timeoutS float64) ([]protocol.ConsoleStreamEvent, error) {
-		return protocol.StreamConsoleChat(ctx, token, payload, protocol.ConsoleStreamOptions{TimeoutS: timeoutS})
+		return products.StreamConsoleChat(ctx, token, payload, timeoutS)
 	}
 	consoleMessagesMaxRetries     = products.SelectionMaxRetries
 	consoleMessagesTimeoutSeconds = defaultConsoleMessagesTimeoutSeconds

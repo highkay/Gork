@@ -1,9 +1,12 @@
 package transport
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"testing"
@@ -62,6 +65,30 @@ func TestPostJSONFailureReturnsUpstreamErrorWithTruncatedBody(t *testing.T) {
 		t.Fatalf("error = %T %v, want UpstreamError", err, err)
 	}
 	if upstream.Status != 500 || upstream.Message != "Upstream returned 500" || len(upstream.Body) != 400 {
+		t.Fatalf("upstream error = %#v", upstream)
+	}
+}
+
+func TestPostStreamFailureDecodesGzipBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusForbidden)
+		writer := gzip.NewWriter(w)
+		if _, err := writer.Write([]byte(`{"error":"token expired"}`)); err != nil {
+			t.Fatalf("write gzip body: %v", err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatalf("close gzip body: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	_, err := PostStream(context.Background(), server.URL, "token", []byte("payload"))
+	var upstream *platform.UpstreamError
+	if !errors.As(err, &upstream) {
+		t.Fatalf("error = %T %v, want UpstreamError", err, err)
+	}
+	if upstream.Status != http.StatusForbidden || upstream.Body != `{"error":"token expired"}` {
 		t.Fatalf("upstream error = %#v", upstream)
 	}
 }
@@ -126,6 +153,48 @@ func TestHTTPDefaultOptionsMatchPython(t *testing.T) {
 		bytesRequest.Headers["Referer"] != "https://grok.com/" ||
 		!bytesRequest.Stream || !bytesRequest.AllowRedirects {
 		t.Fatalf("GetBytesStream defaults = %#v headers=%#v", bytesRequest, bytesRequest.Headers)
+	}
+}
+
+func TestPostStreamAppliesExtraHeaders(t *testing.T) {
+	client := &fakeHTTPClient{responses: []HTTPResponse{{StatusCode: 200, Stream: io.NopCloser(strings.NewReader("data: ok\n"))}}}
+
+	stream, err := PostStream(context.Background(), "https://grok.test/stream", "token", []byte("payload"), HTTPOptions{
+		Client: client,
+		ExtraHeaders: map[string]string{
+			"x-cluster": "https://us-east-1.api.x.ai",
+		},
+	})
+	if err != nil {
+		t.Fatalf("PostStream returned error: %v", err)
+	}
+	_ = drainHTTPLineStream(t, stream)
+
+	if got := client.posts[0].Headers["x-cluster"]; got != "https://us-east-1.api.x.ai" {
+		t.Fatalf("x-cluster header = %q", got)
+	}
+}
+
+func TestPostStreamUsesConsoleHeadersWhenRequested(t *testing.T) {
+	client := &fakeHTTPClient{responses: []HTTPResponse{{StatusCode: 200, Stream: io.NopCloser(strings.NewReader("data: ok\n"))}}}
+
+	stream, err := PostStream(context.Background(), "https://console.x.ai/v1/responses", "sso=tok; sso-rw=rw", []byte("payload"), HTTPOptions{
+		Client:         client,
+		ContentType:    "application/json",
+		ConsoleHeaders: true,
+	})
+	if err != nil {
+		t.Fatalf("PostStream returned error: %v", err)
+	}
+	_ = drainHTTPLineStream(t, stream)
+
+	headers := client.posts[0].Headers
+	if headers["Authorization"] != "Bearer anonymous" ||
+		headers["Origin"] != "https://console.x.ai" ||
+		headers["Referer"] != "https://console.x.ai/" ||
+		headers["x-cluster"] != "https://us-east-1.api.x.ai" ||
+		headers["Cookie"] != "sso=tok; sso-rw=rw" {
+		t.Fatalf("console headers = %#v", headers)
 	}
 }
 

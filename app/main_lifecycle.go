@@ -160,6 +160,7 @@ func defaultAppMainStartAccountDirectory(ctx context.Context, state *appMainLife
 	directory := accountdataplane.NewAccountDirectory(state.repository)
 	state.directory = directory
 	state.bindAdminRuntime()
+	restoreDirectory := accountdataplane.RegisterAccountDirectory(directory)
 
 	syncCtx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -171,6 +172,7 @@ func defaultAppMainStartAccountDirectory(ctx context.Context, state *appMainLife
 	return func(context.Context) error {
 		cancel()
 		<-done
+		restoreDirectory()
 		return nil
 	}, nil
 }

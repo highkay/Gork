@@ -29,14 +29,15 @@ type HTTPClient interface {
 }
 
 type HTTPOptions struct {
-	Client       HTTPClient
-	Lease        *controlproxy.ProxyLease
-	Timeout      time.Duration
-	ContentType  string
-	Origin       string
-	Referer      string
-	Params       map[string]any
-	ExtraHeaders map[string]string
+	Client         HTTPClient
+	Lease          *controlproxy.ProxyLease
+	Timeout        time.Duration
+	ContentType    string
+	Origin         string
+	Referer        string
+	ConsoleHeaders bool
+	Params         map[string]any
+	ExtraHeaders   map[string]string
 }
 
 type HTTPRequest struct {
@@ -170,6 +171,9 @@ func httpOptions(defaultTimeout time.Duration, options ...HTTPOptions) HTTPOptio
 
 func newHTTPRequest(rawURL string, token string, option HTTPOptions) HTTPRequest {
 	headers := buildHTTPTransportHeaders(token, option)
+	for key, value := range option.ExtraHeaders {
+		headers[key] = value
+	}
 	return HTTPRequest{
 		URL:         rawURL,
 		Token:       token,
@@ -185,6 +189,12 @@ func newHTTPRequest(rawURL string, token string, option HTTPOptions) HTTPRequest
 
 func buildHTTPTransportHeaders(token string, option HTTPOptions) map[string]string {
 	contentType := option.ContentType
+	if option.ConsoleHeaders {
+		return proxyadapters.BuildConsoleHeaders(token, proxyadapters.ConsoleHeaderOptions{
+			ContentType: contentType,
+			Lease:       option.Lease,
+		})
+	}
 	headers := proxyadapters.BuildHTTPHeaders(token, proxyadapters.HTTPHeaderOptions{
 		ContentType: &contentType,
 		Origin:      option.Origin,

@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
@@ -60,6 +61,11 @@ func StreamConsoleChat(ctx context.Context, token string, payload map[string]any
 	}
 	response, err := poster.PostConsoleStream(ctx, ConsoleStreamRequest{Token: token, Payload: payload, TimeoutS: timeout, Lease: lease})
 	if err != nil {
+		var upstream *platform.UpstreamError
+		if errors.As(err, &upstream) {
+			_ = proxy.Feedback(ctx, lease, ConsoleStatusFeedback(upstream.Status))
+			return nil, upstream
+		}
 		_ = proxy.Feedback(ctx, lease, ConsoleTransportErrorFeedback())
 		return nil, platform.NewUpstreamError(fmt.Sprintf("Console transport failed: %v", err), 502, "")
 	}

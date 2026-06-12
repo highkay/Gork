@@ -84,6 +84,11 @@ func writeRouterError(w http.ResponseWriter, err error) {
 		writeRouterJSON(w, validation.Status, validation.ToDict())
 		return
 	}
+	var upstream *platform.UpstreamError
+	if errors.As(err, &upstream) && upstream.AppError != nil {
+		writeRouterJSON(w, upstream.Status, upstream.ToDict())
+		return
+	}
 	var appErr *platform.AppError
 	if errors.As(err, &appErr) && appErr != nil {
 		writeRouterJSON(w, appErr.Status, appErr.ToDict())
