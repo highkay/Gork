@@ -307,7 +307,9 @@
       "disabled": "禁用",
       "expired": "过期",
       "invalid": "异常"
-    }
+    },
+    "autoNsfwOnImport": "导入后自动开启 NSFW",
+    "autoNsfwHint": "需要额外时间检测账户状态"
   },
   "config": {
     "pageTitle": "Grok2API - 配置管理",

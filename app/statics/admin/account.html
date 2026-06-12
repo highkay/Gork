@@ -1024,6 +1024,13 @@
         <span class="dialog-label" data-i18n="account.labelType">类型</span>
         <select class="input" id="import-pool" style="flex:1"></select>
       </div>
+      <div class="dialog-field" style="margin-top:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="import-auto-nsfw" style="margin:0">
+          <span data-i18n="account.autoNsfwOnImport">导入后自动开启 NSFW</span>
+        </label>
+        <div style="font-size:12px;color:var(--fg-muted);margin-top:4px" data-i18n="account.autoNsfwHint">需要额外时间检测账户状态</div>
+      </div>
     </div>
     <div class="dialog-actions">
       <button onclick="closeModal('modal-import')" class="dialog-btn" data-i18n="account.cancel">取消</button>
@@ -1048,6 +1055,13 @@
       <div class="dialog-field" id="import-file-pool-row">
         <span class="dialog-label" data-i18n="account.labelType">类型</span>
         <select class="input" id="import-file-pool" style="flex:1"></select>
+      </div>
+      <div class="dialog-field" style="margin-top:12px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input type="checkbox" id="import-file-auto-nsfw" style="margin:0">
+          <span data-i18n="account.autoNsfwOnImport">导入后自动开启 NSFW</span>
+        </label>
+        <div style="font-size:12px;color:var(--fg-muted);margin-top:4px" data-i18n="account.autoNsfwHint">需要额外时间检测账户状态</div>
       </div>
     </div>
     <div class="dialog-actions">
@@ -1620,8 +1634,11 @@ function toggleRow(el) {
 }
 function updateBatchBtns() {
   const show = sel.size > 0;
-  ['btn-nsfw','btn-refresh','btn-disable','btn-restore','btn-delete','btn-delete-invalid'].forEach(id =>
-    document.getElementById(id).style.display = show ? '' : 'none');
+  const globalBtns = ['btn-nsfw-all','btn-refresh-all','btn-delete-invalid-all'];
+  const selectionBtns = ['btn-nsfw','btn-refresh','btn-disable','btn-restore','btn-delete','btn-delete-invalid'];
+  
+  globalBtns.forEach(id => document.getElementById(id).style.display = show ? 'none' : '');
+  selectionBtns.forEach(id => document.getElementById(id).style.display = show ? '' : 'none');
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -1705,11 +1722,13 @@ function openEdit(token) {
 async function doAdd() {
   const raw  = document.getElementById('import-tokens').value;
   const pool = document.getElementById('import-pool').value;
+  const autoNsfw = document.getElementById('import-auto-nsfw').checked;
   const newToks = raw.split('\n').map(s => s.trim()).filter(Boolean);
   if (!newToks.length) return showToast(tr('account.enterToken', null, '请输入 Token'), 'error');
   return saveTokens(
     pool,
     newToks,
+    autoNsfw,
     'modal-import',
     tr('account.adding', { n: newToks.length }, `正在添加 ${newToks.length} 个账户…`),
     tr('account.addDone', null, '添加完成'),
@@ -1721,6 +1740,7 @@ async function doImport() {
   const file = document.getElementById('import-file').files?.[0];
   if (!file) return showToast(tr('account.selectFile', null, '请选择文件'), 'error');
   const isJson = file.name.toLowerCase().endsWith('.json');
+  const autoNsfw = document.getElementById('import-file-auto-nsfw').checked;
   let raw = '';
   try { raw = await file.text(); } catch { return showToast(tr('account.readFileFailed', null, '读取文件失败'), 'error'); }
 
@@ -1733,7 +1753,7 @@ async function doImport() {
     if (!total) return showToast(tr('account.jsonEmpty', null, 'JSON 文件中没有可导入的 Token'), 'error');
     try {
       showToast(tr('account.importing', { n: total }, `正在导入 ${total} 个账户…`), 'info');
-      await _api('POST', '/tokens', parsed);
+      await _api('POST', `/tokens?auto_nsfw=${autoNsfw}`, parsed);
       closeModal('modal-import-file');
       showToast(tr('account.importJsonDone', { n: total }, `导入完成，共 ${total} 个`), 'success');
       load();
@@ -1746,6 +1766,7 @@ async function doImport() {
     return saveTokens(
       pool,
       newToks,
+      autoNsfw,
       'modal-import-file',
       tr('account.importing', { n: newToks.length }, `正在导入 ${newToks.length} 个账户…`),
       tr('account.importDone', null, '导入完成'),
@@ -1784,11 +1805,11 @@ function updateImportFileState() {
     : tr('account.importHintTxt', null, '每行一个 Token，将添加到所选类型');
 }
 
-async function saveTokens(pool, newToks, modalId, pendingMessage, successPrefix, errorPrefix) {
+async function saveTokens(pool, newToks, autoNsfw, modalId, pendingMessage, successPrefix, errorPrefix) {
   const unique = [...new Set(newToks)];
   try {
     showToast(pendingMessage, 'info');
-    const d = await _api('POST', '/tokens/add', { pool, tokens: unique });
+    const d = await _api('POST', `/tokens/add?auto_nsfw=${autoNsfw}`, { pool, tokens: unique });
     closeModal(modalId);
     const msg = d.skipped
       ? tr('account.saveResultSkipped', { prefix: successPrefix, count: d.count, skipped: d.skipped }, `${successPrefix}，新增 ${d.count}，已存在跳过 ${d.skipped}`)
