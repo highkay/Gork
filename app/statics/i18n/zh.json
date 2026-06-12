@@ -286,6 +286,8 @@
     "nsfwDisablingOne": "正在关闭 NSFW…",
     "nsfwDisableDone": "NSFW 关闭完成：成功 {ok} 个，失败 {fail} 个",
     "operationFailed": "操作失败",
+    "autoNsfwOnImport": "导入后自动开启 NSFW",
+    "autoNsfwHint": "需要额外时间检测账户状态",
     "unknown": "未知",
     "na": "—",
     "pool": {

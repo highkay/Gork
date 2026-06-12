@@ -286,6 +286,8 @@
     "nsfwDisablingOne": "Disabling NSFW…",
     "nsfwDisableDone": "NSFW disable completed: {ok} succeeded, {fail} failed",
     "operationFailed": "Operation failed",
+    "autoNsfwOnImport": "Auto-enable NSFW after import",
+    "autoNsfwHint": "Requires additional time to detect account status",
     "unknown": "Unknown",
     "na": "—",
     "pool": {
