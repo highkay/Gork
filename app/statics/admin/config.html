@@ -1070,7 +1070,13 @@ function renderInput(field, section, value) {
     if (field.max != null) attrs.max = field.max;
     const inp = _el('input', attrs);
     inp.addEventListener('input', () => {
-      const n = inp.value === '' ? '' : Number(inp.value);
+      let n = inp.value === '' ? '' : Number(inp.value);
+      // 强制限制在 min/max 范围内
+      if (typeof n === 'number' && !isNaN(n)) {
+        if (field.min != null && n < field.min) n = field.min;
+        if (field.max != null && n > field.max) n = field.max;
+        if (inp.value !== String(n)) inp.value = n;
+      }
       onChange(n);
     });
     return inp;
