@@ -1958,8 +1958,12 @@ async function _runBatch(endpoint, tokens, label, onDone) {
         if (ev.type === 'done') {
           const s = ev.result?.summary || {};
           const ok = s.ok ?? 0, fail = s.fail ?? 0;
-          progress.finish(`${label.replace('…','').replace('正在','')} 完成：成功 ${ok}，失败 ${fail}`, fail > 0 ? 'error' : 'success');
-          onDone(ok, fail);
+          const expired = s.expired ?? 0, transient = s.transient ?? (fail - expired);
+          let finishMsg = `${label.replace('…','').replace('正在','')} 完成：成功 ${ok}`;
+          if (expired > 0) finishMsg += `，异常 ${expired}`;
+          if (transient > 0) finishMsg += `，临时失败 ${transient}`;
+          progress.finish(finishMsg, fail > 0 ? 'error' : 'success');
+          onDone(ok, fail, s);
           load();
         } else if (ev.type === 'cancelled') {
           progress.finish('已取消', 'error');
@@ -2085,7 +2089,13 @@ async function batchRefreshSel() {
   if (!sel.size) return;
   await _runBatch('/batch/refresh', [...sel],
     tr('account.refreshing', { n: sel.size }, `正在刷新 ${sel.size} 个账户…`),
-    (ok, fail) => showToast(tr('account.refreshDone', { ok, fail }, `刷新完成：成功 ${ok}，失败 ${fail}`), 'success')
+    (ok, fail, s) => {
+      const expired = s?.expired ?? 0, transient = s?.transient ?? (fail - expired);
+      let msg = `刷新完成：成功 ${ok}`;
+      if (expired > 0) msg += `，异常 ${expired}`;
+      if (transient > 0) msg += `，临时失败 ${transient}`;
+      showToast(msg, fail > 0 ? 'warning' : 'success');
+    }
   );
 }
 
@@ -2109,7 +2119,13 @@ function batchRefreshAllManageable() {
     tr('account.refreshAllConfirmBody', { n }, `重新测试全部 <b>${n}</b> 个正常/限流账户的运行状态？<br><small style="color:var(--fg-muted)">该操作会调用上游接口，并按后端并发上限 50 分批执行。</small>`),
     async () => _runBatch('/batch/refresh?all_manageable=true', [],
       tr('account.refreshAllRunning', { n }, `正在重新测试 ${n} 个账户…`),
-      (ok, fail) => showToast(tr('account.refreshDone', { ok, fail }, `刷新完成：成功 ${ok}，失败 ${fail}`), fail > 0 ? 'error' : 'success')
+      (ok, fail, s) => {
+        const expired = s?.expired ?? 0, transient = s?.transient ?? (fail - expired);
+        let msg = `刷新完成：成功 ${ok}`;
+        if (expired > 0) msg += `，异常 ${expired}`;
+        if (transient > 0) msg += `，临时失败 ${transient}`;
+        showToast(msg, fail > 0 ? 'warning' : 'success');
+      }
     )
   );
 }

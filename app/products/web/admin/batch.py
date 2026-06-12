@@ -88,20 +88,23 @@ async def _dispatch(
     *,
     use_async: bool,
     concurrency: int = 10,
+    repo: "AccountRepository | None" = None,
 ) -> Response:
     if use_async:
         return await _dispatch_async(tokens, handler, concurrency)
-    return await _dispatch_sync(tokens, handler, concurrency)
+    return await _dispatch_sync(tokens, handler, concurrency, repo)
 
 
 async def _dispatch_sync(
     tokens: list[str],
     handler: Callable[[str], Awaitable[dict]],
     concurrency: int,
+    repo: "AccountRepository | None" = None,
 ) -> Response:
     """Concurrent execution, collect all results, return at once."""
     results: dict[str, Any] = {}
     ok_c = fail_c = 0
+    failed_tokens: list[str] = []
 
     async def _wrapped(token: str) -> tuple[str, dict | None, str | None]:
         try:
@@ -118,11 +121,25 @@ async def _dispatch_sync(
             results[key] = data
         else:
             fail_c += 1
+            failed_tokens.append(token)
             results[key] = {"error": err}
+
+    # 批量查询失败 token 的状态，统计凭证失效数量
+    expired_c = 0
+    if repo and failed_tokens:
+        from app.control.account.enums import AccountStatus
+        records = await repo.get_accounts(failed_tokens)
+        expired_c = sum(1 for r in records if r.status == AccountStatus.EXPIRED)
 
     return _json({
         "status": "success",
-        "summary": {"total": len(tokens), "ok": ok_c, "fail": fail_c},
+        "summary": {
+            "total": len(tokens),
+            "ok": ok_c,
+            "fail": fail_c,
+            "expired": expired_c,
+            "transient": fail_c - expired_c,
+        },
         "results": results,
     })
 
@@ -290,7 +307,7 @@ async def batch_refresh(
     c = _concurrency(concurrency, "batch.refresh_concurrency")
     if all_manageable:
         logger.info("admin batch refresh all manageable: token_count={} concurrency={}", len(tokens), c)
-    return await _dispatch(tokens, _refresh_one, use_async=async_mode, concurrency=c)
+    return await _dispatch(tokens, _refresh_one, use_async=async_mode, concurrency=c, repo=repo)
 
 
 @router.post("/cache-clear")
