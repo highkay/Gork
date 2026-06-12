@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
@@ -19,12 +20,89 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeRouterError(w, err)
 		return
 	}
+	shouldStreamMedia, err := shouldStartChatMediaStream(req)
+	if err != nil {
+		writeRouterError(w, err)
+		return
+	}
+	if shouldStreamMedia {
+		streamChatMediaResult(w, r, req)
+		return
+	}
 	result, err := dispatchChatRequest(r, req)
 	if err != nil {
 		writeRouterError(w, err)
 		return
 	}
 	writeChatResult(w, result)
+}
+
+func shouldStartChatMediaStream(req ChatCompletionRequest) (bool, error) {
+	isStream := routerBoolConfig("features.stream", true)
+	if req.Stream != nil {
+		isStream = *req.Stream
+	}
+	if !isStream {
+		return false, nil
+	}
+	spec, _ := model.Get(req.Model)
+	if spec.IsImage() {
+		cfg := req.ImageConfig
+		if cfg == nil {
+			cfg = &ImageConfig{}
+		}
+		n := routerIntDefault(cfg.N, 1)
+		if err := validateImageN(req.Model, n, "image_config.n"); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	if spec.IsImageEdit() {
+		cfg := req.ImageConfig
+		if cfg == nil {
+			cfg = &ImageConfig{}
+		}
+		n := routerIntDefault(cfg.N, 1)
+		if err := validateImageEditN(n, "image_config.n"); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+func streamChatMediaResult(w http.ResponseWriter, r *http.Request, req ChatCompletionRequest) {
+	startRouterStream(w)
+	writeRouterStreamKeepAlive(w)
+
+	done := make(chan chatMediaStreamOutcome, 1)
+	go func() {
+		result, err := dispatchChatRequest(r, req)
+		done <- chatMediaStreamOutcome{result: result, err: err}
+	}()
+
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case outcome := <-done:
+			if outcome.err != nil {
+				writeRouterStreamError(w, outcome.err)
+				return
+			}
+			writeRouterStreamFrames(w, outcome.result.StreamFrames)
+			return
+		case <-ticker.C:
+			writeRouterStreamKeepAlive(w)
+		case <-r.Context().Done():
+			return
+		}
+	}
+}
+
+type chatMediaStreamOutcome struct {
+	result chatCompletionResult
+	err    error
 }
 
 func dispatchChatRequest(r *http.Request, req ChatCompletionRequest) (chatCompletionResult, error) {

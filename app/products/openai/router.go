@@ -79,28 +79,30 @@ func writeRouterJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func writeRouterError(w http.ResponseWriter, err error) {
+	status, payload := routerErrorResponse(err)
+	writeRouterJSON(w, status, payload)
+}
+
+func routerErrorResponse(err error) (int, map[string]any) {
 	var validation *platform.ValidationError
 	if errors.As(err, &validation) && validation.AppError != nil {
-		writeRouterJSON(w, validation.Status, validation.ToDict())
-		return
+		return validation.Status, validation.ToDict()
 	}
 	var upstream *platform.UpstreamError
 	if errors.As(err, &upstream) && upstream.AppError != nil {
-		writeRouterJSON(w, upstream.Status, upstream.ToDict())
-		return
+		return upstream.Status, upstream.ToDict()
 	}
 	var appErr *platform.AppError
 	if errors.As(err, &appErr) && appErr != nil {
-		writeRouterJSON(w, appErr.Status, appErr.ToDict())
-		return
+		return appErr.Status, appErr.ToDict()
 	}
-	writeRouterJSON(w, http.StatusInternalServerError, map[string]any{
+	return http.StatusInternalServerError, map[string]any{
 		"error": map[string]any{
 			"message": err.Error(),
 			"type":    "server_error",
 			"code":    "internal_error",
 		},
-	})
+	}
 }
 
 func routerBoolConfig(key string, defaultValue bool) bool {
@@ -131,12 +133,46 @@ func routerFloatDefault(value *float64, defaultValue float64) float64 {
 }
 
 func writeRouterStream(w http.ResponseWriter, frames []string) {
+	startRouterStream(w)
+	writeRouterStreamFrames(w, frames)
+}
+
+func startRouterStream(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.WriteHeader(http.StatusOK)
+}
+
+func writeRouterStreamKeepAlive(w http.ResponseWriter) {
+	_, _ = w.Write([]byte(": keep-alive\n\n"))
+	flushRouterStream(w)
+}
+
+func writeRouterStreamFrames(w http.ResponseWriter, frames []string) {
 	for _, frame := range frames {
 		_, _ = w.Write([]byte(frame))
+	}
+	flushRouterStream(w)
+}
+
+func writeRouterStreamError(w http.ResponseWriter, err error) {
+	_, payload := routerErrorResponse(err)
+	raw, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		raw = []byte(`{"error":{"message":"stream error","type":"server_error","code":"internal_error"}}`)
+	}
+	_, _ = w.Write([]byte("event: error\n"))
+	_, _ = w.Write([]byte("data: "))
+	_, _ = w.Write(raw)
+	_, _ = w.Write([]byte("\n\n"))
+	flushRouterStream(w)
+}
+
+func flushRouterStream(w http.ResponseWriter) {
+	flusher, ok := w.(http.Flusher)
+	if ok {
+		flusher.Flush()
 	}
 }
 

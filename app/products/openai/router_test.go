@@ -13,7 +13,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
@@ -223,6 +225,77 @@ func TestRouterChatCompletionsDispatchesOptions(t *testing.T) {
 	}
 	if got.Temperature != 0.2 || got.TopP != 0.3 {
 		t.Fatalf("sampling=%v/%v", got.Temperature, got.TopP)
+	}
+}
+
+func TestRouterChatImageStreamStartsBeforeGenerationCompletes(t *testing.T) {
+	resetRouterDepsForTest(t)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	routerGenerateImages = func(ctx context.Context, options imageGenerationOptions) (imageResult, error) {
+		if options.Model != "grok-imagine-image-lite" || !options.Stream || !options.ChatFormat {
+			t.Errorf("image options=%#v", options)
+		}
+		close(started)
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return imageResult{}, ctx.Err()
+		}
+		return imageResult{IsStream: true, StreamFrames: []string{"data: [DONE]\n\n"}}, nil
+	}
+
+	body := `{"model":"grok-imagine-image-lite","messages":[{"role":"user","content":"draw"}],"stream":true}`
+	rec := newStreamingProbeResponseWriter()
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		NewRouter().ServeHTTP(rec, req)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		close(release)
+		<-done
+		t.Fatal("image generation did not start")
+	}
+
+	select {
+	case <-rec.headerWritten:
+	case <-time.After(100 * time.Millisecond):
+		close(release)
+		<-done
+		t.Fatal("stream response did not start before image generation completed")
+	}
+
+	close(release)
+	<-done
+	if got := rec.Header().Get("Content-Type"); got != "text/event-stream" {
+		t.Fatalf("content-type=%q", got)
+	}
+	if body := rec.bodyString(); !strings.Contains(body, ": keep-alive") {
+		t.Fatalf("stream body missing keep-alive comment: %q", body)
+	}
+}
+
+func TestRouterChatImageStreamValidatesBeforeStartingStream(t *testing.T) {
+	resetRouterDepsForTest(t)
+
+	body := `{"model":"grok-imagine-image-lite","messages":[{"role":"user","content":"draw"}],"image_config":{"n":5},"stream":true}`
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if contentType := rec.Header().Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("content-type=%q body=%s", contentType, rec.Body.String())
+	}
+	bodyText := rec.Body.String()
+	if !strings.Contains(bodyText, `"param":"image_config.n"`) {
+		t.Fatalf("body missing validation param: %s", bodyText)
 	}
 }
 
@@ -617,4 +690,58 @@ func resetRouterDepsForTest(t *testing.T) {
 		routerEditImages = oldEdit
 		routerAuthSettings = oldAuthSettings
 	})
+}
+
+type streamingProbeResponseWriter struct {
+	header        http.Header
+	headerWritten chan struct{}
+	once          sync.Once
+	mu            sync.Mutex
+	status        int
+	body          bytes.Buffer
+}
+
+func newStreamingProbeResponseWriter() *streamingProbeResponseWriter {
+	return &streamingProbeResponseWriter{
+		header:        http.Header{},
+		headerWritten: make(chan struct{}),
+	}
+}
+
+func (w *streamingProbeResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *streamingProbeResponseWriter) WriteHeader(status int) {
+	w.mu.Lock()
+	w.status = status
+	w.mu.Unlock()
+	w.once.Do(func() { close(w.headerWritten) })
+}
+
+func (w *streamingProbeResponseWriter) Write(data []byte) (int, error) {
+	w.once.Do(func() {
+		w.mu.Lock()
+		w.status = http.StatusOK
+		w.mu.Unlock()
+		close(w.headerWritten)
+	})
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.body.Write(data)
+}
+
+func (w *streamingProbeResponseWriter) Flush() {
+	w.once.Do(func() {
+		w.mu.Lock()
+		w.status = http.StatusOK
+		w.mu.Unlock()
+		close(w.headerWritten)
+	})
+}
+
+func (w *streamingProbeResponseWriter) bodyString() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.body.String()
 }
