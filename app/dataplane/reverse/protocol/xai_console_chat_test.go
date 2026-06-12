@@ -141,6 +141,16 @@ func TestStreamConsoleChatMatchesPythonFeedbackAndLinePairing(t *testing.T) {
 	}
 
 	proxy = &fakeConsoleProxy{}
+	poster = &fakeConsolePoster{err: platform.NewUpstreamError("Upstream returned 403", 403, "token expired")}
+	_, err = StreamConsoleChat(context.Background(), "tok", map[string]any{"model": "x"}, ConsoleStreamOptions{Proxy: proxy, Poster: poster})
+	if !errors.As(err, &upstream) || upstream.Status != 403 || upstream.Body != "token expired" || upstream.Error() != "Upstream returned 403" {
+		t.Fatalf("upstream transport error should be preserved: %#v", err)
+	}
+	if len(proxy.feedbacks) != 1 || proxy.feedbacks[0].Kind != controlproxy.ProxyFeedbackChallenge || *proxy.feedbacks[0].StatusCode != 403 {
+		t.Fatalf("upstream transport feedback mismatch: %#v", proxy.feedbacks)
+	}
+
+	proxy = &fakeConsoleProxy{}
 	poster = &fakeConsolePoster{response: ConsoleStreamResponse{StatusCode: 500, Body: strings.Repeat("x", 500)}}
 	_, err = StreamConsoleChat(context.Background(), "tok", map[string]any{"model": "x"}, ConsoleStreamOptions{Proxy: proxy, Poster: poster})
 	if !errors.As(err, &upstream) || upstream.Status != 500 || len(upstream.Body) != 400 {

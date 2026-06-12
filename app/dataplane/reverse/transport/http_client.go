@@ -2,6 +2,8 @@ package transport
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -47,11 +49,52 @@ func doHTTPRequest(ctx context.Context, method string, request HTTPRequest) (HTT
 	}
 	defer cancel()
 	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
+	body, err := readHTTPResponseBody(response)
 	if err != nil {
 		return HTTPResponse{}, err
 	}
 	return HTTPResponse{StatusCode: response.StatusCode, Body: body, Headers: firstHeaderValues(response.Header)}, nil
+}
+
+func readHTTPResponseBody(response *http.Response) ([]byte, error) {
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, err
+	}
+	encoding := response.Header.Get("Content-Encoding")
+	switch encoding {
+	case "gzip":
+		return decodeGzipBody(body)
+	case "deflate":
+		return decodeDeflateBody(body)
+	}
+	if len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b {
+		return decodeGzipBody(body)
+	}
+	return body, nil
+}
+
+func decodeGzipBody(body []byte) ([]byte, error) {
+	reader, err := gzip.NewReader(bytes.NewReader(body))
+	if err != nil {
+		return body, nil
+	}
+	defer reader.Close()
+	decoded, err := io.ReadAll(reader)
+	if err != nil {
+		return body, nil
+	}
+	return decoded, nil
+}
+
+func decodeDeflateBody(body []byte) ([]byte, error) {
+	reader := flate.NewReader(bytes.NewReader(body))
+	defer reader.Close()
+	decoded, err := io.ReadAll(reader)
+	if err != nil {
+		return body, nil
+	}
+	return decoded, nil
 }
 
 func httpRequestURL(request HTTPRequest) string {

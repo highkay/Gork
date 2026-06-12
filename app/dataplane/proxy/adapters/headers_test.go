@@ -63,6 +63,25 @@ func TestBuildSSOCookieMatchesPython(t *testing.T) {
 	}
 }
 
+func TestBuildSSOCookieNormalizesStoredCookieShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		token string
+		want  string
+	}{
+		{name: "bare token", token: "abc", want: "sso=abc; sso-rw=abc"},
+		{name: "sso cookie", token: "sso=abc", want: "sso=abc; sso-rw=abc"},
+		{name: "sso rw cookie", token: "sso=abc; sso-rw=rw", want: "sso=abc; sso-rw=rw"},
+		{name: "full cookie", token: "foo=1; sso=abc; sso-rw=rw; bar=2", want: "foo=1; sso=abc; sso-rw=rw; bar=2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := BuildSSOCookie(tc.token); got != tc.want {
+				t.Fatalf("BuildSSOCookie(%q) = %q, want %q", tc.token, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSanitizeMatchesPythonNormalization(t *testing.T) {
 	value := "\t\u201chello\u201d\u2014x😀\n"
 	if got := sanitize(&value, "field", false); got != "\"hello\"-x" {
@@ -236,5 +255,12 @@ func TestBuildConsoleHeadersMatchesPython(t *testing.T) {
 	}
 	if !strings.Contains(headers["User-Agent"], "Chrome/136.0.0.0") {
 		t.Fatalf("console default UA = %q", headers["User-Agent"])
+	}
+}
+
+func TestBuildConsoleHeadersPreservesStoredCookieString(t *testing.T) {
+	headers := BuildConsoleHeaders("sso=console-token; sso-rw=rw-token; cf_clearance=cf-token; extra=1")
+	if headers["Cookie"] != "sso=console-token; sso-rw=rw-token; cf_clearance=cf-token; extra=1" {
+		t.Fatalf("console Cookie = %q", headers["Cookie"])
 	}
 }
