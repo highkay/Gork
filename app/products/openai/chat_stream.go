@@ -4,8 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"time"
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 	"github.com/dslzl/gork/app/platform"
 )
 
@@ -53,4 +56,29 @@ func streamChat(ctx context.Context, options chatStreamOptions) ([]string, error
 		return nil, platform.NewUpstreamError(fmt.Sprintf("Chat upstream returned %d", response.StatusCode), response.StatusCode, body)
 	}
 	return append([]string{}, response.Lines...), nil
+}
+
+func defaultStreamPost(ctx context.Context, request chatStreamRequest) (*chatStreamResponse, error) {
+	timeout := time.Duration(request.TimeoutSeconds * float64(time.Second))
+	stream, err := transport.PostStream(ctx, chatStreamEndpoint(), request.Token, request.PayloadBytes, transport.HTTPOptions{
+		Timeout:      timeout,
+		ContentType:  "application/json",
+		ExtraHeaders: request.Headers,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer stream.Close()
+
+	lines := []string{}
+	for {
+		line, ok, err := stream.Next()
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return &chatStreamResponse{StatusCode: http.StatusOK, Lines: lines}, nil
+		}
+		lines = append(lines, line)
+	}
 }

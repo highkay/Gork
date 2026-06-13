@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -289,6 +292,49 @@ func TestChatStreamChatWrapsTransportAndNon200(t *testing.T) {
 	upstream, ok = err.(*platform.UpstreamError)
 	if !ok || upstream.Status != 503 || upstream.Body != "bad body" || !strings.Contains(upstream.Error(), "Chat upstream returned 503") {
 		t.Fatalf("non200 err=%#v", err)
+	}
+}
+
+func TestDefaultStreamPostUsesHTTPTransport(t *testing.T) {
+	oldEndpoint := chatStreamEndpoint
+	t.Cleanup(func() { chatStreamEndpoint = oldEndpoint })
+
+	var gotPayload string
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		gotPayload = string(raw)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: one\n"))
+		_, _ = w.Write([]byte("data: two\n"))
+	}))
+	defer server.Close()
+	chatStreamEndpoint = func() string { return server.URL }
+
+	resp, err := defaultStreamPost(context.Background(), chatStreamRequest{
+		Token:        "tok-default",
+		PayloadBytes: []byte(`{"message":"hello"}`),
+		Headers: map[string]string{
+			"authorization": "Bearer tok-default",
+			"content-type":  "application/json",
+		},
+		TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("defaultStreamPost err=%v", err)
+	}
+	if resp.StatusCode != http.StatusOK || !reflect.DeepEqual(resp.Lines, []string{"data: one", "data: two"}) {
+		t.Fatalf("response=%#v", resp)
+	}
+	if gotPayload != `{"message":"hello"}` {
+		t.Fatalf("payload=%q", gotPayload)
+	}
+	if !strings.Contains(gotAuth, "Bearer tok-default") {
+		t.Fatalf("authorization=%q", gotAuth)
 	}
 }
 
