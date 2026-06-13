@@ -7,6 +7,7 @@ import (
 	"github.com/dslzl/gork/app/control/model"
 	dataaccount "github.com/dslzl/gork/app/dataplane/account"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 	appruntime "github.com/dslzl/gork/app/platform/runtime"
@@ -52,9 +53,8 @@ var (
 		}
 		return result.FileID, result.FileURI, nil
 	}
-	streamPost = func(context.Context, chatStreamRequest) (*chatStreamResponse, error) {
-		return nil, fmt.Errorf("chat stream transport is not configured")
-	}
+	chatStreamEndpoint      = func() string { return reverseruntime.Chat }
+	streamPost              = defaultStreamPost
 	currentAccountStrategy  = dataaccount.CurrentStrategy
 	chatRefreshService      = defaultChatRefreshService
 	isInvalidCredentials    = protocol.IsInvalidCredentialsError
