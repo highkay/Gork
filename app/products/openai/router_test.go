@@ -275,8 +275,12 @@ func TestRouterChatImageStreamStartsBeforeGenerationCompletes(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "text/event-stream" {
 		t.Fatalf("content-type=%q", got)
 	}
-	if body := rec.bodyString(); !strings.Contains(body, ": keep-alive") {
-		t.Fatalf("stream body missing keep-alive comment: %q", body)
+	bodyText := rec.bodyString()
+	if strings.Contains(bodyText, ": keep-alive") {
+		t.Fatalf("stream body uses SSE comment heartbeat: %q", bodyText)
+	}
+	if !strings.Contains(bodyText, `"object":"chat.completion.chunk"`) || !strings.Contains(bodyText, `"delta":{}`) {
+		t.Fatalf("stream body missing OpenAI-compatible heartbeat: %q", bodyText)
 	}
 }
 
