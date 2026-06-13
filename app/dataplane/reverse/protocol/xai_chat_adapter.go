@@ -124,6 +124,15 @@ func (a *StreamAdapter) Feed(data string) ([]FrameEvent, error) {
 	if cardRaw, ok := resp["cardAttachment"].(map[string]any); ok && len(cardRaw) > 0 {
 		events = append(events, a.handleCard(cardRaw)...)
 	}
+	if stream := ExtractStreamingImageEditResponse(obj); stream != nil {
+		events = append(events, a.handleStreamingImageGeneration(stream)...)
+	}
+	for _, rawURL := range ExtractModelResponseImageEditURLs(obj) {
+		if url := grokImageURL(rawURL); url != "" {
+			a.ImageURLs = append(a.ImageURLs, imageURLRef{URL: url})
+			events = append(events, FrameEvent{Kind: "image", Content: url})
+		}
+	}
 	a.collectSearchResults(resp)
 	token, hasToken := resp["token"]
 	think, _ := resp["isThinking"].(bool)

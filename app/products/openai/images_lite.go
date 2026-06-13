@@ -116,6 +116,7 @@ func runLiteAttempt(ctx context.Context, account chatAccount, spec model.ModelSp
 		return imageOutput{}, err
 	}
 	adapter := protocol.NewStreamAdapter(protocol.StreamAdapterOptions{})
+	diagnostic := newLiteStreamDiagnostic()
 	for _, line := range lines {
 		eventType, data := protocol.ClassifyLine(line)
 		if eventType == "done" {
@@ -124,10 +125,12 @@ func runLiteAttempt(ctx context.Context, account chatAccount, spec model.ModelSp
 		if eventType != "data" || data == "" {
 			continue
 		}
+		diagnostic.ObserveData(data)
 		events, err := adapter.Feed(data)
 		if err != nil {
 			return imageOutput{}, err
 		}
+		diagnostic.ObserveEvents(events)
 		for _, event := range events {
 			if event.Kind == "image_progress" {
 				if options.ProgressCB != nil {
@@ -148,5 +151,5 @@ func runLiteAttempt(ctx context.Context, account chatAccount, spec model.ModelSp
 			})
 		}
 	}
-	return imageOutput{}, platform.NewUpstreamError("Image generation returned no images", 502, "")
+	return imageOutput{}, platform.NewUpstreamError("Image generation returned no images", 502, diagnostic.String())
 }

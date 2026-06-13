@@ -435,6 +435,65 @@ func TestImagesRunLiteBatchRetriesAndParsesImageEvent(t *testing.T) {
 	}
 }
 
+func TestImagesRunLiteBatchParsesStreamingImageGenerationResponse(t *testing.T) {
+	resetChatDepsForTest(t)
+	resetImagesDepsForTest(t)
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok-lite", ModeID: model.ModeFast}}}
+	refresh := &fakeChatRefreshService{}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+	chatRefreshService = func() chatRefreshProvider { return refresh }
+	imageStreamLiteGenerate = func(_ context.Context, token, prompt string, modeID model.ModeID) ([]string, error) {
+		if token != "tok-lite" || prompt != "draw lite" || modeID != model.ModeFast {
+			t.Fatalf("lite stream token/prompt/mode=%q/%q/%v", token, prompt, modeID)
+		}
+		return []string{
+			`data: {"result":{"response":{"streamingImageGenerationResponse":{"imageIndex":0,"progress":40,"moderated":false}}}}`,
+			`data: {"result":{"response":{"streamingImageGenerationResponse":{"imageIndex":0,"progress":100,"imageUrl":"generated/lite-stream.png","moderated":false}}}}`,
+			`data: [DONE]`,
+		}, nil
+	}
+
+	images, err := runLiteBatch(context.Background(), imageLiteBatchOptions{
+		Model:          "grok-imagine-image-lite",
+		Prompt:         "draw lite",
+		N:              1,
+		ResponseFormat: "url",
+	})
+	if err != nil {
+		t.Fatalf("runLiteBatch err=%v", err)
+	}
+	if len(images) != 1 || images[0].APIValue != "https://assets.grok.com/generated/lite-stream.png" {
+		t.Fatalf("images=%#v", images)
+	}
+}
+
+func TestImagesRunLiteAttemptNoImagesIncludesStreamSummary(t *testing.T) {
+	resetImagesDepsForTest(t)
+	imageStreamLiteGenerate = func(context.Context, string, string, model.ModeID) ([]string, error) {
+		return []string{
+			`data: {"result":{"response":{"token":"I cannot create that image here.","isThinking":false,"messageTag":"final"}}}`,
+			`data: {"result":{"response":{"finalMetadata":{"done":true}}}}`,
+			`data: [DONE]`,
+		}, nil
+	}
+
+	_, err := runLiteAttempt(context.Background(), chatAccount{Token: "tok-lite"}, model.ModelSpec{ModeID: model.ModeFast}, imageLiteBatchOptions{
+		Prompt:         "draw lite",
+		ResponseFormat: "url",
+	}, 0)
+	var upstream *platform.UpstreamError
+	if !errors.As(err, &upstream) {
+		t.Fatalf("err=%#v", err)
+	}
+	if !strings.Contains(upstream.Body, "data_frames=2") ||
+		!strings.Contains(upstream.Body, "response_keys=") ||
+		!strings.Contains(upstream.Body, "finalMetadata") ||
+		!strings.Contains(upstream.Body, "token") ||
+		!strings.Contains(upstream.Body, "text=\"I cannot create that image here.\"") {
+		t.Fatalf("body=%q", upstream.Body)
+	}
+}
+
 func TestImagesEditNonStreamUploadsCreatesPostAndCollectsImages(t *testing.T) {
 	resetChatDepsForTest(t)
 	resetImagesDepsForTest(t)

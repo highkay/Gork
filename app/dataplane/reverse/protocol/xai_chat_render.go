@@ -48,11 +48,49 @@ func (a *StreamAdapter) handleCard(cardRaw map[string]any) []FrameEvent {
 		events = append(events, FrameEvent{Kind: "image_progress", Content: fmt.Sprint(progress), ImageID: uuid})
 	}
 	if progress == 100 && !boolFromAny(chunk["moderated"]) {
-		url := imageBaseURL + stringFromAny(chunk["imageUrl"])
-		a.ImageURLs = append(a.ImageURLs, imageURLRef{URL: url, ImageID: uuid})
-		events = append(events, FrameEvent{Kind: "image", Content: url, ImageID: uuid})
+		if url := grokImageURL(stringFromAny(chunk["imageUrl"])); url != "" {
+			a.ImageURLs = append(a.ImageURLs, imageURLRef{URL: url, ImageID: uuid})
+			events = append(events, FrameEvent{Kind: "image", Content: url, ImageID: uuid})
+		}
 	}
 	return events
+}
+
+func (a *StreamAdapter) handleStreamingImageGeneration(stream map[string]any) []FrameEvent {
+	events := []FrameEvent{}
+	progress, hasProgress := numberAsInt(stream["progress"])
+	uuid := firstStringFromAny(stream["imageUuid"], stream["assetId"])
+	if hasProgress {
+		events = append(events, FrameEvent{Kind: "image_progress", Content: fmt.Sprint(progress), ImageID: uuid})
+	}
+	if (!hasProgress || progress >= 100) && !boolFromAny(stream["moderated"]) {
+		rawURL := firstStringFromAny(stream["imageUrl"], stream["imageURL"], stream["url"])
+		if url := grokImageURL(rawURL); url != "" {
+			a.ImageURLs = append(a.ImageURLs, imageURLRef{URL: url, ImageID: uuid})
+			events = append(events, FrameEvent{Kind: "image", Content: url, ImageID: uuid})
+		}
+	}
+	return events
+}
+
+func grokImageURL(rawURL string) string {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return ""
+	}
+	if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") {
+		return rawURL
+	}
+	return imageBaseURL + strings.TrimLeft(rawURL, "/")
+}
+
+func firstStringFromAny(values ...any) string {
+	for _, value := range values {
+		if text := strings.TrimSpace(stringFromAny(value)); text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 func (a *StreamAdapter) cleanToken(token string) (string, []map[string]any) {
