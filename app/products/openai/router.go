@@ -144,8 +144,18 @@ func startRouterStream(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func writeRouterStreamKeepAlive(w http.ResponseWriter) {
-	_, _ = w.Write([]byte(": keep-alive\n\n"))
+func writeRouterStreamHeartbeat(w http.ResponseWriter, modelName string, responseID string) {
+	frame := formatChatDataFrame(map[string]any{
+		"id":      responseID,
+		"object":  "chat.completion.chunk",
+		"created": formatNowUnix(),
+		"model":   modelName,
+		"choices": []any{map[string]any{
+			"index": 0,
+			"delta": map[string]any{},
+		}},
+	})
+	_, _ = w.Write([]byte(frame))
 	flushRouterStream(w)
 }
 

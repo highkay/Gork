@@ -2,12 +2,14 @@ package openai
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/logging"
 )
 
 func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +75,8 @@ func shouldStartChatMediaStream(req ChatCompletionRequest) (bool, error) {
 
 func streamChatMediaResult(w http.ResponseWriter, r *http.Request, req ChatCompletionRequest) {
 	startRouterStream(w)
-	writeRouterStreamKeepAlive(w)
+	heartbeatID := MakeResponseID()
+	writeRouterStreamHeartbeat(w, req.Model, heartbeatID)
 
 	done := make(chan chatMediaStreamOutcome, 1)
 	go func() {
@@ -87,13 +90,14 @@ func streamChatMediaResult(w http.ResponseWriter, r *http.Request, req ChatCompl
 		select {
 		case outcome := <-done:
 			if outcome.err != nil {
+				logChatMediaStreamError(req.Model, outcome.err)
 				writeRouterStreamError(w, outcome.err)
 				return
 			}
 			writeRouterStreamFrames(w, outcome.result.StreamFrames)
 			return
 		case <-ticker.C:
-			writeRouterStreamKeepAlive(w)
+			writeRouterStreamHeartbeat(w, req.Model, heartbeatID)
 		case <-r.Context().Done():
 			return
 		}
@@ -103,6 +107,36 @@ func streamChatMediaResult(w http.ResponseWriter, r *http.Request, req ChatCompl
 type chatMediaStreamOutcome struct {
 	result chatCompletionResult
 	err    error
+}
+
+func logChatMediaStreamError(modelName string, err error) {
+	var upstream *platform.UpstreamError
+	if errors.As(err, &upstream) {
+		logging.Logger.Warn(
+			"chat media stream failed",
+			"model", modelName,
+			"status", upstream.Status,
+			"message", truncateStreamErrorText(upstream.Message, 400),
+			"body_len", len(upstream.Body),
+			"body_excerpt", truncateStreamErrorText(upstreamBodyExcerpt(upstream, 400), 400),
+		)
+		return
+	}
+	logging.Logger.Warn(
+		"chat media stream failed",
+		"model", modelName,
+		"error", truncateStreamErrorText(err.Error(), 400),
+	)
+}
+
+func truncateStreamErrorText(value string, limit int) string {
+	if limit <= 0 {
+		limit = 400
+	}
+	if len(value) > limit {
+		return value[:limit]
+	}
+	return value
 }
 
 func dispatchChatRequest(r *http.Request, req ChatCompletionRequest) (chatCompletionResult, error) {
