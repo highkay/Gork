@@ -43,6 +43,52 @@ func TestRegistryLookupMatchesPython(t *testing.T) {
 	}
 }
 
+func TestRegistryMergesDynamicConsoleModels(t *testing.T) {
+	restore := SetDynamicProvider(func() []ModelSpec {
+		return []ModelSpec{
+			{ModelName: "grok-4.20-auto", ModeID: ModeConsole, Tier: TierBasic, Capability: CapabilityConsoleChat, Enabled: true, PublicName: "Should Not Override Static"},
+			{ModelName: "grok-dynamic-chat", ModeID: ModeConsole, Tier: TierBasic, Capability: CapabilityConsoleChat, Enabled: true, PublicName: "Grok Dynamic Chat"},
+			{ModelName: "grok-disabled-dynamic", ModeID: ModeConsole, Tier: TierBasic, Capability: CapabilityConsoleChat, Enabled: false, PublicName: "Disabled"},
+		}
+	})
+	t.Cleanup(restore)
+
+	spec, ok := Get("grok-dynamic-chat")
+	if !ok {
+		t.Fatalf("Get should include dynamic models")
+	}
+	if spec.ModeID != ModeConsole || spec.Capability != CapabilityConsoleChat || !spec.Enabled {
+		t.Fatalf("dynamic spec = %#v", spec)
+	}
+	if spec.PublicName != "Grok Dynamic Chat" {
+		t.Fatalf("dynamic public name = %q", spec.PublicName)
+	}
+
+	static, ok := Get("grok-4.20-auto")
+	if !ok || static.ModeID != ModeAuto || static.PublicName != "Grok 4.20 Auto" {
+		t.Fatalf("dynamic provider should not override static models: %#v", static)
+	}
+	if _, err := Resolve("grok-dynamic-chat"); err != nil {
+		t.Fatalf("Resolve should include dynamic models: %v", err)
+	}
+	if _, ok := Get("grok-disabled-dynamic"); !ok {
+		t.Fatalf("Get should expose disabled dynamic models for exact lookup")
+	}
+
+	enabledNames := modelNames(ListEnabled())
+	if !containsModelName(enabledNames, "grok-dynamic-chat") {
+		t.Fatalf("ListEnabled missing dynamic model: %#v", enabledNames)
+	}
+	if containsModelName(enabledNames, "grok-disabled-dynamic") {
+		t.Fatalf("ListEnabled should omit disabled dynamic models: %#v", enabledNames)
+	}
+
+	consoleNames := modelNames(ListByCapability(CapabilityConsoleChat))
+	if !containsModelName(consoleNames, "grok-dynamic-chat") {
+		t.Fatalf("ListByCapability missing dynamic console model: %#v", consoleNames)
+	}
+}
+
 func TestRegistryListEnabledMatchesPython(t *testing.T) {
 	got := ListEnabled()
 	want := expectedRegistryModels()
@@ -122,6 +168,15 @@ func modelNames(specs []ModelSpec) []string {
 		names = append(names, spec.ModelName)
 	}
 	return names
+}
+
+func containsModelName(names []string, want string) bool {
+	for _, name := range names {
+		if name == want {
+			return true
+		}
+	}
+	return false
 }
 
 func expectedRegistryModels() []ModelSpec {

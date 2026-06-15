@@ -96,6 +96,56 @@ func TestResponsesNonStreamBuildsTextReasoningAndFeedback(t *testing.T) {
 	}
 }
 
+func TestResponsesNonStreamBuildsFunctionCallOutputWhenParsed(t *testing.T) {
+	resetChatDepsForTest(t)
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok-resp", ModeID: model.ModeFast}}}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+	streamPost = func(_ context.Context, req chatStreamRequest) (*chatStreamResponse, error) {
+		var payload map[string]any
+		if err := json.Unmarshal(req.PayloadBytes, &payload); err != nil {
+			t.Fatalf("payload json: %v", err)
+		}
+		if !strings.Contains(payload["message"].(string), "lookup") {
+			t.Fatalf("payload message missing tool prompt=%q", payload["message"])
+		}
+		return &chatStreamResponse{StatusCode: 200, Lines: []string{
+			`data: {"result":{"response":{"token":"<tool_calls><tool_call><tool_name>lookup</tool_name><parameters>{\"q\":\"x\"}</parameters></tool_call></tool_calls>","isThinking":false,"messageTag":"final"}}}`,
+			`data: [DONE]`,
+		}}, nil
+	}
+
+	result, err := Responses(context.Background(), responseOptions{
+		Model: "grok-4.20-fast",
+		Input: "hello",
+		Tools: []map[string]any{{
+			"type": "function",
+			"function": map[string]any{
+				"name":        "lookup",
+				"description": "search",
+				"parameters":  map[string]any{"type": "object"},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Responses err=%v", err)
+	}
+	output := result.Response["output"].([]map[string]any)
+	if len(output) != 1 {
+		t.Fatalf("output=%#v", output)
+	}
+	call := output[0]
+	if call["type"] != "function_call" || call["name"] != "lookup" || call["arguments"] != `{"q":"x"}` {
+		t.Fatalf("function_call=%#v", call)
+	}
+	body, err := json.Marshal(result.Response)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if strings.Contains(string(body), "<tool_calls>") || strings.Contains(string(body), "<tool_name>") {
+		t.Fatalf("raw XML leaked in response=%s", body)
+	}
+}
+
 func TestResponsesStreamEmitsResponsesEvents(t *testing.T) {
 	resetChatDepsForTest(t)
 	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok-resp", ModeID: model.ModeFast}}}

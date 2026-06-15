@@ -360,6 +360,7 @@
         "features": "Core Features",
         "mediaFormat": "Media Output",
         "refreshSchedule": "Quota Refresh",
+        "ssoValidation": "SSO Validity Checks",
         "selection": "Selection Concurrency",
         "batchConcurrency": "Batch Concurrency",
         "egressProxy": "Egress Proxy",
@@ -472,6 +473,27 @@
           "label": "Enable Quota Refresh",
           "desc": "When enabled, the system automatically switches to quota refresh mode. When disabled, it automatically switches to auto-retry mode.",
           "help": "On: quota refresh mode. The scheduler periodically syncs real quota, and selection uses scoring.\nOff: auto-retry mode. No upstream probing, uniform random selection, and auto-swap on errors for up to 5 retries.\nRecommendation: turn this off for >10k accounts to avoid self-triggering upstream 429s."
+        },
+        "ssoValidationEnabled": {
+          "label": "Enable SSO Auto-Removal",
+          "desc": "Checks SSO validity in batches on a fixed interval. After the consecutive failure threshold is reached, the account is soft-deleted and no longer selected at runtime.",
+          "help": "Check rule: refresh account state first. If refresh fails, record a failure and skip model listing. If refresh succeeds, fetch the model list; only refresh success plus model list success counts as healthy.\nCleanup rule: once consecutive failures reach the threshold, soft-delete the account without physically deleting the database row.\nRecommendation: for large SSO pools, start with lower concurrency and batch size to avoid triggering upstream rate limits."
+        },
+        "ssoValidationInterval": {
+          "label": "Check Interval (s)",
+          "desc": "Interval between batch checks. Full sweep time is approximately ceil(total SSO / batch size) × check interval."
+        },
+        "ssoValidationBatchSize": {
+          "label": "Batch Size",
+          "desc": "Maximum number of SSO accounts selected per scheduler tick, splitting large pools into segments."
+        },
+        "ssoValidationConcurrency": {
+          "label": "Check Concurrency",
+          "desc": "Maximum parallel refresh and model-list probes within one batch."
+        },
+        "ssoValidationMaxFailures": {
+          "label": "Consecutive Failure Threshold",
+          "desc": "Soft-delete an SSO after this many consecutive failures. A successful check resets the failure count."
         },
         "maxInflight": {
           "label": "Max Inflight per Account",

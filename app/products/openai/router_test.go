@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	controlmodel "github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/storage"
@@ -43,6 +44,34 @@ func TestRouterListModelsDefaultsToEnabledModels(t *testing.T) {
 	}
 	if !containsString(ids, "grok-4.20-heavy") {
 		t.Fatalf("default ids missing heavy model: %v", ids)
+	}
+}
+
+func TestRouterModelsIncludeDynamicConsoleModels(t *testing.T) {
+	resetRouterDepsForTest(t)
+	restore := controlmodel.SetDynamicProvider(func() []controlmodel.ModelSpec {
+		return []controlmodel.ModelSpec{{
+			ModelName: "grok-dynamic-console", ModeID: controlmodel.ModeConsole, Tier: controlmodel.TierBasic,
+			Capability: controlmodel.CapabilityConsoleChat, Enabled: true, PublicName: "Grok Dynamic Console",
+		}}
+	})
+	t.Cleanup(restore)
+	routerAvailablePools = func(*http.Request) map[string]struct{} {
+		return map[string]struct{}{"basic": {}}
+	}
+
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	ids := routerResponseModelIDs(t, decodeRouterJSON(t, rec))
+	if !containsString(ids, "grok-dynamic-console") {
+		t.Fatalf("dynamic model missing from /v1/models: %v", ids)
+	}
+
+	rec = httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/models/grok-dynamic-console", nil))
+	body := decodeRouterJSON(t, rec)
+	if rec.Code != http.StatusOK || body["id"] != "grok-dynamic-console" || body["name"] != "Grok Dynamic Console" {
+		t.Fatalf("dynamic get status/body=%d/%#v", rec.Code, body)
 	}
 }
 
@@ -664,6 +693,7 @@ func isValidationParam(err error, param string) bool {
 
 func resetRouterDepsForTest(t *testing.T) {
 	t.Helper()
+	restoreDynamicModels := controlmodel.SetDynamicProvider(nil)
 	oldPools := routerAvailablePools
 	oldCompletions := routerCompletions
 	oldResponses := routerResponses
@@ -687,6 +717,7 @@ func resetRouterDepsForTest(t *testing.T) {
 	}
 
 	t.Cleanup(func() {
+		restoreDynamicModels()
 		routerAvailablePools = oldPools
 		routerCompletions = oldCompletions
 		routerResponses = oldResponses

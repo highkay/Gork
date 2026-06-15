@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -121,6 +122,49 @@ func TestMessagesStreamConvertsToolCallToAnthropicToolUse(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("tool stream missing %q in %s", want, joined)
 		}
+	}
+}
+
+func TestMessagesNonStreamConvertsToolCallToAnthropicToolUse(t *testing.T) {
+	resetMessagesDepsForTest(t)
+	directory := &fakeMessagesDirectory{accounts: []messagesAccount{{Token: "tok1", ModeID: model.ModeAuto}}}
+	messagesDirectoryProvider = func() messagesDirectory { return directory }
+	messagesStream = func(context.Context, messagesStreamOptions) ([]string, error) {
+		return []string{
+			`data: {"result":{"response":{"token":"<tool_calls><tool_call><tool_name>lookup</tool_name><parameters>{\"q\":\"go\"}</parameters></tool_call></tool_calls>","isThinking":false,"messageTag":"final"}}}`,
+			`data: [DONE]`,
+		}, nil
+	}
+
+	result, err := Messages(context.Background(), MessagesOptions{
+		Model:     "grok-4.20-auto",
+		Messages:  []map[string]any{{"role": "user", "content": "hi"}},
+		Stream:    false,
+		Tools:     []map[string]any{{"name": "lookup", "input_schema": map[string]any{"type": "object"}}},
+		MessageID: "msg_tool",
+	})
+	if err != nil {
+		t.Fatalf("Messages tool non-stream err=%v", err)
+	}
+	body := result.Response
+	if body["stop_reason"] != "tool_use" {
+		t.Fatalf("stop_reason=%#v", body["stop_reason"])
+	}
+	content := body["content"].([]map[string]any)
+	if len(content) != 1 {
+		t.Fatalf("content=%#v", content)
+	}
+	tool := content[0]
+	input := tool["input"].(map[string]any)
+	if tool["type"] != "tool_use" || tool["name"] != "lookup" || input["q"] != "go" {
+		t.Fatalf("tool_use=%#v", tool)
+	}
+	rendered, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal body: %v", err)
+	}
+	if strings.Contains(string(rendered), "<tool_calls>") || strings.Contains(string(rendered), "<tool_name>") {
+		t.Fatalf("raw tool XML leaked: %s", rendered)
 	}
 }
 

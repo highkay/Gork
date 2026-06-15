@@ -50,14 +50,14 @@ func CurrentStrategy() string {
 
 func Select(table *AccountRuntimeTable, poolID int, modeID int, options SelectOptions) (int, bool) {
 	if CurrentStrategy() == strategyRandom {
-		return randomSelect(table, poolID, options)
+		return randomSelect(table, poolID, modeID, options)
 	}
 	return quotaSelect(table, poolID, modeID, options)
 }
 
 func SelectAny(table *AccountRuntimeTable, poolID int, options SelectOptions) (int, bool) {
 	if CurrentStrategy() == strategyRandom {
-		return randomSelect(table, poolID, options)
+		return randomSelectAny(table, poolID, options)
 	}
 	return quotaSelectAny(table, poolID, options)
 }
@@ -207,11 +207,28 @@ func scoreCandidate(health float64, quota int, inflight int, failCount int, last
 	return score
 }
 
-func randomSelect(table *AccountRuntimeTable, poolID int, options SelectOptions) (int, bool) {
+func randomSelect(table *AccountRuntimeTable, poolID int, modeID int, options SelectOptions) (int, bool) {
+	candidates := table.ModeAvailable[ModeKey{PoolID: poolID, ModeID: modeID}]
+	if len(candidates) == 0 {
+		return 0, false
+	}
+	resetCol := table.resetCol(modeID)
+	quotaCol := table.quotaCol(modeID)
+	totalCol := table.totalCol(modeID)
+	windowCol := table.windowCol(modeID)
+	maybeResetWindows(table, candidates, modeID, resetCol, quotaCol, totalCol, windowCol, poolID, options.NowS)
+	return randomSelectFrom(table, candidates, quotaCol, options)
+}
+
+func randomSelectAny(table *AccountRuntimeTable, poolID int, options SelectOptions) (int, bool) {
 	candidates := poolUnion(table, poolID)
 	if len(candidates) == 0 {
 		return 0, false
 	}
+	return randomSelectFrom(table, candidates, nil, options)
+}
+
+func randomSelectFrom(table *AccountRuntimeTable, candidates map[int]bool, quotaCol []int, options SelectOptions) (int, bool) {
 	maxInflight := options.MaxInflight
 	if maxInflight <= 0 {
 		maxInflight = defaultMaxInflight
@@ -222,6 +239,9 @@ func randomSelect(table *AccountRuntimeTable, poolID int, options SelectOptions)
 			continue
 		}
 		if table.CoolingUntilSByIdx[idx] > options.NowS {
+			continue
+		}
+		if quotaCol != nil && quotaCol[idx] <= 0 {
 			continue
 		}
 		if table.InflightByIdx[idx] >= maxInflight {

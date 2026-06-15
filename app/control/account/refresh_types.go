@@ -35,24 +35,42 @@ func (r *RefreshResult) Merge(other RefreshResult) {
 
 type AccountRefreshRepository interface {
 	GetAccounts(context.Context, []string) ([]AccountRecord, error)
+	ListAccounts(context.Context, ListAccountsQuery) (AccountPage, error)
 	PatchAccounts(context.Context, []AccountPatch) (AccountMutationResult, error)
+	DeleteAccounts(context.Context, []string) (AccountMutationResult, error)
 	RuntimeSnapshot(context.Context) (RuntimeSnapshot, error)
 }
 
+type SSOModelVerifier interface {
+	ProbeListModels(context.Context, string) error
+}
+
+type SSOModelVerifierFunc func(context.Context, string) error
+
+func (f SSOModelVerifierFunc) ProbeListModels(ctx context.Context, token string) error {
+	return f(ctx, token)
+}
+
 type AccountRefreshOptions struct {
-	Fetcher             protocol.UsageFetcher
-	UsageConcurrency    int
-	OnDemandMinInterval time.Duration
+	Fetcher                  protocol.UsageFetcher
+	UsageConcurrency         int
+	OnDemandMinInterval      time.Duration
+	SSOModelVerifier         SSOModelVerifier
+	SSOValidationConcurrency int
+	SSOValidationMaxFailures int
 }
 
 type AccountRefreshService struct {
-	repo                AccountRefreshRepository
-	fetcher             protocol.UsageFetcher
-	usageConcurrency    int
-	onDemandMinInterval time.Duration
-	mu                  sync.Mutex
-	onDemandRunning     bool
-	onDemandLast        time.Time
+	repo                     AccountRefreshRepository
+	fetcher                  protocol.UsageFetcher
+	usageConcurrency         int
+	onDemandMinInterval      time.Duration
+	ssoModelVerifier         SSOModelVerifier
+	ssoValidationConcurrency int
+	ssoValidationMaxFailures int
+	mu                       sync.Mutex
+	onDemandRunning          bool
+	onDemandLast             time.Time
 }
 
 func NewAccountRefreshService(repo AccountRefreshRepository, options AccountRefreshOptions) *AccountRefreshService {
@@ -65,10 +83,13 @@ func NewAccountRefreshService(repo AccountRefreshRepository, options AccountRefr
 		minInterval = 300 * time.Second
 	}
 	return &AccountRefreshService{
-		repo:                repo,
-		fetcher:             options.Fetcher,
-		usageConcurrency:    concurrency,
-		onDemandMinInterval: minInterval,
+		repo:                     repo,
+		fetcher:                  options.Fetcher,
+		usageConcurrency:         concurrency,
+		onDemandMinInterval:      minInterval,
+		ssoModelVerifier:         options.SSOModelVerifier,
+		ssoValidationConcurrency: options.SSOValidationConcurrency,
+		ssoValidationMaxFailures: options.SSOValidationMaxFailures,
 	}
 }
 

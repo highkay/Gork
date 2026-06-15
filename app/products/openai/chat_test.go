@@ -428,12 +428,23 @@ func TestChatBuildNonStreamResponseReturnsToolCallsWhenParsed(t *testing.T) {
 		t.Fatalf("build err=%v", err)
 	}
 	choices := resp["choices"].([]any)
-	message := choices[0].(map[string]any)["message"].(map[string]any)
+	choice := choices[0].(map[string]any)
+	if choice["finish_reason"] != "tool_calls" {
+		t.Fatalf("finish_reason=%#v", choice["finish_reason"])
+	}
+	message := choice["message"].(map[string]any)
 	if message["content"] != nil {
 		t.Fatalf("tool response content=%#v", message["content"])
 	}
 	if got := len(message["tool_calls"].([]any)); got != 1 {
 		t.Fatalf("tool call count=%d", got)
+	}
+	body, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if strings.Contains(string(body), "<tool_calls>") {
+		t.Fatalf("raw XML leaked in response=%s", body)
 	}
 	if !reflect.DeepEqual(resp["search_sources"], state.SearchSources) {
 		t.Fatalf("search_sources=%#v", resp["search_sources"])

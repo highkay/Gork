@@ -121,6 +121,46 @@ func TestRandomSelectFiltersCoolingInflightExcludeAndPreferTags(t *testing.T) {
 	}
 }
 
+func TestRandomSelectUsesRequestedModeAvailability(t *testing.T) {
+	table := MakeEmptyTable()
+	autoOnly := table.AppendSlot(AccountSlot{
+		Token:      "auto-only",
+		PoolID:     0,
+		StatusID:   StatusActive,
+		QuotaAuto:  1,
+		WindowAuto: 60,
+		Health:     1,
+		Tags:       []string{"preferred"},
+	})
+	fastOnly := table.AppendSlot(AccountSlot{
+		Token:      "fast-only",
+		PoolID:     0,
+		StatusID:   StatusActive,
+		QuotaFast:  1,
+		WindowFast: 60,
+		Health:     1,
+	})
+	if err := SetStrategy("random"); err != nil {
+		t.Fatalf("SetStrategy returned error: %v", err)
+	}
+
+	got, ok := Select(table, 0, 1, SelectOptions{
+		PreferTagIdxs: map[int]bool{autoOnly: true},
+		NowS:          100,
+	})
+	if !ok || got != fastOnly {
+		t.Fatalf("random Select for fast mode = %d/%v, want %d/true", got, ok, fastOnly)
+	}
+
+	got, ok = Select(table, 0, 0, SelectOptions{
+		PreferTagIdxs: map[int]bool{fastOnly: true},
+		NowS:          100,
+	})
+	if !ok || got != autoOnly {
+		t.Fatalf("random Select for auto mode = %d/%v, want %d/true", got, ok, autoOnly)
+	}
+}
+
 func TestQuotaSelectAppliesRecentPenaltyAndFailureCap(t *testing.T) {
 	table := MakeEmptyTable()
 	recent := table.AppendSlot(AccountSlot{Token: "recent", PoolID: 1, StatusID: StatusActive, QuotaAuto: 2, WindowAuto: 60, Health: 1.0, LastUseS: 99})

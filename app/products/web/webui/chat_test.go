@@ -47,6 +47,35 @@ func TestWebUIModelsRequiresKeyAndMatchesPythonShape(t *testing.T) {
 	}
 }
 
+func TestWebUIModelsIncludeDynamicRegistryModels(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	webUIUnixNow = func() int64 { return 789 }
+	restore := controlmodel.SetDynamicProvider(func() []controlmodel.ModelSpec {
+		return []controlmodel.ModelSpec{{
+			ModelName: "grok-dynamic-webui", ModeID: controlmodel.ModeConsole, Tier: controlmodel.TierBasic,
+			Capability: controlmodel.CapabilityConsoleChat, Enabled: true, PublicName: "Grok Dynamic WebUI",
+		}}
+	})
+	t.Cleanup(restore)
+
+	rec := webUIRequest(http.MethodGet, "/webui/api/models", "", "Bearer web")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	data := decodeWebUIBody(t, rec)["data"].([]any)
+	for _, item := range data {
+		model := item.(map[string]any)
+		if model["id"] == "grok-dynamic-webui" {
+			if model["capability"] != "chat" || model["created"].(float64) != 789 {
+				t.Fatalf("dynamic webui model = %#v", model)
+			}
+			return
+		}
+	}
+	t.Fatalf("dynamic model missing from webui models: %#v", data)
+}
+
 func TestWebUIChatCompletionsDelegatesToOpenAIHandler(t *testing.T) {
 	resetWebUITestDeps(t)
 	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }

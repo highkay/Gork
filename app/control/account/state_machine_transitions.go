@@ -20,18 +20,6 @@ func (s *feedbackState) applyForbidden(feedback AccountFeedback, policy StatePol
 	s.disable(feedback.At, defaultString(feedback.Reason, "forbidden"))
 }
 
-func (s *feedbackState) applyRateLimited(feedback AccountFeedback, policy StatePolicy) {
-	cooldownMS := policy.DefaultCoolingMS
-	if feedback.RetryAfterMS != nil && *feedback.RetryAfterMS != 0 {
-		cooldownMS = *feedback.RetryAfterMS
-	}
-	reason := defaultString(feedback.Reason, "rate_limited")
-	s.status = AccountStatusCooling
-	s.stateReason = stringValuePtr(reason)
-	s.ext[cooldownUntilKey] = feedback.At + cooldownMS
-	s.ext[cooldownReasonKey] = reason
-}
-
 func (s *feedbackState) applySuccess(feedback AccountFeedback) {
 	if s.status != AccountStatusCooling {
 		return

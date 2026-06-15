@@ -34,15 +34,28 @@ func TestApplySuccessAndRateLimitFeedbackMatchesPythonStrategies(t *testing.T) {
 
 	before := int(appruntime.NowS())
 	table.HealthByIdx[idx] = 0.8
-	table.CoolingUntilSByIdx[idx] = before + 100
-	ApplyRateLimitedRandom(table, idx, 5)
-	if table.CoolingUntilSByIdx[idx] != before+100 {
-		t.Fatalf("cooling timestamp was lowered to %d", table.CoolingUntilSByIdx[idx])
+	table.QuotaFastByIdx[idx] = 7
+	table.ResetFastAtByIdx[idx] = before + 100
+	ApplyRateLimitedRandom(table, idx, 1, 5)
+	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] != before+100 || !floatClose(table.HealthByIdx[idx], 0.36) {
+		t.Fatalf("random rate-limit preserved reset mismatch: cooling=%d quota=%d reset=%d health=%f",
+			table.CoolingUntilSByIdx[idx],
+			table.QuotaFastByIdx[idx],
+			table.ResetFastAtByIdx[idx],
+			table.HealthByIdx[idx],
+		)
 	}
-	table.CoolingUntilSByIdx[idx] = 0
-	ApplyRateLimitedRandom(table, idx, 5)
-	if table.CoolingUntilSByIdx[idx] < before+5 || !floatClose(table.HealthByIdx[idx], 0.162) {
-		t.Fatalf("random rate-limit: cooling=%d health=%f", table.CoolingUntilSByIdx[idx], table.HealthByIdx[idx])
+	table.HealthByIdx[idx] = 0.8
+	table.QuotaFastByIdx[idx] = 7
+	table.ResetFastAtByIdx[idx] = 0
+	ApplyRateLimitedRandom(table, idx, 1, 5)
+	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] < before+5 || !floatClose(table.HealthByIdx[idx], 0.36) {
+		t.Fatalf("random rate-limit: cooling=%d quota=%d reset=%d health=%f",
+			table.CoolingUntilSByIdx[idx],
+			table.QuotaFastByIdx[idx],
+			table.ResetFastAtByIdx[idx],
+			table.HealthByIdx[idx],
+		)
 	}
 }
 

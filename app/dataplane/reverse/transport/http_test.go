@@ -198,6 +198,23 @@ func TestPostStreamUsesConsoleHeadersWhenRequested(t *testing.T) {
 	}
 }
 
+func TestPostStreamReadsLargeConsoleSSELines(t *testing.T) {
+	longData := "data: " + strings.Repeat("x", 128*1024)
+	client := &fakeHTTPClient{responses: []HTTPResponse{{StatusCode: 200, Stream: io.NopCloser(strings.NewReader(longData + "\n"))}}}
+
+	stream, err := PostStream(context.Background(), "https://console.x.ai/v1/responses", "sso=tok", []byte("payload"), HTTPOptions{
+		Client:         client,
+		ConsoleHeaders: true,
+	})
+	if err != nil {
+		t.Fatalf("PostStream returned error: %v", err)
+	}
+	got := drainHTTPLineStream(t, stream)
+	if !reflect.DeepEqual(got, []string{longData}) {
+		t.Fatalf("large stream line mismatch: len=%d want=%d", len(got[0]), len(longData))
+	}
+}
+
 func TestGetJSONAndDeleteJSONUseParamsAndAllowedStatuses(t *testing.T) {
 	client := &fakeHTTPClient{responses: []HTTPResponse{
 		{StatusCode: 200, Body: []byte(`{"items":[1]}`)},

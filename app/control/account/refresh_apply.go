@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	"github.com/dslzl/gork/app/platform"
 )
 
@@ -13,9 +14,9 @@ func (s *AccountRefreshService) refreshOne(ctx context.Context, record AccountRe
 	}
 	windows, err := s.fetchAllQuotas(ctx, record.Token, record.Pool, bootstrap)
 	if err != nil {
-		marked, markErr := s.expireInvalidCredentials(ctx, record, err)
-		if markErr != nil || marked {
-			return RefreshResult{Checked: 1, Expired: 1}, markErr
+		result, handled, markErr := s.expireInvalidCredentials(ctx, record, err)
+		if markErr != nil || handled {
+			return result, markErr
 		}
 		return RefreshResult{}, err
 	}
@@ -139,8 +140,8 @@ func (s *AccountRefreshService) recordSpecificFailure(ctx context.Context, token
 		return false
 	}
 	record := records[0]
-	marked, markErr := s.expireInvalidCredentials(ctx, record, err)
-	if markErr == nil && marked {
+	_, handled, markErr := s.expireInvalidCredentials(ctx, record, err)
+	if markErr == nil && handled {
 		return true
 	}
 	var upstream *platform.UpstreamError
@@ -217,8 +218,15 @@ func (s *AccountRefreshService) singleModePatch(
 	return &patch, nil
 }
 
-func (s *AccountRefreshService) expireInvalidCredentials(ctx context.Context, record AccountRecord, err error) (bool, error) {
-	return MarkAccountInvalidCredentials(ctx, s.repo, record.Token, err, "usage refresh")
+func (s *AccountRefreshService) expireInvalidCredentials(ctx context.Context, record AccountRecord, err error) (RefreshResult, bool, error) {
+	if !protocol.IsInvalidCredentialsError(err) {
+		return RefreshResult{}, false, nil
+	}
+	result, validationErr := s.validateSSOAccount(ctx, record)
+	if validationErr != nil {
+		return RefreshResult{}, false, validationErr
+	}
+	return result, true, nil
 }
 
 func (s *AccountRefreshService) ResetExpiredConsoleWindows(ctx context.Context) (int, error) {

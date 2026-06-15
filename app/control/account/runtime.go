@@ -8,10 +8,11 @@ import (
 
 var refreshRuntimeState = struct {
 	sync.Mutex
-	service         accountScheduledRefresher
-	scheduler       *AccountRefreshScheduler
-	schedulerLeader bool
-	strategy        string
+	service                accountScheduledRefresher
+	scheduler              *AccountRefreshScheduler
+	ssoValidationScheduler *SSOValidationScheduler
+	schedulerLeader        bool
+	strategy               string
 }{
 	strategy: "random",
 }
@@ -42,6 +43,18 @@ func GetRefreshScheduler() *AccountRefreshScheduler {
 	refreshRuntimeState.Lock()
 	defer refreshRuntimeState.Unlock()
 	return refreshRuntimeState.scheduler
+}
+
+func SetSSOValidationScheduler(scheduler *SSOValidationScheduler) {
+	refreshRuntimeState.Lock()
+	defer refreshRuntimeState.Unlock()
+	refreshRuntimeState.ssoValidationScheduler = scheduler
+}
+
+func GetSSOValidationSchedulerRuntime() *SSOValidationScheduler {
+	refreshRuntimeState.Lock()
+	defer refreshRuntimeState.Unlock()
+	return refreshRuntimeState.ssoValidationScheduler
 }
 
 func SetRefreshSchedulerLeader(isLeader bool) {
@@ -80,7 +93,7 @@ func ReconcileRefreshRuntime(enabled ...bool) string {
 	if refreshEnabled {
 		targetStrategy = "quota"
 	}
-	scheduler, leader := runtimeSchedulerState()
+	scheduler, validationScheduler, leader := runtimeSchedulerState()
 	SetAccountSelectionStrategy(targetStrategy)
 	if scheduler != nil && leader {
 		if refreshEnabled && !scheduler.IsRunning() {
@@ -90,11 +103,25 @@ func ReconcileRefreshRuntime(enabled ...bool) string {
 			scheduler.Stop()
 		}
 	}
+	reconcileSSOValidationScheduler(validationScheduler, leader)
 	return targetStrategy
 }
 
-func runtimeSchedulerState() (*AccountRefreshScheduler, bool) {
+func runtimeSchedulerState() (*AccountRefreshScheduler, *SSOValidationScheduler, bool) {
 	refreshRuntimeState.Lock()
 	defer refreshRuntimeState.Unlock()
-	return refreshRuntimeState.scheduler, refreshRuntimeState.schedulerLeader
+	return refreshRuntimeState.scheduler, refreshRuntimeState.ssoValidationScheduler, refreshRuntimeState.schedulerLeader
+}
+
+func reconcileSSOValidationScheduler(scheduler *SSOValidationScheduler, leader bool) {
+	if scheduler == nil || !leader {
+		return
+	}
+	enabled := ssoValidationEnabled()
+	if enabled && !scheduler.IsRunning() {
+		scheduler.Start()
+	}
+	if !enabled && scheduler.IsRunning() {
+		scheduler.Stop()
+	}
 }

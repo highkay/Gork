@@ -74,7 +74,7 @@ func (s *feedbackState) applyStatus(feedback AccountFeedback, policy StatePolicy
 	case FeedbackKindForbidden:
 		s.applyForbidden(feedback, policy)
 	case FeedbackKindRateLimited:
-		s.applyRateLimited(feedback, policy)
+		return
 	case FeedbackKindSuccess:
 		s.applySuccess(feedback)
 	case FeedbackKindDisable:
