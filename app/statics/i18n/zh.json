@@ -360,6 +360,7 @@
         "features": "基本功能设置",
         "mediaFormat": "媒体返回格式",
         "refreshSchedule": "配额刷新调度",
+        "ssoValidation": "SSO 有效性检查",
         "selection": "选号并发限制",
         "batchConcurrency": "批量操作并发",
         "egressProxy": "出站代理设置",
@@ -472,6 +473,27 @@
           "label": "启用配额刷新",
           "desc": "开启后自动进入配额刷新模式，关闭后自动进入自动重试模式。",
           "help": "开启：配额刷新模式，scheduler 周期同步真实配额，选号按评分。\n关闭：自动重试模式，不主动探测 upstream，选号随机，出错自动换号重试最多 5 次。\n建议：万级以上账号关闭，避免主动探测触发 upstream 429。"
+        },
+        "ssoValidationEnabled": {
+          "label": "启用 SSO 自动剔除",
+          "desc": "按固定间隔分批检查 SSO 有效性；连续失败达到阈值后会软删除账号，运行时不再选中该 SSO。",
+          "help": "检查规则：先刷新账号状态；刷新失败直接记为失败，不再拉取模型列表。刷新成功后再拉取模型列表，只有模型列表也拉取成功才算正常。\n清理规则：连续失败次数达到阈值后调用软删除，不物理删除数据库记录。\n建议：大规模 SSO 池先使用较小并发和批量，避免主动探测触发 upstream 限流。"
+        },
+        "ssoValidationInterval": {
+          "label": "检查间隔（秒）",
+          "desc": "每轮分批检查的触发间隔。完整扫描耗时约为 ceil(SSO 总数 / 每批检查数量) × 检查间隔。"
+        },
+        "ssoValidationBatchSize": {
+          "label": "每批检查数量",
+          "desc": "每次调度最多取出的 SSO 数量，用于把大号池拆成多段检查。"
+        },
+        "ssoValidationConcurrency": {
+          "label": "检查并发数",
+          "desc": "单批内同时执行刷新和模型列表探测的最大并行数。"
+        },
+        "ssoValidationMaxFailures": {
+          "label": "连续失败阈值",
+          "desc": "同一个 SSO 连续失败达到该次数后软删除；检查成功会清零失败计数。"
         },
         "maxInflight": {
           "label": "单号并发上限",

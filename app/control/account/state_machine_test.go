@@ -135,14 +135,6 @@ func TestApplyFeedbackStatusTransitions(t *testing.T) {
 			wantExtKey: "disabled_at",
 		},
 		{
-			name:       "rate limited cools",
-			record:     baseStateRecord(AccountStatusActive),
-			feedback:   AccountFeedback{Kind: FeedbackKindRateLimited, ModeID: 1, At: 3000, Reason: "slow", RetryAfterMS: stateMS(500)},
-			wantStatus: AccountStatusCooling,
-			wantReason: "slow",
-			wantExtKey: "cooldown_until",
-		},
-		{
 			name:       "operator disable",
 			record:     baseStateRecord(AccountStatusActive),
 			feedback:   AccountFeedback{Kind: FeedbackKindDisable, At: 4000},
@@ -164,6 +156,47 @@ func TestApplyFeedbackStatusTransitions(t *testing.T) {
 				t.Fatalf("expected ext key %q in %#v", tt.wantExtKey, updated.Ext)
 			}
 		})
+	}
+}
+
+func TestApplyFeedbackRateLimitedUpdatesOnlyModeQuota(t *testing.T) {
+	record := baseStateRecord(AccountStatusActive)
+	quota, err := record.QuotaSet()
+	if err != nil {
+		t.Fatalf("QuotaSet returned error: %v", err)
+	}
+	quota.Auto.Remaining = 9
+	quota.Fast.Remaining = 7
+	quota.Fast.Total = 30
+	quota.Fast.WindowSeconds = 60
+	quota.Expert.Remaining = 11
+	record = record.WithQuotaSet(quota)
+
+	updated, err := ApplyFeedback(record, AccountFeedback{
+		Kind:         FeedbackKindRateLimited,
+		ModeID:       1,
+		At:           3000,
+		Reason:       "slow",
+		RetryAfterMS: stateMS(500),
+	}, StatePolicy{})
+	if err != nil {
+		t.Fatalf("ApplyFeedback rate limit returned error: %v", err)
+	}
+	if updated.Status != AccountStatusActive || updated.StateReason != nil || updated.Ext["cooldown_until"] != nil || updated.Ext["cooldown_reason"] != nil {
+		t.Fatalf("rate limit should not cool account: status=%q stateReason=%#v ext=%#v", updated.Status, updated.StateReason, updated.Ext)
+	}
+	if updated.UsageFailCount != record.UsageFailCount+1 || updated.LastFailAt == nil || *updated.LastFailAt != 3000 || updated.LastFailReason == nil || *updated.LastFailReason != "slow" {
+		t.Fatalf("rate limit failure accounting = %#v", updated)
+	}
+	updatedQuota, err := updated.QuotaSet()
+	if err != nil {
+		t.Fatalf("updated QuotaSet returned error: %v", err)
+	}
+	if updatedQuota.Fast.Remaining != 0 || updatedQuota.Fast.ResetAt == nil || *updatedQuota.Fast.ResetAt != 3500 {
+		t.Fatalf("fast quota after rate limit = %#v", updatedQuota.Fast)
+	}
+	if updatedQuota.Auto.Remaining != 9 || updatedQuota.Expert.Remaining != 11 {
+		t.Fatalf("other mode quota changed: auto=%#v expert=%#v", updatedQuota.Auto, updatedQuota.Expert)
 	}
 }
 

@@ -11,11 +11,14 @@ import (
 )
 
 type fakeRefreshRepo struct {
-	mu       sync.Mutex
-	records  []AccountRecord
-	snapshot RuntimeSnapshot
-	patches  []AccountPatch
-	getCalls [][]string
+	mu            sync.Mutex
+	records       []AccountRecord
+	snapshot      RuntimeSnapshot
+	patches       []AccountPatch
+	deletedTokens []string
+	getCalls      [][]string
+	listQueries   []ListAccountsQuery
+	listPage      AccountPage
 }
 
 func (r *fakeRefreshRepo) GetAccounts(_ context.Context, tokens []string) ([]AccountRecord, error) {
@@ -30,6 +33,30 @@ func (r *fakeRefreshRepo) PatchAccounts(_ context.Context, patches []AccountPatc
 	defer r.mu.Unlock()
 	r.patches = append(r.patches, patches...)
 	return AccountMutationResult{Patched: len(patches)}, nil
+}
+
+func (r *fakeRefreshRepo) DeleteAccounts(_ context.Context, tokens []string) (AccountMutationResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.deletedTokens = append(r.deletedTokens, tokens...)
+	return AccountMutationResult{Deleted: len(tokens)}, nil
+}
+
+func (r *fakeRefreshRepo) ListAccounts(_ context.Context, query ListAccountsQuery) (AccountPage, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.listQueries = append(r.listQueries, query)
+	if r.listPage.Items != nil {
+		return r.listPage, nil
+	}
+	page := AccountPage{
+		Items:      append([]AccountRecord(nil), r.records...),
+		Total:      len(r.records),
+		Page:       query.Page,
+		PageSize:   query.PageSize,
+		TotalPages: 1,
+	}
+	return page, nil
 }
 
 func (r *fakeRefreshRepo) RuntimeSnapshot(context.Context) (RuntimeSnapshot, error) {
@@ -441,34 +468,40 @@ func TestRunRefreshBatchHonorsUsageConcurrency(t *testing.T) {
 	}
 }
 
-func TestRefreshCallAsyncInvalidCredentialsExpiresAccount(t *testing.T) {
-	oldNow := invalidCredentialsNowMS
-	invalidCredentialsNowMS = func() int64 { return 8000 }
-	t.Cleanup(func() { invalidCredentialsNowMS = oldNow })
+func TestRefreshCallAsyncInvalidCredentialsRecordsSSOValidationFailure(t *testing.T) {
+	oldNow := refreshNowMS
+	refreshNowMS = func() int64 { return 8000 }
+	t.Cleanup(func() { refreshNowMS = oldNow })
 	record := AccountRecord{Token: "tok-invalid", Pool: "basic", Status: AccountStatusActive, Quota: DefaultQuotaSet("basic").ToDict()}
 	repo := &fakeRefreshRepo{records: []AccountRecord{record}}
 	service := NewAccountRefreshService(repo, AccountRefreshOptions{
-		Fetcher: &fakeUsageFetcher{err: platform.NewUpstreamError("bad", 403, "token expired")},
+		Fetcher:                  &fakeUsageFetcher{err: platform.NewUpstreamError("bad", 403, "token expired")},
+		SSOModelVerifier:         &fakeSSOModelVerifier{},
+		SSOValidationMaxFailures: 3,
 	})
 
 	if err := service.RefreshCallAsync(context.Background(), "tok-invalid", 1); err != nil {
 		t.Fatalf("RefreshCallAsync returned error: %v", err)
 	}
 	if len(repo.patches) != 1 {
-		t.Fatalf("invalid credential patch count = %d, want 1", len(repo.patches))
+		t.Fatalf("sso validation patch count = %d, want 1", len(repo.patches))
 	}
 	patch := repo.patches[0]
-	if patch.Status == nil || *patch.Status != AccountStatusExpired {
-		t.Fatalf("invalid credential status patch = %#v", patch.Status)
+	if patch.Status != nil {
+		t.Fatalf("invalid credentials should not patch expired directly: %#v", patch.Status)
 	}
 	if patch.LastFailAt == nil || *patch.LastFailAt != 8000 {
-		t.Fatalf("invalid credential last fail at = %#v", patch.LastFailAt)
+		t.Fatalf("sso validation last fail at = %#v", patch.LastFailAt)
 	}
-	if patch.LastFailReason == nil || *patch.LastFailReason != "invalid_credentials" {
-		t.Fatalf("invalid credential reason = %#v", patch.LastFailReason)
+	if patch.LastFailReason == nil || *patch.LastFailReason != "sso_validation_refresh" {
+		t.Fatalf("sso validation reason = %#v", patch.LastFailReason)
 	}
-	if patch.StateReason == nil || *patch.StateReason != "invalid_credentials" {
-		t.Fatalf("invalid credential state reason = %#v", patch.StateReason)
+	if patch.StateReason == nil || *patch.StateReason != "sso_validation_refresh" {
+		t.Fatalf("sso validation state reason = %#v", patch.StateReason)
+	}
+	validation := patch.ExtMerge["sso_validation"].(map[string]any)
+	if validation["failure_count"] != 1 || validation["last_fail_stage"] != "refresh" {
+		t.Fatalf("sso validation metadata = %#v", validation)
 	}
 }
 

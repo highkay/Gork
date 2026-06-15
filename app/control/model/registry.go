@@ -1,6 +1,9 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 var Models = []ModelSpec{
 	{ModelName: "grok-4.20-0309-non-reasoning", ModeID: ModeFast, Tier: TierBasic, Capability: CapabilityChat, Enabled: true, PublicName: "Grok 4.20 0309 Non-Reasoning"},
@@ -42,6 +45,8 @@ var Models = []ModelSpec{
 var (
 	modelsByName       = buildModelsByName()
 	modelsByCapability = buildModelsByCapability()
+	dynamicProviderMu  sync.RWMutex
+	dynamicProvider    func() []ModelSpec
 )
 
 func buildModelsByName() map[string]ModelSpec {
@@ -62,8 +67,15 @@ func buildModelsByCapability() map[int][]ModelSpec {
 }
 
 func Get(modelName string) (ModelSpec, bool) {
-	spec, ok := modelsByName[modelName]
-	return spec, ok
+	if spec, ok := modelsByName[modelName]; ok {
+		return spec, true
+	}
+	for _, spec := range dynamicModels() {
+		if spec.ModelName == modelName {
+			return spec, true
+		}
+	}
+	return ModelSpec{}, false
 }
 
 func Resolve(modelName string) (ModelSpec, error) {
@@ -75,8 +87,9 @@ func Resolve(modelName string) (ModelSpec, error) {
 }
 
 func ListEnabled() []ModelSpec {
-	enabled := make([]ModelSpec, 0, len(Models))
-	for _, spec := range Models {
+	all := allModels()
+	enabled := make([]ModelSpec, 0, len(all))
+	for _, spec := range all {
 		if spec.Enabled {
 			enabled = append(enabled, spec)
 		}
@@ -86,10 +99,56 @@ func ListEnabled() []ModelSpec {
 
 func ListByCapability(cap Capability) []ModelSpec {
 	matches := make([]ModelSpec, 0, len(modelsByCapability[int(cap)]))
-	for _, spec := range Models {
+	for _, spec := range allModels() {
 		if spec.Enabled && spec.Capability&cap != 0 {
 			matches = append(matches, spec)
 		}
 	}
 	return matches
+}
+
+func SetDynamicProvider(provider func() []ModelSpec) func() {
+	dynamicProviderMu.Lock()
+	previous := dynamicProvider
+	dynamicProvider = provider
+	dynamicProviderMu.Unlock()
+	return func() {
+		dynamicProviderMu.Lock()
+		dynamicProvider = previous
+		dynamicProviderMu.Unlock()
+	}
+}
+
+func allModels() []ModelSpec {
+	all := append([]ModelSpec{}, Models...)
+	seen := make(map[string]struct{}, len(all))
+	for _, spec := range all {
+		seen[spec.ModelName] = struct{}{}
+	}
+	for _, spec := range dynamicModels() {
+		if spec.ModelName == "" {
+			continue
+		}
+		if _, ok := seen[spec.ModelName]; ok {
+			continue
+		}
+		seen[spec.ModelName] = struct{}{}
+		all = append(all, spec)
+	}
+	return all
+}
+
+func dynamicModels() (models []ModelSpec) {
+	dynamicProviderMu.RLock()
+	provider := dynamicProvider
+	dynamicProviderMu.RUnlock()
+	if provider == nil {
+		return nil
+	}
+	defer func() {
+		if recover() != nil {
+			models = nil
+		}
+	}()
+	return provider()
 }

@@ -13,6 +13,7 @@ import (
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 	platformstorage "github.com/dslzl/gork/app/platform/storage"
+	openaiproduct "github.com/dslzl/gork/app/products/openai"
 	adminproduct "github.com/dslzl/gork/app/products/web/admin"
 )
 
@@ -216,8 +217,11 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 	if state.repository == nil {
 		return nil, nil
 	}
-	service := accountcontrol.NewAccountRefreshService(state.repository, accountcontrol.AccountRefreshOptions{})
+	service := accountcontrol.NewAccountRefreshService(state.repository, accountcontrol.AccountRefreshOptions{
+		SSOModelVerifier: accountcontrol.SSOModelVerifierFunc(openaiproduct.ProbeConsoleListModels),
+	})
 	scheduler := accountcontrol.GetAccountRefreshScheduler(service)
+	validationScheduler := accountcontrol.GetSSOValidationScheduler(service)
 	leader := true
 	var localLockCleanup Hook
 	if state.runtimeStore != nil {
@@ -246,6 +250,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 	consoleResetCleanup := appMainStartConsoleQuotaResetLoop(service, appMainConsoleResetInterval)
 	accountcontrol.SetRefreshService(service)
 	accountcontrol.SetRefreshScheduler(scheduler)
+	accountcontrol.SetSSOValidationScheduler(validationScheduler)
 	accountcontrol.SetRefreshSchedulerLeader(leader)
 	accountcontrol.ReconcileRefreshRuntime()
 	return func(ctx context.Context) error {
@@ -254,6 +259,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 			consoleResetCleanup = nil
 		}
 		scheduler.Stop()
+		validationScheduler.Stop()
 		if state.schedulerKey != nil {
 			_, _ = state.schedulerKey.Release(ctx)
 			state.schedulerKey = nil
@@ -265,6 +271,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 			localLockCleanup = nil
 		}
 		accountcontrol.SetRefreshScheduler(nil)
+		accountcontrol.SetSSOValidationScheduler(nil)
 		accountcontrol.SetRefreshSchedulerLeader(false)
 		accountcontrol.SetRefreshService(nil)
 		state.bindAdminRuntime()

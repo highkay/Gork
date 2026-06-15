@@ -63,8 +63,8 @@ type HTTPResponse struct {
 }
 
 type HTTPLineStream struct {
-	scanner *bufio.Scanner
-	closer  io.Closer
+	reader *bufio.Reader
+	closer io.Closer
 }
 
 func PostStream(ctx context.Context, rawURL string, token string, payload []byte, options ...HTTPOptions) (*HTTPLineStream, error) {
@@ -209,14 +209,20 @@ func newHTTPLineStream(response HTTPResponse) *HTTPLineStream {
 	if reader == nil {
 		reader = io.NopCloser(bytes.NewReader(response.Body))
 	}
-	return &HTTPLineStream{scanner: bufio.NewScanner(reader), closer: reader}
+	return &HTTPLineStream{reader: bufio.NewReader(reader), closer: reader}
 }
 
 func (s *HTTPLineStream) Next() (string, bool, error) {
-	if s.scanner.Scan() {
-		return s.scanner.Text(), true, nil
+	line, err := s.reader.ReadString('\n')
+	if len(line) > 0 {
+		line = strings.TrimSuffix(line, "\n")
+		line = strings.TrimSuffix(line, "\r")
+		return line, true, nil
 	}
-	if err := s.scanner.Err(); err != nil {
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return "", false, nil
+		}
 		return "", false, err
 	}
 	return "", false, nil

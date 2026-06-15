@@ -201,8 +201,20 @@ func TestAccountDirectoryFeedbackDispatchMatchesPython(t *testing.T) {
 	directory = accountDirectoryWithTable(table)
 	before := int(appruntime.NowS())
 	directory.Feedback("tok", controlaccount.FeedbackKindRateLimited, 1, FeedbackOptions{NowS: intPtr(now)})
-	if table.CoolingUntilSByIdx[idx] < before+17 || table.LastFailAtByIdx[idx] != now {
-		t.Fatalf("random rate-limit cooling=%d lastFail=%d", table.CoolingUntilSByIdx[idx], table.LastFailAtByIdx[idx])
+	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] < before+17 || table.QuotaConsoleByIdx[idx] != 1 || table.LastFailAtByIdx[idx] != now {
+		t.Fatalf("random rate-limit state cooling=%d fast=%d reset=%d console=%d lastFail=%d",
+			table.CoolingUntilSByIdx[idx],
+			table.QuotaFastByIdx[idx],
+			table.ResetFastAtByIdx[idx],
+			table.QuotaConsoleByIdx[idx],
+			table.LastFailAtByIdx[idx],
+		)
+	}
+	if _, ok := directory.Reserve(0, 1, ReserveOptions{NowS: intPtr(now + 1)}); ok {
+		t.Fatalf("rate-limited fast mode was still selectable")
+	}
+	if lease, ok := directory.Reserve(0, 5, ReserveOptions{NowS: intPtr(now + 1)}); !ok || lease.Token != "tok" {
+		t.Fatalf("console mode should remain selectable after fast rate limit: lease=%#v ok=%t", lease, ok)
 	}
 }
 

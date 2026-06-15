@@ -10,6 +10,15 @@ const (
 
 var allModeIDs = []int{0, 1, 2, 3, 4, 5}
 
+func isKnownModeID(modeID int) bool {
+	for _, known := range allModeIDs {
+		if modeID == known {
+			return true
+		}
+	}
+	return false
+}
+
 type ModeKey struct {
 	PoolID int
 	ModeID int

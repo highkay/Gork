@@ -82,6 +82,49 @@ func TestAdminConfigUpdateSanitizesAndRejectsStartupOnly(t *testing.T) {
 	}
 }
 
+func TestAdminConfigUpdateAcceptsSSOValidationPatch(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	cfg := &fakeAdminConfig{}
+	adminRouterConfig = cfg
+	reconciled := false
+	adminReconcileRefreshRuntime = func() string {
+		reconciled = true
+		return "quota"
+	}
+
+	body := `{"account":{"sso_validation":{"enabled":true,"interval_sec":60,"batch_size":50,"concurrency":5,"max_failures":3}}}`
+	rec := adminRequest(http.MethodPost, "/admin/api/config", body, "Bearer gork")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("config status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	account, ok := cfg.patch["account"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing account patch: %#v", cfg.patch)
+	}
+	sso, ok := account["sso_validation"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing sso_validation patch: %#v", account)
+	}
+	if got, ok := sso["enabled"].(bool); !ok || !got {
+		t.Fatalf("enabled=%#v", sso["enabled"])
+	}
+	for key, want := range map[string]string{
+		"interval_sec": "60",
+		"batch_size":   "50",
+		"concurrency":  "5",
+		"max_failures": "3",
+	} {
+		got, ok := sso[key].(json.Number)
+		if !ok || got.String() != want {
+			t.Fatalf("%s=%#v want json.Number(%s)", key, sso[key], want)
+		}
+	}
+	if !cfg.loaded || !reconciled {
+		t.Fatalf("side effects loaded=%v reconciled=%v", cfg.loaded, reconciled)
+	}
+	assertAdminGoldenJSON(t, rec, http.StatusOK, map[string]any{"status": "success", "selection_strategy": "quota"})
+}
+
 func TestAdminConfigResetClearsOverridesAndRunsRuntimeSideEffects(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	cfg := &fakeAdminConfig{strs: map[string]string{"logging.file_level": "info"}, ints: map[string]int{"logging.max_files": 5}}

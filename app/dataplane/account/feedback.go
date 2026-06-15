@@ -23,14 +23,20 @@ func ApplySuccessRandom(table *AccountRuntimeTable, idx int) {
 }
 
 func ApplyRateLimitedQuota(table *AccountRuntimeTable, idx int, modeID int) {
-	table.quotaCol(modeID)[idx] = 0
+	if isKnownModeID(modeID) {
+		table.quotaCol(modeID)[idx] = 0
+	}
 	adjustHealth(table, idx, rateLimitFactor)
 }
 
-func ApplyRateLimitedRandom(table *AccountRuntimeTable, idx int, coolingSec int) {
-	ts := int(appruntime.NowS()) + maxInt(0, coolingSec)
-	if ts > table.CoolingUntilSByIdx[idx] {
-		table.CoolingUntilSByIdx[idx] = ts
+func ApplyRateLimitedRandom(table *AccountRuntimeTable, idx int, modeID int, coolingSec int) {
+	if isKnownModeID(modeID) {
+		table.quotaCol(modeID)[idx] = 0
+		ts := int(appruntime.NowS()) + maxInt(0, coolingSec)
+		resetCol := table.resetCol(modeID)
+		if ts > resetCol[idx] {
+			resetCol[idx] = ts
+		}
 	}
 	adjustHealth(table, idx, rateLimitFactor)
 }
