@@ -10,6 +10,7 @@ import (
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/logging"
 )
 
 func streamChat(ctx context.Context, options chatStreamOptions) ([]string, error) {
@@ -55,6 +56,11 @@ func streamChat(ctx context.Context, options chatStreamOptions) ([]string, error
 		}
 		return nil, platform.NewUpstreamError(fmt.Sprintf("Chat upstream returned %d", response.StatusCode), response.StatusCode, body)
 	}
+	logging.Logger.Info("streamChat upstream response",
+		"line_count", len(response.Lines),
+		"body_len", len(response.Body),
+		"first_line", truncateFirstLine(response.Lines),
+	)
 	return append([]string{}, response.Lines...), nil
 }
 
@@ -81,4 +87,15 @@ func defaultStreamPost(ctx context.Context, request chatStreamRequest) (*chatStr
 		}
 		lines = append(lines, line)
 	}
+}
+
+func truncateFirstLine(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	first := lines[0]
+	if len(first) > 200 {
+		return first[:200]
+	}
+	return first
 }
