@@ -3,6 +3,7 @@ package transport
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -208,6 +209,12 @@ func newHTTPLineStream(response HTTPResponse) *HTTPLineStream {
 	reader := response.Stream
 	if reader == nil {
 		reader = io.NopCloser(bytes.NewReader(response.Body))
+	}
+	if strings.EqualFold(response.Headers["Content-Encoding"], "gzip") {
+		gz, err := gzip.NewReader(reader)
+		if err == nil {
+			reader = gz
+		}
 	}
 	return &HTTPLineStream{reader: bufio.NewReader(reader), closer: reader}
 }
