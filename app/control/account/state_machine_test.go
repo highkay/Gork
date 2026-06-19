@@ -182,8 +182,11 @@ func TestApplyFeedbackRateLimitedUpdatesOnlyModeQuota(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ApplyFeedback rate limit returned error: %v", err)
 	}
-	if updated.Status != AccountStatusActive || updated.StateReason != nil || updated.Ext["cooldown_until"] != nil || updated.Ext["cooldown_reason"] != nil {
-		t.Fatalf("rate limit should not cool account: status=%q stateReason=%#v ext=%#v", updated.Status, updated.StateReason, updated.Ext)
+	if updated.Status != AccountStatusCooling || updated.StateReason == nil || *updated.StateReason != "slow" || updated.Ext["cooldown_reason"] != "slow" {
+		t.Fatalf("rate limit should cool account: status=%q stateReason=%#v ext=%#v", updated.Status, updated.StateReason, updated.Ext)
+	}
+	if updated.Ext["cooldown_until"] != int64(1203000) {
+		t.Fatalf("rate limit cooldown_until=%#v", updated.Ext["cooldown_until"])
 	}
 	if updated.UsageFailCount != record.UsageFailCount+1 || updated.LastFailAt == nil || *updated.LastFailAt != 3000 || updated.LastFailReason == nil || *updated.LastFailReason != "slow" {
 		t.Fatalf("rate limit failure accounting = %#v", updated)

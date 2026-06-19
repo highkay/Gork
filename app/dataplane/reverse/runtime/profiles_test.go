@@ -24,7 +24,7 @@ func TestOperationProfilesMatchPythonPrebuiltProfiles(t *testing.T) {
 		"grpc":       GRPCProfile,
 	}
 	want := map[string]OperationProfile{
-		"chat":       {TimeoutS: 120.0, MaxRetries: 1, RetryCodes: []int{502, 503}, RetryDelayS: 2.0, IdleTimeoutS: 30.0},
+		"chat":       {TimeoutS: 120.0, MaxRetries: 1, RetryCodes: []int{429, 502, 503}, RetryDelayS: 2.0, IdleTimeoutS: 30.0},
 		"image":      {TimeoutS: 300.0, MaxRetries: 0, RetryDelayS: 1.0, IdleTimeoutS: 60.0},
 		"image_edit": {TimeoutS: 120.0, MaxRetries: 1, RetryCodes: []int{502, 503}, RetryDelayS: 2.0, IdleTimeoutS: 30.0},
 		"video":      {TimeoutS: 60.0, MaxRetries: 1, RetryCodes: []int{429, 502, 503}, RetryDelayS: 5.0},
@@ -43,11 +43,8 @@ func TestOperationProfilesMatchPythonPrebuiltProfiles(t *testing.T) {
 }
 
 func TestOperationProfileRetriesStatus(t *testing.T) {
-	if !ChatProfile.RetriesStatus(502) || !ChatProfile.RetriesStatus(503) {
-		t.Fatalf("chat profile should retry 502 and 503")
-	}
-	if ChatProfile.RetriesStatus(429) {
-		t.Fatalf("chat profile should not retry 429")
+	if !ChatProfile.RetriesStatus(429) || !ChatProfile.RetriesStatus(502) || !ChatProfile.RetriesStatus(503) {
+		t.Fatalf("chat profile should retry 429, 502 and 503")
 	}
 	for name, profile := range Profiles {
 		for _, code := range profile.RetryCodes {

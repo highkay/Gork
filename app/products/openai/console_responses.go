@@ -15,6 +15,8 @@ type consoleResponseOptions struct {
 	EmitThink   *bool
 	Temperature float64
 	TopP        float64
+	Tools       []map[string]any
+	ToolChoice  any
 	ResponseID  string
 	ReasoningID string
 	MessageID   string
@@ -64,6 +66,9 @@ func ConsoleResponses(ctx context.Context, options consoleResponseOptions) (chat
 		lastErr = err
 		if shouldRetryUpstream(err, retryCodes) && attempt < maxRetries {
 			excluded = append(excluded, account.Token)
+			if waitErr := waitBeforeChatRetry(ctx, attempt); waitErr != nil {
+				return chatCompletionResult{}, waitErr
+			}
 			continue
 		}
 		return chatCompletionResult{}, err
@@ -76,13 +81,17 @@ func ConsoleResponses(ctx context.Context, options consoleResponseOptions) (chat
 
 func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptions, account chatAccount, responseID, messageID string, isStream bool) (chatCompletionResult, error) {
 	upstreamStream := true
+	clientToolNames := protocol.ClientConsoleToolNames(options.Tools)
 	payload := protocol.BuildConsolePayload(protocol.ConsolePayloadOptions{
-		Messages:        options.Messages,
-		Model:           options.Model,
-		Temperature:     options.Temperature,
-		TopP:            options.TopP,
-		ReasoningEffort: consoleReasoningEffort(options.EmitThink),
-		Stream:          &upstreamStream,
+		Messages:          options.Messages,
+		Model:             options.Model,
+		Temperature:       options.Temperature,
+		TopP:              options.TopP,
+		ReasoningEffort:   consoleReasoningEffort(options.EmitThink),
+		Stream:            &upstreamStream,
+		CustomInstruction: chatCustomInstruction(),
+		Tools:             options.Tools,
+		ToolChoice:        options.ToolChoice,
 	})
 
 	events, err := consoleStreamChat(ctx, account.Token, payload, chatTimeoutSeconds())
@@ -90,14 +99,18 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 		return chatCompletionResult{}, err
 	}
 
-	adapter := protocol.NewConsoleStreamAdapter()
-	frames := consoleResponseInitialFrames(responseID, options.Model, messageID, isStream)
+	adapter := protocol.NewConsoleStreamAdapterWithTools(clientToolNames)
+	bufferText := len(clientToolNames) > 0
+	frames := consoleResponseLifecycleFrames(responseID, options.Model, isStream)
+	if isStream && !bufferText {
+		frames = append(frames, consoleResponseMessageStartFrames(messageID, 0)...)
+	}
 	for _, event := range events {
 		tokens, err := adapter.Feed(event.EventType, event.Data)
 		if err != nil {
 			return chatCompletionResult{}, err
 		}
-		if isStream {
+		if isStream && !bufferText {
 			for _, token := range tokens {
 				frames = append(frames, consoleResponseTextDeltaFrame(messageID, token))
 			}
@@ -105,8 +118,15 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 	}
 
 	fullText := adapter.FullText()
-	usage := consoleResponseUsage(adapter, options.Messages)
-	output := []map[string]any{consoleResponseOutputItem(messageID, fullText)}
+	toolCalls := adapter.ParsedToolCalls()
+	toolItems := buildResponseFunctionCallItems(toolCalls)
+	usage := consoleResponseUsageForOutput(adapter, options.Messages, fullText, toolItems)
+	output := []map[string]any{}
+	if len(toolItems) > 0 {
+		output = append(output, toolItems...)
+	} else {
+		output = append(output, consoleResponseOutputItem(messageID, fullText))
+	}
 	response := MakeRespObject(RespObjectParams{
 		ResponseID: responseID,
 		Model:      options.Model,
@@ -116,6 +136,20 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 	})
 	if !isStream {
 		return chatCompletionResult{Response: response}, nil
+	}
+	if len(toolItems) > 0 {
+		frames = append(frames, emitResponseFunctionCallEvents(toolItems, 0)...)
+		frames = append(frames, FormatSSE("response.completed", map[string]any{
+			"type":     "response.completed",
+			"response": response,
+		}), "data: [DONE]\n\n")
+		return chatCompletionResult{IsStream: true, StreamFrames: frames}, nil
+	}
+	if bufferText {
+		frames = append(frames, consoleResponseMessageStartFrames(messageID, 0)...)
+		if fullText != "" {
+			frames = append(frames, consoleResponseTextDeltaFrame(messageID, fullText))
+		}
 	}
 
 	frames = append(frames,
@@ -152,6 +186,14 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 }
 
 func consoleResponseInitialFrames(responseID, modelName, messageID string, isStream bool) []string {
+	frames := consoleResponseLifecycleFrames(responseID, modelName, isStream)
+	if !isStream {
+		return frames
+	}
+	return append(frames, consoleResponseMessageStartFrames(messageID, 0)...)
+}
+
+func consoleResponseLifecycleFrames(responseID, modelName string, isStream bool) []string {
 	if !isStream {
 		return nil
 	}
@@ -169,9 +211,14 @@ func consoleResponseInitialFrames(responseID, modelName, messageID string, isStr
 	return []string{
 		inProgress("response.created"),
 		inProgress("response.in_progress"),
+	}
+}
+
+func consoleResponseMessageStartFrames(messageID string, outputIndex int) []string {
+	return []string{
 		FormatSSE("response.output_item.added", map[string]any{
 			"type":         "response.output_item.added",
-			"output_index": 0,
+			"output_index": outputIndex,
 			"item": map[string]any{
 				"id":      messageID,
 				"type":    "message",
@@ -183,7 +230,7 @@ func consoleResponseInitialFrames(responseID, modelName, messageID string, isStr
 		FormatSSE("response.content_part.added", map[string]any{
 			"type":          "response.content_part.added",
 			"item_id":       messageID,
-			"output_index":  0,
+			"output_index":  outputIndex,
 			"content_index": 0,
 			"part": map[string]any{
 				"type":        "output_text",
@@ -218,14 +265,22 @@ func consoleResponseOutputItem(messageID, text string) map[string]any {
 }
 
 func consoleResponseUsage(adapter *protocol.ConsoleStreamAdapter, messages []map[string]any) map[string]any {
+	return consoleResponseUsageForOutput(adapter, messages, adapter.FullText(), nil)
+}
+
+func consoleResponseUsageForOutput(adapter *protocol.ConsoleStreamAdapter, messages []map[string]any, text string, toolItems []map[string]any) map[string]any {
 	if adapter.Usage != nil {
 		return BuildRespUsage(
 			intFromAny(adapter.Usage["input_tokens"]),
 			intFromAny(adapter.Usage["output_tokens"]),
 		)
 	}
+	outputTokens := platform.EstimateTokens(text)
+	if len(toolItems) > 0 {
+		outputTokens = estimateToolCallTokens(toolItems)
+	}
 	return BuildRespUsage(
 		platform.EstimatePromptTokens(messages, platform.PromptOverhead),
-		platform.EstimateTokens(adapter.FullText()),
+		outputTokens,
 	)
 }

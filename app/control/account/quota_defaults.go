@@ -2,9 +2,9 @@ package account
 
 const (
 	basicFastLimit            = 30
-	basicFastWindowSeconds    = 86400
+	basicFastWindowSeconds    = 1800
 	basicConsoleLimit         = 30
-	basicConsoleWindowSeconds = 900
+	basicConsoleWindowSeconds = 1800
 )
 
 var (

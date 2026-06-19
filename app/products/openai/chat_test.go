@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	controlaccount "github.com/dslzl/gork/app/control/account"
 	"github.com/dslzl/gork/app/control/model"
@@ -934,6 +935,7 @@ func resetChatDepsForTest(t *testing.T) {
 	oldDirectory := chatDirectoryProvider
 	oldConsole := consoleCompletions
 	oldConsoleStream := consoleStreamChat
+	oldRetryDelay := chatRetryDelay
 
 	imageFormatConfig = "grok_url"
 	proxyImaginePublicConfig = false
@@ -964,6 +966,7 @@ func resetChatDepsForTest(t *testing.T) {
 	consoleStreamChat = func(context.Context, string, map[string]any, float64) ([]protocol.ConsoleStreamEvent, error) {
 		return nil, errors.New("console stream is not configured")
 	}
+	chatRetryDelay = func(int) time.Duration { return 0 }
 
 	t.Cleanup(func() {
 		imageFormatConfig = oldImageFormat
@@ -985,5 +988,6 @@ func resetChatDepsForTest(t *testing.T) {
 		chatDirectoryProvider = oldDirectory
 		consoleCompletions = oldConsole
 		consoleStreamChat = oldConsoleStream
+		chatRetryDelay = oldRetryDelay
 	})
 }

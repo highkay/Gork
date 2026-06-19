@@ -28,7 +28,7 @@ var (
 	ChatProfile = OperationProfile{
 		TimeoutS:     120.0,
 		MaxRetries:   1,
-		RetryCodes:   []int{502, 503},
+		RetryCodes:   []int{429, 502, 503},
 		RetryDelayS:  2.0,
 		IdleTimeoutS: 30.0,
 	}

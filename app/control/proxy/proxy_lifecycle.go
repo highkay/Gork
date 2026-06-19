@@ -30,6 +30,17 @@ func (d *ProxyDirectory) WarmUp(ctx context.Context) error {
 }
 
 func (d *ProxyDirectory) RefreshClearanceSafe(ctx context.Context) error {
+	return d.refreshClearance(ctx, nil)
+}
+
+// RefreshClearanceFiltered refreshes clearance bundles but skips keys present
+// in skip (typically those in active cooldown). Mirrors
+// cloudriver8 refresh_clearance_filtered().
+func (d *ProxyDirectory) RefreshClearanceFiltered(ctx context.Context, skip map[BundleKey]bool) error {
+	return d.refreshClearance(ctx, skip)
+}
+
+func (d *ProxyDirectory) refreshClearance(ctx context.Context, skip map[BundleKey]bool) error {
 	mode, nodes, existing := d.refreshSnapshot()
 	if mode == ClearanceModeNone {
 		return nil
@@ -49,15 +60,21 @@ func (d *ProxyDirectory) RefreshClearanceSafe(ctx context.Context) error {
 		}
 	}
 	for key, target := range targets {
+		if skip != nil && skip[key] {
+			continue
+		}
 		bundle, ok, err := d.refreshBundle(ctx, mode, key.Affinity, key.ClearanceHost, target)
 		if err != nil {
 			return err
 		}
+		d.mu.Lock()
 		if ok {
-			d.mu.Lock()
 			d.bundles[key] = bundle
-			d.mu.Unlock()
+			d.recordRefreshSuccessLocked(key)
+		} else {
+			d.recordRefreshFailureLocked(key)
 		}
+		d.mu.Unlock()
 	}
 	return nil
 }
@@ -66,12 +83,16 @@ func (d *ProxyDirectory) getOrBuildBundle(ctx context.Context, affinityKey, prox
 	host := clearanceHost(origin)
 	key := BundleKey{Affinity: affinityKey, ClearanceHost: host}
 	for {
-		mode, event, winner, bundle := d.bundleRefreshState(key)
+		mode, event, winner, bundle, suppressed := d.bundleRefreshState(key)
 		if mode == ClearanceModeNone {
 			return nil, nil
 		}
 		if bundle != nil {
 			return bundle, nil
+		}
+		// In cooldown with no usable fallback: do not hammer the upstream.
+		if suppressed {
+			return nil, nil
 		}
 		if winner {
 			return d.buildBundleAsWinner(ctx, mode, key, proxyURL, origin, event)
@@ -84,31 +105,56 @@ func (d *ProxyDirectory) getOrBuildBundle(ctx context.Context, affinityKey, prox
 	}
 }
 
-func (d *ProxyDirectory) bundleRefreshState(key BundleKey) (ClearanceMode, *refreshEvent, bool, *ClearanceBundle) {
+// bundleRefreshState resolves the next action for a key. The returned
+// *ClearanceBundle is either a VALID bundle or a STALE cooldown fallback.
+// suppressed=true means the key is in active cooldown with no fallback, so the
+// caller should return nil rather than refresh. Mirrors the head of
+// cloudriver8 _get_or_build_bundle().
+func (d *ProxyDirectory) bundleRefreshState(key BundleKey) (ClearanceMode, *refreshEvent, bool, *ClearanceBundle, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.clearanceMode == ClearanceModeNone {
-		return d.clearanceMode, nil, false, nil
+		return d.clearanceMode, nil, false, nil, false
 	}
 	if bundle, ok := d.bundles[key]; ok && bundle.State == ClearanceBundleValid {
-		return d.clearanceMode, nil, false, &bundle
+		return d.clearanceMode, nil, false, &bundle, false
+	}
+	// Prefer a still-warm fallback bundle while in cooldown.
+	var current *ClearanceBundle
+	if b, ok := d.bundles[key]; ok {
+		current = &b
+	}
+	if fallback := d.cooldownBundleLocked(key, current); fallback != nil {
+		return d.clearanceMode, nil, false, fallback, false
+	}
+	// Still inside the cooldown window with no usable fallback → suppress.
+	if until, ok := d.refreshBackoffUntil[key]; ok && until > d.clock() {
+		return d.clearanceMode, nil, false, nil, true
 	}
 	if event, ok := d.refreshEvents[key]; ok {
-		return d.clearanceMode, event, false, nil
+		return d.clearanceMode, event, false, nil, false
 	}
 	event := &refreshEvent{done: make(chan struct{})}
 	d.refreshEvents[key] = event
-	return d.clearanceMode, event, true, nil
+	return d.clearanceMode, event, true, nil, false
 }
 
 func (d *ProxyDirectory) buildBundleAsWinner(ctx context.Context, mode ClearanceMode, key BundleKey, proxyURL, origin string, event *refreshEvent) (*ClearanceBundle, error) {
 	defer d.finishRefresh(key, event)
 	bundle, ok, err := d.refreshBundle(ctx, mode, key.Affinity, key.ClearanceHost, refreshTarget{proxyURL: proxyURL, origin: origin})
-	if err != nil || !ok {
+	if err != nil {
 		return nil, err
+	}
+	if !ok {
+		// Refresh produced no bundle: record failure, return any fallback.
+		d.mu.Lock()
+		fallback := d.recordRefreshFailureLocked(key)
+		d.mu.Unlock()
+		return fallback, nil
 	}
 	d.mu.Lock()
 	d.bundles[key] = bundle
+	d.recordRefreshSuccessLocked(key)
 	d.mu.Unlock()
 	return &bundle, nil
 }

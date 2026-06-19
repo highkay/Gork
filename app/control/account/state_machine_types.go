@@ -11,7 +11,7 @@ type StatePolicy struct {
 var defaultStatePolicy = StatePolicy{
 	FailThreshold:    5,
 	ForbiddenStrikes: 1,
-	DefaultCoolingMS: 15 * 60 * 1000,
+	DefaultCoolingMS: 20 * 60 * 1000,
 }
 
 var stateMachineNowMS = appruntime.NowMS

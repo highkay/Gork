@@ -269,8 +269,9 @@ func consoleMessagesFromEvents(ctx context.Context, options ConsoleMessagesOptio
 	payload := protocol.BuildConsolePayload(protocol.ConsolePayloadOptions{
 		Messages: options.Messages, Model: options.Model,
 		Temperature: options.Temperature, TopP: options.TopP,
-		ReasoningEffort: consoleMessagesEffort(options.EmitThink),
-		Stream:          boolPtr(true),
+		ReasoningEffort:   consoleMessagesEffort(options.EmitThink),
+		Stream:            boolPtr(true),
+		CustomInstruction: platformconfig.GlobalConfig.GetStr("features.custom_instruction", ""),
 	})
 	events, err := consoleMessagesStream(ctx, token, payload, consoleMessagesTimeoutSeconds())
 	if err != nil {

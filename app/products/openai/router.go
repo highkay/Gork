@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +14,9 @@ import (
 var (
 	routerAvailablePools = func(*http.Request) map[string]struct{} {
 		return map[string]struct{}{}
+	}
+	routerAccountPools = func(context.Context) map[string]int {
+		return nil
 	}
 	routerCompletions    = Completions
 	routerResponses      = Responses
@@ -37,6 +41,12 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("/v1/files/video", routerMethod(http.MethodGet, handleServeVideo))
 	mux.HandleFunc("/v1/files/image", routerMethod(http.MethodGet, handleServeImage))
 	return mux
+}
+
+// SetRouterAccountPools sets the function used to query account pool counts.
+// Pass nil to disable account pool filtering on /v1/models.
+func SetRouterAccountPools(provider func(context.Context) map[string]int) {
+	routerAccountPools = provider
 }
 
 func routerMethod(method string, handler http.HandlerFunc) http.HandlerFunc {

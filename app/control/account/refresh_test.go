@@ -176,7 +176,7 @@ func TestRefreshOnImportAppliesFetchedQuotasAndKeepsPythonCheckedCount(t *testin
 	if patch.UsageSyncDelta == nil || *patch.UsageSyncDelta != 1 || patch.LastSyncAt == nil {
 		t.Fatalf("sync patch fields = %#v", patch)
 	}
-	if patch.QuotaFast["total"] != 30 || patch.QuotaFast["window_seconds"] != 86400 {
+	if patch.QuotaFast["total"] != 30 || patch.QuotaFast["window_seconds"] != 1800 {
 		t.Fatalf("basic fast quota should be normalized, got %#v", patch.QuotaFast)
 	}
 }
@@ -257,7 +257,7 @@ func TestRefreshCallAsyncConsoleStartsResetTimerAtThreshold(t *testing.T) {
 	}
 
 	patch := repo.patches[0]
-	if patch.QuotaConsole["remaining"] != 15 || patch.QuotaConsole["reset_at"] != int64(903000) {
+	if patch.QuotaConsole["remaining"] != 15 || patch.QuotaConsole["reset_at"] != int64(1803000) {
 		t.Fatalf("console threshold quota patch = %#v", patch.QuotaConsole)
 	}
 }

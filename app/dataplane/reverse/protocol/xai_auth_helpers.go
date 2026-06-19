@@ -118,6 +118,18 @@ func (c *XAIAuthClient) sequenceFeedbackError(ctx context.Context, lease control
 	return platform.NewUpstreamError(fmt.Sprintf("nsfw_sequence: transport error: %v", err), 0, "")
 }
 
+// isBirthDateLockedError reports whether err is the benign "birth date already
+// set and locked" response: HTTP 429 whose body contains
+// "birth-date-change-limit-reached". Such accounts can skip set_birth_date and
+// proceed straight to enable_nsfw. Mirrors jiujiu532 #25.
+func isBirthDateLockedError(err error) bool {
+	var upstream *platform.UpstreamError
+	if !errors.As(err, &upstream) {
+		return false
+	}
+	return upstream.Status == 429 && strings.Contains(upstream.Body, "birth-date-change-limit-reached")
+}
+
 func encodeGRPCPayload(data []byte) []byte {
 	out := make([]byte, 5+len(data))
 	binary.BigEndian.PutUint32(out[1:5], uint32(len(data)))

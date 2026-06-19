@@ -62,6 +62,9 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 		lastErr = err
 		if shouldRetryUpstream(err, retryCodes) && attempt < maxRetries {
 			excluded = append(excluded, account.Token)
+			if waitErr := waitBeforeChatRetry(ctx, attempt); waitErr != nil {
+				return chatCompletionResult{}, waitErr
+			}
 			continue
 		}
 		return chatCompletionResult{}, err
@@ -74,13 +77,17 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 
 func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOptions, account chatAccount, responseID string, isStream bool, timeoutS float64) (chatCompletionResult, error) {
 	upstreamStream := true
+	clientToolNames := protocol.ClientConsoleToolNames(options.Tools)
 	payload := protocol.BuildConsolePayload(protocol.ConsolePayloadOptions{
-		Messages:        options.Messages,
-		Model:           options.Model,
-		Temperature:     options.Temperature,
-		TopP:            options.TopP,
-		ReasoningEffort: consoleReasoningEffort(options.EmitThink),
-		Stream:          &upstreamStream,
+		Messages:          options.Messages,
+		Model:             options.Model,
+		Temperature:       options.Temperature,
+		TopP:              options.TopP,
+		ReasoningEffort:   consoleReasoningEffort(options.EmitThink),
+		Stream:            &upstreamStream,
+		CustomInstruction: chatCustomInstruction(),
+		Tools:             options.Tools,
+		ToolChoice:        options.ToolChoice,
 	})
 
 	events, err := consoleStreamChat(ctx, account.Token, payload, timeoutS)
@@ -88,14 +95,20 @@ func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOpti
 		return chatCompletionResult{}, err
 	}
 
-	adapter := protocol.NewConsoleStreamAdapter()
+	emitThink := options.EmitThink == nil || *options.EmitThink
+
+	adapter := protocol.NewConsoleStreamAdapterWithTools(clientToolNames)
+	// When client function tools are active, hold text until we know whether the
+	// turn produced a function_call (a mixed content+tool_calls turn must not
+	// stream earlier text). Without client tools, stream text deltas live.
+	bufferText := len(clientToolNames) > 0
 	frames := []string{}
 	for _, event := range events {
 		tokens, err := adapter.Feed(event.EventType, event.Data)
 		if err != nil {
 			return chatCompletionResult{}, err
 		}
-		if isStream {
+		if isStream && !bufferText {
 			for _, token := range tokens {
 				frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
 					ResponseID: responseID,
@@ -106,26 +119,137 @@ func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOpti
 		}
 	}
 
+	toolCalls := adapter.ParsedToolCalls()
+	thinkingText := adapter.ThinkingText()
+	references := adapter.ReferencesSuffix(true)
+	searchSources := adapter.SearchSourcesList()
+	annotations := adapter.AnnotationsList()
 	usage := consoleUsage(adapter, options.Messages)
+
 	if isStream {
-		frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
+		// Tool-call turn: emit tool_call chunks and finish with tool_calls.
+		if len(toolCalls) > 0 {
+			toolUsage := usage
+			if adapter.Usage == nil {
+				toolUsage = BuildUsage(
+					platform.EstimatePromptTokens(options.Messages, platform.PromptOverhead),
+					platform.EstimateToolCallTokens(parsedToolCallsToAny(toolCalls)),
+				)
+			}
+			for i, call := range toolCalls {
+				frames = append(frames, formatChatDataFrame(MakeToolCallChunk(ToolCallChunkParams{
+					ResponseID: responseID,
+					Model:      options.Model,
+					Index:      i,
+					CallID:     call.CallID,
+					Name:       call.Name,
+					Arguments:  call.Arguments,
+					IsFirst:    true,
+				})))
+			}
+			frames = append(frames, formatChatDataFrame(MakeToolCallDoneChunk(ToolCallDoneChunkParams{
+				ResponseID: responseID,
+				Model:      options.Model,
+				Usage:      toolUsage,
+			})), "data: [DONE]\n\n")
+			return chatCompletionResult{IsStream: true, StreamFrames: frames}, nil
+		}
+		// No tool calls: flush buffered text (if buffering was on), then thinking,
+		// references and the final stop chunk.
+		if bufferText {
+			if text := adapter.FullText(); text != "" {
+				frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
+					ResponseID: responseID,
+					Model:      options.Model,
+					Content:    text,
+				})))
+			}
+		}
+		if emitThink && thinkingText != "" {
+			frames = append(frames, formatChatDataFrame(MakeThinkingChunk(ThinkingChunkParams{
+				ResponseID: responseID,
+				Model:      options.Model,
+				Content:    thinkingText,
+			})))
+		}
+		if references != "" {
+			frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
+				ResponseID: responseID,
+				Model:      options.Model,
+				Content:    references,
+			})))
+		}
+		final := MakeStreamChunk(StreamChunkParams{
 			ResponseID:   responseID,
 			Model:        options.Model,
 			Content:      "",
 			IsFinal:      true,
 			Usage:        usage,
 			FinishReason: "stop",
-		})), "data: [DONE]\n\n")
+			Annotations:  toChatAnnotations(annotations),
+		})
+		if len(searchSources) > 0 {
+			final["search_sources"] = searchSources
+		}
+		frames = append(frames, formatChatDataFrame(final), "data: [DONE]\n\n")
 		return chatCompletionResult{IsStream: true, StreamFrames: frames}, nil
 	}
 
-	return chatCompletionResult{Response: MakeChatResponse(ChatResponseParams{
-		Model:         options.Model,
-		Content:       adapter.FullText(),
-		PromptContent: options.Messages,
-		ResponseID:    responseID,
-		Usage:         usage,
-	})}, nil
+	// Non-stream tool-call response.
+	if len(toolCalls) > 0 {
+		anyCalls := parsedToolCallsToAny(toolCalls)
+		toolUsage := usage
+		if adapter.Usage == nil {
+			toolUsage = BuildUsage(
+				platform.EstimatePromptTokens(options.Messages, platform.PromptOverhead),
+				platform.EstimateToolCallTokens(anyCalls),
+			)
+		}
+		response := MakeToolCallResponse(ToolCallResponseParams{
+			Model:         options.Model,
+			ToolCalls:     anyCalls,
+			PromptContent: options.Messages,
+			ResponseID:    responseID,
+			Usage:         toolUsage,
+		})
+		if len(searchSources) > 0 {
+			response["search_sources"] = searchSources
+		}
+		return chatCompletionResult{Response: response}, nil
+	}
+
+	content := adapter.FullText() + references
+	reasoningContent := ""
+	if emitThink {
+		reasoningContent = thinkingText
+	}
+	response := MakeChatResponse(ChatResponseParams{
+		Model:            options.Model,
+		Content:          content,
+		PromptContent:    options.Messages,
+		ResponseID:       responseID,
+		ReasoningContent: reasoningContent,
+		SearchSources:    searchSources,
+		Annotations:      toChatAnnotations(annotations),
+		Usage:            usage,
+	})
+	return chatCompletionResult{Response: response}, nil
+}
+
+func parsedToolCallsToAny(calls []protocol.ParsedToolCall) []any {
+	out := make([]any, 0, len(calls))
+	for i, call := range calls {
+		out = append(out, map[string]any{
+			"id":    call.CallID,
+			"type":  "function",
+			"index": i,
+			"function": map[string]any{
+				"name":      call.Name,
+				"arguments": call.Arguments,
+			},
+		})
+	}
+	return out
 }
 
 func consoleUsage(adapter *protocol.ConsoleStreamAdapter, messages []map[string]any) map[string]any {

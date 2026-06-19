@@ -119,6 +119,103 @@ func TestConsoleResponsesStreamFramesResponsesEvents(t *testing.T) {
 	}
 }
 
+func TestConsoleResponsesNonStreamReturnsFunctionCallItems(t *testing.T) {
+	resetChatDepsForTest(t)
+	stream := false
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok1", ModeID: model.ModeConsole}}}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+	consoleStreamChat = func(_ context.Context, _ string, payload map[string]any, _ float64) ([]protocol.ConsoleStreamEvent, error) {
+		tools := payload["tools"].([]map[string]any)
+		found := false
+		for _, tool := range tools {
+			if tool["type"] == "function" && tool["name"] == "lookup_order" {
+				found = true
+			}
+			if tool["name"] == "web_search" {
+				t.Fatalf("builtin web_search must not be forwarded as a client function: %#v", tools)
+			}
+		}
+		if !found {
+			t.Fatalf("client function tool missing from payload: %#v", payload)
+		}
+		choice := payload["tool_choice"].(map[string]any)
+		if choice["name"] != "lookup_order" {
+			t.Fatalf("tool_choice=%#v", choice)
+		}
+		return []protocol.ConsoleStreamEvent{
+			{EventType: "response.output_item.added", Data: `{"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup_order"}}`},
+			{EventType: "response.function_call_arguments.done", Data: `{"item_id":"fc_1","arguments":"{\"order_id\":\"A1\"}"}`},
+			{EventType: "response.completed", Data: `{"response":{"usage":{"input_tokens":8,"output_tokens":4}}}`},
+		}, nil
+	}
+
+	result, err := ConsoleResponses(context.Background(), consoleResponseOptions{
+		Model:    "grok-4.3-console",
+		Messages: []map[string]any{{"role": "user", "content": "lookup"}},
+		Stream:   &stream,
+		Tools: []map[string]any{
+			{"type": "function", "function": map[string]any{"name": "lookup_order", "parameters": map[string]any{"type": "object"}}},
+			{"type": "function", "function": map[string]any{"name": "web_search"}},
+		},
+		ToolChoice: map[string]any{"type": "function", "function": map[string]any{"name": "lookup_order"}},
+		ResponseID: "resp_tool",
+		MessageID:  "msg_tool",
+	})
+	if err != nil {
+		t.Fatalf("ConsoleResponses tool err=%v", err)
+	}
+	output := result.Response["output"].([]map[string]any)
+	if len(output) != 1 || output[0]["type"] != "function_call" || output[0]["call_id"] != "call_1" || output[0]["name"] != "lookup_order" {
+		t.Fatalf("function_call output=%#v", output)
+	}
+	if output[0]["arguments"] != `{"order_id":"A1"}` {
+		t.Fatalf("function_call arguments=%#v", output[0]["arguments"])
+	}
+}
+
+func TestConsoleResponsesStreamReturnsFunctionCallEvents(t *testing.T) {
+	resetChatDepsForTest(t)
+	stream := true
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok1", ModeID: model.ModeConsole}}}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+	consoleStreamChat = func(context.Context, string, map[string]any, float64) ([]protocol.ConsoleStreamEvent, error) {
+		return []protocol.ConsoleStreamEvent{
+			{EventType: "response.output_item.added", Data: `{"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup_order"}}`},
+			{EventType: "response.function_call_arguments.delta", Data: `{"item_id":"fc_1","delta":"{\"order_id\":"}`},
+			{EventType: "response.function_call_arguments.delta", Data: `{"item_id":"fc_1","delta":"\"A1\"}"}`},
+			{EventType: "response.completed", Data: `{"response":{"usage":{"input_tokens":8,"output_tokens":4}}}`},
+		}, nil
+	}
+
+	result, err := ConsoleResponses(context.Background(), consoleResponseOptions{
+		Model:    "grok-4.3-console",
+		Messages: []map[string]any{{"role": "user", "content": "lookup"}},
+		Stream:   &stream,
+		Tools:    []map[string]any{{"type": "function", "function": map[string]any{"name": "lookup_order"}}},
+	})
+	if err != nil {
+		t.Fatalf("ConsoleResponses stream tool err=%v", err)
+	}
+	joined := strings.Join(result.StreamFrames, "")
+	for _, want := range []string{
+		"event: response.function_call_arguments.delta",
+		"event: response.function_call_arguments.done",
+		`"type":"function_call"`,
+		`"call_id":"call_1"`,
+		`"name":"lookup_order"`,
+		`"arguments":"{\"order_id\":\"A1\"}"`,
+		"event: response.completed",
+		"data: [DONE]",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("stream tool frames missing %q:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "response.output_text.delta") {
+		t.Fatalf("tool-call response must not emit buffered text deltas:\n%s", joined)
+	}
+}
+
 func TestConsoleResponsesRetriesRetryableUpstreamStatus(t *testing.T) {
 	resetChatDepsForTest(t)
 	stream := false

@@ -43,6 +43,9 @@ func Completions(ctx context.Context, options chatCompletionOptions) (chatComple
 		lastErr = err
 		if shouldRetryUpstream(err, plan.RetryCodes) && attempt < plan.MaxRetries {
 			excluded = append(excluded, account.Token)
+			if waitErr := waitBeforeChatRetry(ctx, attempt); waitErr != nil {
+				return chatCompletionResult{}, waitErr
+			}
 			continue
 		}
 		return chatCompletionResult{}, err

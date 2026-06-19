@@ -70,7 +70,7 @@ func TestBuildConsolePayloadMatchesPythonContentFallbacks(t *testing.T) {
 			"skip",
 			map[string]any{"type": "image_url", "image_url": map[string]any{}},
 		}},
-		{"role": "tool", "content": 123},
+		{"role": "user", "content": 123},
 		{"content": nil},
 	}
 	payload := BuildConsolePayload(ConsolePayloadOptions{Messages: messages, Model: "grok-build-console"})

@@ -60,6 +60,7 @@ var (
 	isInvalidCredentials    = protocol.IsInvalidCredentialsError
 	chatFeatureStream       = func() bool { return platformconfig.GlobalConfig.GetBool("features.stream", true) }
 	chatFeatureThinking     = func() bool { return platformconfig.GlobalConfig.GetBool("features.thinking", true) }
+	chatCustomInstruction   = func() string { return platformconfig.GlobalConfig.GetStr("features.custom_instruction", "") }
 	chatSelectionMaxRetries = func() int { return products.SelectionMaxRetries() }
 	chatRetryConfig         = defaultChatRetryConfig
 	chatTimeoutSeconds      = func() float64 { return platformconfig.GlobalConfig.GetFloat("chat.timeout", 120.0) }

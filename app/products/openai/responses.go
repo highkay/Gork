@@ -37,6 +37,8 @@ func Responses(ctx context.Context, options responseOptions) (chatCompletionResu
 			EmitThink:   &emitThink,
 			Temperature: options.Temperature,
 			TopP:        options.TopP,
+			Tools:       toResponseChatTools(options.Tools),
+			ToolChoice:  options.ToolChoice,
 			ResponseID:  MakeRespID("resp"),
 			ReasoningID: MakeRespID("rs"),
 			MessageID:   MakeRespID("msg"),
@@ -90,6 +92,9 @@ func Responses(ctx context.Context, options responseOptions) (chatCompletionResu
 		lastErr = err
 		if shouldRetryUpstream(err, retryCodes) && attempt < maxRetries {
 			excluded = append(excluded, account.Token)
+			if waitErr := waitBeforeChatRetry(ctx, attempt); waitErr != nil {
+				return chatCompletionResult{}, waitErr
+			}
 			continue
 		}
 		return chatCompletionResult{}, err

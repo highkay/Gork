@@ -16,10 +16,14 @@ var poolIDToName = map[int]string{
 
 func handleListModels(w http.ResponseWriter, r *http.Request) {
 	pools := routerAvailablePools(r)
+	accountPools := routerAccountPools(r.Context())
 	created := time.Now().Unix()
 	data := make([]map[string]any, 0)
 	for _, spec := range model.ListEnabled() {
 		if !modelAvailableForPools(spec, pools) {
+			continue
+		}
+		if accountPools != nil && !modelHasAccountPool(spec, accountPools) {
 			continue
 		}
 		data = append(data, routerModelBody(spec, created))
@@ -65,6 +69,16 @@ func modelAvailableForPools(spec model.ModelSpec, pools map[string]struct{}) boo
 	for _, poolID := range spec.PoolCandidates() {
 		pool := poolIDToName[poolID]
 		if _, ok := pools[pool]; ok && routerSupportsMode(pool, int(spec.ModeID)) {
+			return true
+		}
+	}
+	return false
+}
+
+func modelHasAccountPool(spec model.ModelSpec, accountPools map[string]int) bool {
+	for _, poolID := range spec.PoolCandidates() {
+		pool := poolIDToName[poolID]
+		if count, ok := accountPools[pool]; ok && count > 0 {
 			return true
 		}
 	}

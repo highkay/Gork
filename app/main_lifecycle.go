@@ -133,8 +133,10 @@ func defaultAppMainInitializeRepository(ctx context.Context, state *appMainLifec
 	}
 	state.repository = repo
 	state.bindAdminRuntime()
+	state.bindAccountPools()
 	return func(ctx context.Context) error {
 		state.clearAdminRuntime()
+		state.clearAccountPools()
 		return repo.Close(ctx)
 	}, nil
 }
@@ -321,6 +323,31 @@ func (state *appMainLifecycleState) clearAdminRuntime() {
 	}
 	state.adminCleanup()
 	state.adminCleanup = nil
+}
+
+type accountFacetRepository interface {
+	ListFacets(context.Context) (accountcontrol.AccountFacetSnapshot, error)
+}
+
+func (state *appMainLifecycleState) bindAccountPools() {
+	if state.repository == nil {
+		return
+	}
+	facetRepo, ok := state.repository.(accountFacetRepository)
+	if !ok {
+		return
+	}
+	openaiproduct.SetRouterAccountPools(func(ctx context.Context) map[string]int {
+		facets, err := facetRepo.ListFacets(ctx)
+		if err != nil {
+			return nil
+		}
+		return facets.Pools
+	})
+}
+
+func (state *appMainLifecycleState) clearAccountPools() {
+	openaiproduct.SetRouterAccountPools(nil)
 }
 
 func defaultAppMainStartProxyScheduler(ctx context.Context, _ *appMainLifecycleState) (Hook, error) {
