@@ -530,8 +530,8 @@ class AccountRefreshService:
                     new_remaining = max(0, existing.remaining - 1)
                     reset_at = existing.reset_at
                     if mode_id == 5:
-                        # console 配额：remaining <= 20 时才启动恢复计时器
-                        if reset_at is None and new_remaining <= 20 and existing.window_seconds > 0:
+                        # console 配额：remaining <= 12 时才启动恢复计时器
+                        if reset_at is None and new_remaining <= 12 and existing.window_seconds > 0:
                             reset_at = now + existing.window_seconds * 1000
                     else:
                         # 非 console 模式保持原有逻辑：首次使用即启动计时器
