@@ -36,6 +36,15 @@ func TestNewAppRoutesHealthStaticFaviconAndProductRouters(t *testing.T) {
 	assertAppResponse(t, app.Handler(), http.MethodGet, "/admin", "", http.StatusOK, "web")
 }
 
+func TestNewAppRoutesInternalRequestsToMaintenanceRouter(t *testing.T) {
+	stubAppMainRequestMiddleware(t)
+	app := NewApp(AppOptions{
+		MaintenanceRouter: textHandler("maintenance"),
+	})
+
+	assertAppResponse(t, app.Handler(), http.MethodPost, "/internal/maintenance/account-sync", "", http.StatusOK, "maintenance")
+}
+
 func TestNewAppCORSAndErrorRecovery(t *testing.T) {
 	stubAppMainRequestMiddleware(t)
 	app := NewApp(AppOptions{
@@ -221,6 +230,57 @@ func TestDefaultLifecycleMirrorsPythonLifespanStartupAndShutdown(t *testing.T) {
 	}
 }
 
+func TestDefaultLifecycleSkipsBackgroundLoopsInServerlessMode(t *testing.T) {
+	resetAppMainDeps(t)
+	t.Setenv("GORK_RUNTIME_MODE", "serverless")
+	events := []string{}
+	appMainEnsureConfig = func(context.Context) error {
+		events = append(events, "config")
+		return nil
+	}
+	appMainSetupLogging = func() error {
+		events = append(events, "logging")
+		return nil
+	}
+	appMainStartRuntimeStore = recordLifecycleStep("runtime-store", "runtime-store-close", &events)
+	appMainConfigureTaskSnapshotStore = recordLifecycleStep("task-snapshot-store", "task-snapshot-store-clear", &events)
+	appMainInitializeRepository = recordLifecycleStep("repository", "repository-close", &events)
+	appMainRunStartupMigrations = recordLifecycleStep("startup-migrations", "", &events)
+	appMainReconcileLocalMediaCache = recordLifecycleStep("media-cache", "", &events)
+	appMainStartAccountDirectory = recordLifecycleStep("account-directory", "account-directory-stop", &events)
+	appMainStartServerlessAccountDirectory = recordLifecycleStep("account-directory-serverless", "account-directory-serverless-stop", &events)
+	appMainStartRefreshRuntime = recordLifecycleStep("refresh-runtime", "refresh-runtime-stop", &events)
+	appMainStartServerlessRefreshRuntime = recordLifecycleStep("maintenance-runtime", "maintenance-runtime-stop", &events)
+	appMainStartProxyScheduler = recordLifecycleStep("proxy-scheduler", "proxy-scheduler-stop", &events)
+
+	app := NewApp(AppOptions{})
+	if err := app.Start(context.Background()); err != nil {
+		t.Fatalf("start error: %v", err)
+	}
+	if err := app.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown error: %v", err)
+	}
+	want := strings.Join([]string{
+		"config",
+		"logging",
+		"runtime-store",
+		"task-snapshot-store",
+		"repository",
+		"startup-migrations",
+		"media-cache",
+		"account-directory-serverless",
+		"maintenance-runtime",
+		"maintenance-runtime-stop",
+		"account-directory-serverless-stop",
+		"repository-close",
+		"task-snapshot-store-clear",
+		"runtime-store-close",
+	}, ",")
+	if got := strings.Join(events, ","); got != want {
+		t.Fatalf("serverless lifecycle events=%s, want %s", got, want)
+	}
+}
+
 func resetAppMainDeps(t *testing.T) {
 	t.Helper()
 	oldEnsureConfig := appMainEnsureConfig
@@ -233,8 +293,11 @@ func resetAppMainDeps(t *testing.T) {
 	oldRunStartupMigrations := appMainRunStartupMigrations
 	oldReconcileLocalMediaCache := appMainReconcileLocalMediaCache
 	oldStartAccountDirectory := appMainStartAccountDirectory
+	oldStartServerlessAccountDirectory := appMainStartServerlessAccountDirectory
 	oldStartRefreshRuntime := appMainStartRefreshRuntime
+	oldStartServerlessRefreshRuntime := appMainStartServerlessRefreshRuntime
 	oldStartProxyScheduler := appMainStartProxyScheduler
+	oldServerlessMode := appMainServerlessMode
 	t.Cleanup(func() {
 		appMainEnsureConfig = oldEnsureConfig
 		appMainLoadRequestConfig = oldLoadRequestConfig
@@ -246,8 +309,11 @@ func resetAppMainDeps(t *testing.T) {
 		appMainRunStartupMigrations = oldRunStartupMigrations
 		appMainReconcileLocalMediaCache = oldReconcileLocalMediaCache
 		appMainStartAccountDirectory = oldStartAccountDirectory
+		appMainStartServerlessAccountDirectory = oldStartServerlessAccountDirectory
 		appMainStartRefreshRuntime = oldStartRefreshRuntime
+		appMainStartServerlessRefreshRuntime = oldStartServerlessRefreshRuntime
 		appMainStartProxyScheduler = oldStartProxyScheduler
+		appMainServerlessMode = oldServerlessMode
 	})
 }
 

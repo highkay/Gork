@@ -28,17 +28,20 @@ type appMainLifecycleState struct {
 type appMainLifecycleStep func(context.Context, *appMainLifecycleState) (Hook, error)
 
 var (
-	appMainRuntimeClientFactory       platformruntime.RedisRuntimeClientFactory
-	appMainStartRuntimeStore          appMainLifecycleStep                = defaultAppMainStartRuntimeStore
-	appMainConfigureTaskSnapshotStore appMainLifecycleStep                = defaultAppMainConfigureTaskSnapshotStore
-	appMainInitializeRepository       appMainLifecycleStep                = defaultAppMainInitializeRepository
-	appMainRunStartupMigrations       appMainLifecycleStep                = defaultAppMainRunStartupMigrations
-	appMainReconcileLocalMediaCache   appMainLifecycleStep                = defaultAppMainReconcileLocalMediaCache
-	appMainStartAccountDirectory      appMainLifecycleStep                = defaultAppMainStartAccountDirectory
-	appMainStartRefreshRuntime        appMainLifecycleStep                = defaultAppMainStartRefreshRuntime
-	appMainStartProxyScheduler        appMainLifecycleStep                = defaultAppMainStartProxyScheduler
-	appMainAcquireSchedulerFileLock   func(context.Context) (Hook, error) = acquireAppMainSchedulerFileLock
-	appMainConsoleResetInterval                                           = 30 * time.Second
+	appMainRuntimeClientFactory            platformruntime.RedisRuntimeClientFactory
+	appMainStartRuntimeStore               appMainLifecycleStep                = defaultAppMainStartRuntimeStore
+	appMainConfigureTaskSnapshotStore      appMainLifecycleStep                = defaultAppMainConfigureTaskSnapshotStore
+	appMainInitializeRepository            appMainLifecycleStep                = defaultAppMainInitializeRepository
+	appMainRunStartupMigrations            appMainLifecycleStep                = defaultAppMainRunStartupMigrations
+	appMainReconcileLocalMediaCache        appMainLifecycleStep                = defaultAppMainReconcileLocalMediaCache
+	appMainStartAccountDirectory           appMainLifecycleStep                = defaultAppMainStartAccountDirectory
+	appMainStartServerlessAccountDirectory appMainLifecycleStep                = defaultAppMainStartServerlessAccountDirectory
+	appMainStartRefreshRuntime             appMainLifecycleStep                = defaultAppMainStartRefreshRuntime
+	appMainStartServerlessRefreshRuntime   appMainLifecycleStep                = defaultAppMainStartServerlessRefreshRuntime
+	appMainStartProxyScheduler             appMainLifecycleStep                = defaultAppMainStartProxyScheduler
+	appMainAcquireSchedulerFileLock        func(context.Context) (Hook, error) = acquireAppMainSchedulerFileLock
+	appMainServerlessMode                  func() bool                         = defaultAppMainServerlessMode
+	appMainConsoleResetInterval                                                = 30 * time.Second
 )
 
 func defaultLifecycleHooks() ([]Hook, []Hook) {
@@ -64,9 +67,20 @@ func defaultLifecycleHooks() ([]Hook, []Hook) {
 		stepHook(appMainInitializeRepository),
 		stepHook(appMainRunStartupMigrations),
 		stepHook(appMainReconcileLocalMediaCache),
-		stepHook(appMainStartAccountDirectory),
-		stepHook(appMainStartRefreshRuntime),
-		stepHook(appMainStartProxyScheduler),
+	}
+	if appMainServerlessMode() {
+		startupHooks = append(
+			startupHooks,
+			stepHook(appMainStartServerlessAccountDirectory),
+			stepHook(appMainStartServerlessRefreshRuntime),
+		)
+	} else {
+		startupHooks = append(
+			startupHooks,
+			stepHook(appMainStartAccountDirectory),
+			stepHook(appMainStartRefreshRuntime),
+			stepHook(appMainStartProxyScheduler),
+		)
 	}
 	shutdownHooks := []Hook{
 		func(ctx context.Context) error {
@@ -82,6 +96,11 @@ func defaultLifecycleHooks() ([]Hook, []Hook) {
 		},
 	}
 	return startupHooks, shutdownHooks
+}
+
+func defaultAppMainServerlessMode() bool {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("GORK_RUNTIME_MODE")))
+	return mode == "serverless" || strings.TrimSpace(os.Getenv("VERCEL")) == "1"
 }
 
 func defaultAppMainStartRuntimeStore(ctx context.Context, state *appMainLifecycleState) (Hook, error) {
@@ -174,6 +193,25 @@ func defaultAppMainStartAccountDirectory(ctx context.Context, state *appMainLife
 		cancel()
 		<-done
 		restoreDirectory()
+		return nil
+	}, nil
+}
+
+func defaultAppMainStartServerlessAccountDirectory(ctx context.Context, state *appMainLifecycleState) (Hook, error) {
+	if state.repository == nil {
+		return nil, nil
+	}
+	directory := accountdataplane.NewAccountDirectory(state.repository)
+	if err := directory.Bootstrap(ctx); err != nil {
+		return nil, err
+	}
+	state.directory = directory
+	state.bindAdminRuntime()
+	restoreDirectory := accountdataplane.RegisterAccountDirectory(directory)
+	return func(context.Context) error {
+		restoreDirectory()
+		state.clearAdminRuntime()
+		state.directory = nil
 		return nil
 	}, nil
 }
@@ -274,6 +312,29 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 		accountcontrol.SetSSOValidationScheduler(nil)
 		accountcontrol.SetRefreshSchedulerLeader(false)
 		accountcontrol.SetRefreshService(nil)
+		state.bindAdminRuntime()
+		return nil
+	}, nil
+}
+
+func defaultAppMainStartServerlessRefreshRuntime(_ context.Context, state *appMainLifecycleState) (Hook, error) {
+	if state.repository == nil {
+		return nil, nil
+	}
+	service := accountcontrol.NewAccountRefreshService(state.repository, accountcontrol.AccountRefreshOptions{
+		SSOModelVerifier: accountcontrol.SSOModelVerifierFunc(openaiproduct.ProbeConsoleListModels),
+	})
+	state.bindAdminRuntimeWithRefresh(service)
+	accountcontrol.SetRefreshService(service)
+	accountcontrol.SetRefreshScheduler(nil)
+	accountcontrol.SetSSOValidationScheduler(nil)
+	accountcontrol.SetRefreshSchedulerLeader(false)
+	accountcontrol.ReconcileRefreshRuntime(false)
+	return func(context.Context) error {
+		accountcontrol.SetRefreshService(nil)
+		accountcontrol.SetRefreshScheduler(nil)
+		accountcontrol.SetSSOValidationScheduler(nil)
+		accountcontrol.SetRefreshSchedulerLeader(false)
 		state.bindAdminRuntime()
 		return nil
 	}, nil

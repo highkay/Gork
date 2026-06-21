@@ -12,6 +12,7 @@ import (
 	"github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/logging"
 	"github.com/dslzl/gork/app/products/anthropic"
+	"github.com/dslzl/gork/app/products/maintenance"
 	"github.com/dslzl/gork/app/products/openai"
 	"github.com/dslzl/gork/app/products/web"
 )
@@ -34,12 +35,13 @@ var (
 type Hook func(context.Context) error
 
 type AppOptions struct {
-	StaticsRoot     string
-	WebRouter       http.Handler
-	OpenAIRouter    http.Handler
-	AnthropicRouter http.Handler
-	StartupHooks    []Hook
-	ShutdownHooks   []Hook
+	StaticsRoot       string
+	WebRouter         http.Handler
+	OpenAIRouter      http.Handler
+	AnthropicRouter   http.Handler
+	MaintenanceRouter http.Handler
+	StartupHooks      []Hook
+	ShutdownHooks     []Hook
 }
 
 type App struct {
@@ -101,6 +103,9 @@ func normalizeAppOptions(options AppOptions) AppOptions {
 	if options.AnthropicRouter == nil {
 		options.AnthropicRouter = anthropic.NewRouter()
 	}
+	if options.MaintenanceRouter == nil {
+		options.MaintenanceRouter = maintenance.NewRouter()
+	}
 	return options
 }
 
@@ -117,6 +122,8 @@ func newAppRouter(options AppOptions) http.Handler {
 			options.AnthropicRouter.ServeHTTP(w, r)
 		case strings.HasPrefix(r.URL.Path, "/v1/"):
 			options.OpenAIRouter.ServeHTTP(w, r)
+		case strings.HasPrefix(r.URL.Path, "/internal/"):
+			options.MaintenanceRouter.ServeHTTP(w, r)
 		default:
 			options.WebRouter.ServeHTTP(w, r)
 		}

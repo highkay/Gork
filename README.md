@@ -145,6 +145,41 @@ go build -o gork ./cmd/gork
 ./gork
 ```
 
+### 方式五：Vercel 免费套餐部署
+
+Vercel 部署使用 Go Runtime 和 `cmd/api` 入口，适合轻量 API 转发和低频后台维护。Hobby 免费套餐的 Cron Job 只能每日触发，且触发时间为小时级精度，因此 Vercel 版不会启动常驻后台轮询；账号同步、额度刷新、代理 clearance 刷新和 Console 配额重置会改为内部维护接口按需执行。
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/dslzl/gork&env=ACCOUNT_STORAGE,ACCOUNT_REDIS_URL,ACCOUNT_MYSQL_URL,ACCOUNT_POSTGRESQL_URL,RUNTIME_REDIS_URL,CRON_SECRET,GORK_APP_APP_KEY,GORK_APP_API_KEY,GORK_APP_APP_URL)
+
+Vercel 正式部署不支持本地 SQLite/TOML 持久化，`ACCOUNT_STORAGE=local` 仅适合临时演示。请选择以下五种模式之一：
+
+| 模式 | 必填环境变量 | 说明 |
+| :-- | :-- | :-- |
+| Redis | `ACCOUNT_STORAGE=redis`、`ACCOUNT_REDIS_URL` | 账号和运行时配置都使用 Redis；`RUNTIME_REDIS_URL` 留空时复用 `ACCOUNT_REDIS_URL`。 |
+| MySQL | `ACCOUNT_STORAGE=mysql`、`ACCOUNT_MYSQL_URL` | 账号和运行时配置使用 MySQL；不启用 Redis 协调。 |
+| PostgreSQL | `ACCOUNT_STORAGE=postgresql`、`ACCOUNT_POSTGRESQL_URL` | 账号和运行时配置使用 PostgreSQL；不启用 Redis 协调。 |
+| MySQL + Redis | `ACCOUNT_STORAGE=mysql`、`ACCOUNT_MYSQL_URL`、`RUNTIME_REDIS_URL` | MySQL 存账号/配置，Redis 用于任务快照和维护任务协调。 |
+| PostgreSQL + Redis | `ACCOUNT_STORAGE=postgresql`、`ACCOUNT_POSTGRESQL_URL`、`RUNTIME_REDIS_URL` | PostgreSQL 存账号/配置，Redis 用于任务快照和维护任务协调。 |
+
+还需要设置：
+
+- `CRON_SECRET`：内部维护接口鉴权密钥，Vercel Cron 会使用 `Authorization: Bearer <CRON_SECRET>` 调用每日维护入口。
+- `GORK_APP_APP_KEY`：Admin 后台密码。
+- `GORK_APP_API_KEY`：OpenAI/Anthropic 兼容 API 鉴权密钥。
+- `GORK_APP_APP_URL`：Vercel 项目公网地址，用于生成图片、视频等公开链接。
+
+内部维护接口：
+
+| 路径 | 用途 |
+| :-- | :-- |
+| `/internal/cron/daily-maintenance` | Vercel 每日 Cron 聚合入口，低频执行小批量维护。 |
+| `/internal/maintenance/account-sync` | 手动同步账号目录。 |
+| `/internal/maintenance/account-refresh?limit=5` | 手动小批量刷新账号额度。 |
+| `/internal/maintenance/proxy-refresh` | 手动刷新代理 clearance。 |
+| `/internal/maintenance/console-quota-reset` | 手动重置过期 Console 配额窗口。 |
+
+> 免费套餐不要依赖分钟级自动维护。需要高频自动刷新时，请使用付费 Vercel 计划、外部定时器，或改用 Docker / 长期运行部署。
+
 ### 首次启动
 
 服务启动后访问 `http://localhost:8000/admin/login`，默认密码为 `gork`，进入后依次完成：
@@ -304,6 +339,8 @@ server {
 | `HOST_PORT` | Compose 宿主机映射端口 | `8000` |
 | `DATA_DIR` | 本地数据根目录 | `./data` |
 | `LOG_DIR` | 本地日志目录 | `./logs` |
+| `GORK_RUNTIME_MODE` | 运行模式；Vercel 使用 `serverless`，禁用常驻后台 loop | `""` |
+| `CRON_SECRET` | Vercel 内部维护接口鉴权密钥 | `""` |
 | `ACCOUNT_STORAGE` | 账号存储后端：`local` / `redis` / `mysql` / `postgresql` | `local` |
 | `ACCOUNT_LOCAL_PATH` | `local` 模式 SQLite 路径 | `${DATA_DIR}/accounts.db` |
 | `ACCOUNT_REDIS_URL` | `redis` 账号存储 DSN；也可被 Redis runtime 复用 | `""` |

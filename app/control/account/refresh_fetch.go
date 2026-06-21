@@ -90,6 +90,10 @@ func (s *AccountRefreshService) RefreshCallAsync(ctx context.Context, token stri
 }
 
 func (s *AccountRefreshService) RefreshScheduled(ctx context.Context, pool *string) (RefreshResult, error) {
+	return s.RefreshScheduledLimit(ctx, pool, 0)
+}
+
+func (s *AccountRefreshService) RefreshScheduledLimit(ctx context.Context, pool *string, limit int) (RefreshResult, error) {
 	snapshot, err := s.repo.RuntimeSnapshot(ctx)
 	if err != nil {
 		return RefreshResult{}, err
@@ -97,6 +101,9 @@ func (s *AccountRefreshService) RefreshScheduled(ctx context.Context, pool *stri
 	records := filterRefreshManageable(snapshot.Items)
 	if pool != nil {
 		records = filterRefreshPool(records, *pool)
+	}
+	if limit > 0 && len(records) > limit {
+		records = records[:limit]
 	}
 	results, err := s.runRefreshBatch(ctx, records, true, false)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 var refreshRuntimeState = struct {
 	sync.Mutex
 	service                accountScheduledRefresher
+	maintenanceService     accountMaintenanceRefresher
 	scheduler              *AccountRefreshScheduler
 	ssoValidationScheduler *SSOValidationScheduler
 	schedulerLeader        bool
@@ -25,12 +26,23 @@ func SetRefreshService(service accountScheduledRefresher) {
 	refreshRuntimeState.Lock()
 	defer refreshRuntimeState.Unlock()
 	refreshRuntimeState.service = service
+	if maintenance, ok := service.(accountMaintenanceRefresher); ok {
+		refreshRuntimeState.maintenanceService = maintenance
+	} else {
+		refreshRuntimeState.maintenanceService = nil
+	}
 }
 
 func GetRefreshService() accountScheduledRefresher {
 	refreshRuntimeState.Lock()
 	defer refreshRuntimeState.Unlock()
 	return refreshRuntimeState.service
+}
+
+func GetMaintenanceRefreshService() accountMaintenanceRefresher {
+	refreshRuntimeState.Lock()
+	defer refreshRuntimeState.Unlock()
+	return refreshRuntimeState.maintenanceService
 }
 
 func SetRefreshScheduler(scheduler *AccountRefreshScheduler) {

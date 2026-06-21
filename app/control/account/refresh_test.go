@@ -336,6 +336,32 @@ func TestRefreshScheduledFiltersPoolAndManageable(t *testing.T) {
 	}
 }
 
+func TestRefreshScheduledLimitCapsManageableRecords(t *testing.T) {
+	oldNow := refreshNowMS
+	refreshNowMS = func() int64 { return 5500 }
+	t.Cleanup(func() { refreshNowMS = oldNow })
+	records := []AccountRecord{
+		{Token: "tok-a", Pool: "basic", Status: AccountStatusActive, Quota: DefaultQuotaSet("basic").ToDict()},
+		{Token: "tok-b", Pool: "basic", Status: AccountStatusActive, Quota: DefaultQuotaSet("basic").ToDict()},
+		{Token: "tok-c", Pool: "basic", Status: AccountStatusActive, Quota: DefaultQuotaSet("basic").ToDict()},
+	}
+	repo := &fakeRefreshRepo{snapshot: RuntimeSnapshot{Items: records}}
+	fetcher := &fakeUsageFetcher{}
+	service := NewAccountRefreshService(repo, AccountRefreshOptions{Fetcher: fetcher, UsageConcurrency: 1})
+
+	result, err := service.RefreshScheduledLimit(context.Background(), nil, 2)
+
+	if err != nil {
+		t.Fatalf("RefreshScheduledLimit returned error: %v", err)
+	}
+	if result.Checked != 2 || result.Refreshed != 2 || result.Failed != 0 {
+		t.Fatalf("RefreshScheduledLimit result = %#v", result)
+	}
+	if len(repo.patches) != 2 || repo.patches[0].Token != "tok-a" || repo.patches[1].Token != "tok-b" {
+		t.Fatalf("limited patches = %#v", repo.patches)
+	}
+}
+
 func TestRefreshOnDemandThrottlesAfterSuccessfulRefresh(t *testing.T) {
 	oldNow := refreshNowMS
 	refreshNowMS = func() int64 { return 6000 }

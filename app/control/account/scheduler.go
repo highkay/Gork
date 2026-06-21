@@ -33,6 +33,11 @@ type accountScheduledRefresher interface {
 	RefreshScheduled(context.Context, *string) (RefreshResult, error)
 }
 
+type accountMaintenanceRefresher interface {
+	RefreshScheduledLimit(context.Context, *string, int) (RefreshResult, error)
+	ResetExpiredConsoleWindows(context.Context) (int, error)
+}
+
 type AccountRefreshScheduler struct {
 	service      accountScheduledRefresher
 	intervals    map[string]time.Duration

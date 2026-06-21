@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "buildCommand": "go build -trimpath -ldflags=\"-s -w\" -o server ./cmd/api",
+  "functions": {
+    "cmd/api/main.go": {
+      "includeFiles": "{config.defaults.toml,app/statics/**}"
+    }
+  },
+  "env": {
+    "LOG_LEVEL": "INFO",
+    "LOG_FILE_ENABLED": "false",
+    "DATA_DIR": "/tmp/data",
+    "LOG_DIR": "/tmp/logs",
+    "GORK_RUNTIME_MODE": "serverless"
+  },
+  "crons": [
+    {
+      "path": "/internal/cron/daily-maintenance",
+      "schedule": "0 3 * * *"
+    }
+  ]
+}

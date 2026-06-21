@@ -78,6 +78,12 @@ func RegisterAccountDirectory(directory *AccountDirectory) func() {
 	}
 }
 
+func CurrentAccountDirectory() *AccountDirectory {
+	accountDirectoryMu.Lock()
+	defer accountDirectoryMu.Unlock()
+	return accountDirectorySingleton
+}
+
 func (d *AccountDirectory) Bootstrap(ctx context.Context) error {
 	table, err := Bootstrap(ctx, d.repository)
 	if err != nil {

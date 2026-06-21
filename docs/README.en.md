@@ -104,6 +104,41 @@ go build -o gork ./cmd/gork
 ./gork
 ```
 
+### Option 4: Vercel Hobby deployment
+
+The Vercel build uses the Go Runtime and the `cmd/api` entrypoint. It is designed for lightweight API forwarding and low-frequency maintenance. Vercel Hobby Cron Jobs run at most once per day with hour-level accuracy, so the Vercel build does not start long-running background loops. Account sync, quota refresh, proxy clearance refresh, and Console quota reset are exposed as authenticated maintenance endpoints instead.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/dslzl/gork&env=ACCOUNT_STORAGE,ACCOUNT_REDIS_URL,ACCOUNT_MYSQL_URL,ACCOUNT_POSTGRESQL_URL,RUNTIME_REDIS_URL,CRON_SECRET,GORK_APP_APP_KEY,GORK_APP_API_KEY,GORK_APP_APP_URL)
+
+Do not use local SQLite/TOML as durable Vercel storage. `ACCOUNT_STORAGE=local` is only suitable for temporary demos. Choose one of these supported modes:
+
+| Mode | Required env vars | Notes |
+| :-- | :-- | :-- |
+| Redis | `ACCOUNT_STORAGE=redis`, `ACCOUNT_REDIS_URL` | Accounts and runtime config use Redis. `RUNTIME_REDIS_URL` falls back to `ACCOUNT_REDIS_URL` when empty. |
+| MySQL | `ACCOUNT_STORAGE=mysql`, `ACCOUNT_MYSQL_URL` | Accounts and runtime config use MySQL. Redis coordination is disabled. |
+| PostgreSQL | `ACCOUNT_STORAGE=postgresql`, `ACCOUNT_POSTGRESQL_URL` | Accounts and runtime config use PostgreSQL. Redis coordination is disabled. |
+| MySQL + Redis | `ACCOUNT_STORAGE=mysql`, `ACCOUNT_MYSQL_URL`, `RUNTIME_REDIS_URL` | MySQL stores accounts/config; Redis stores task snapshots and maintenance coordination. |
+| PostgreSQL + Redis | `ACCOUNT_STORAGE=postgresql`, `ACCOUNT_POSTGRESQL_URL`, `RUNTIME_REDIS_URL` | PostgreSQL stores accounts/config; Redis stores task snapshots and maintenance coordination. |
+
+Also set:
+
+- `CRON_SECRET`: secret for internal maintenance endpoints. Vercel Cron calls them with `Authorization: Bearer <CRON_SECRET>`.
+- `GORK_APP_APP_KEY`: Admin password.
+- `GORK_APP_API_KEY`: OpenAI/Anthropic-compatible API key.
+- `GORK_APP_APP_URL`: public Vercel URL used for image/video links.
+
+Maintenance endpoints:
+
+| Path | Purpose |
+| :-- | :-- |
+| `/internal/cron/daily-maintenance` | Daily Vercel Cron aggregate endpoint. |
+| `/internal/maintenance/account-sync` | Manually sync account directory. |
+| `/internal/maintenance/account-refresh?limit=5` | Manually refresh a small account batch. |
+| `/internal/maintenance/proxy-refresh` | Manually refresh proxy clearance. |
+| `/internal/maintenance/console-quota-reset` | Manually reset expired Console quota windows. |
+
+> Hobby deployments should not depend on minute-level automatic maintenance. Use a paid Vercel plan, an external scheduler, or a long-running Docker deployment when you need high-frequency refreshes.
+
 ### First-time setup
 
 After the service is up, open `http://localhost:8000/admin/login`. Default password is `gork`. Then:
@@ -224,6 +259,8 @@ Bootstrap-time variables (`.env` / Compose / `docker run -e`):
 | `HOST_PORT` | Compose host port mapping | `8000` |
 | `DATA_DIR` | Data root | `./data` |
 | `LOG_DIR` | Logs dir | `./logs` |
+| `GORK_RUNTIME_MODE` | Runtime mode; Vercel uses `serverless` to disable long-running background loops | `""` |
+| `CRON_SECRET` | Secret for Vercel internal maintenance endpoints | `""` |
 | `ACCOUNT_STORAGE` | Backend: `local` / `redis` / `mysql` / `postgresql` | `local` |
 | `ACCOUNT_LOCAL_PATH` | SQLite path for `local` mode | `${DATA_DIR}/accounts.db` |
 | `ACCOUNT_REDIS_URL` | DSN for `redis` mode | `""` |
@@ -233,6 +270,7 @@ Bootstrap-time variables (`.env` / Compose / `docker run -e`):
 | `ACCOUNT_SQL_MAX_OVERFLOW` | SQL pool max overflow | `10` |
 | `ACCOUNT_SQL_POOL_TIMEOUT` | Pool checkout timeout (s) | `30` |
 | `ACCOUNT_SQL_POOL_RECYCLE` | Connection recycle time (s) | `1800` |
+| `RUNTIME_REDIS_URL` | Optional Redis DSN for task snapshots and runtime coordination; falls back to `ACCOUNT_REDIS_URL` when empty | `""` |
 | `CONFIG_LOCAL_PATH` | Runtime config file path | `${DATA_DIR}/config.toml` |
 
 Runtime config can also be overridden via `GROK_`-prefixed env vars, e.g. `GROK_APP_API_KEY` overrides `app.api_key`, `GROK_FEATURES_STREAM` overrides `features.stream`.
