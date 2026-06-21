@@ -87,7 +87,7 @@ func localUseWindowPatch(pool string, modeID int, window QuotaWindow, now int64)
 	}
 	window.Remaining = clampInt(window.Remaining-1, 0, window.Total)
 	if modeID == 5 {
-		if window.ResetAt == nil && window.Remaining <= 15 && window.WindowSeconds > 0 {
+		if window.ResetAt == nil && window.Remaining <= 12 && window.WindowSeconds > 0 {
 			resetAt := now + int64(window.WindowSeconds)*1000
 			window.ResetAt = &resetAt
 		}

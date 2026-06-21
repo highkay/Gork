@@ -225,7 +225,10 @@ func TestRefreshRuntimeStartsConsoleQuotaResetLoop(t *testing.T) {
 	if len(repo.patches) == 0 {
 		t.Fatalf("console quota reset loop did not patch expired console quota")
 	}
-	if repo.patches[0].QuotaConsole["remaining"] != 30 || repo.patches[0].QuotaConsole["reset_at"] != nil {
+	if repo.patches[0].QuotaConsole["remaining"] != 20 ||
+		repo.patches[0].QuotaConsole["total"] != 20 ||
+		repo.patches[0].QuotaConsole["window_seconds"] != 3600 ||
+		repo.patches[0].QuotaConsole["reset_at"] != nil {
 		t.Fatalf("console reset patch = %#v", repo.patches[0].QuotaConsole)
 	}
 }

@@ -238,7 +238,11 @@ func (s *AccountRefreshService) ResetExpiredConsoleWindows(ctx context.Context) 
 	patches := []AccountPatch{}
 	for _, record := range snapshot.Items {
 		quotaSet, err := record.QuotaSet()
-		if err != nil || quotaSet.Console == nil || !quotaSet.Console.IsWindowExpired(now) {
+		if err != nil || quotaSet.Console == nil {
+			continue
+		}
+		stuck := quotaSet.Console.Remaining <= 0 && quotaSet.Console.ResetAt == nil
+		if !quotaSet.Console.IsWindowExpired(now) && !stuck {
 			continue
 		}
 		if quotaSet.Console.Remaining >= quotaSet.Console.Total {

@@ -305,11 +305,11 @@ func TestRouterChatImageStreamStartsBeforeGenerationCompletes(t *testing.T) {
 		t.Fatalf("content-type=%q", got)
 	}
 	bodyText := rec.bodyString()
-	if strings.Contains(bodyText, ": keep-alive") {
-		t.Fatalf("stream body uses SSE comment heartbeat: %q", bodyText)
+	if !strings.Contains(bodyText, ": heartbeat") {
+		t.Fatalf("stream body missing SSE comment heartbeat: %q", bodyText)
 	}
-	if !strings.Contains(bodyText, `"object":"chat.completion.chunk"`) || !strings.Contains(bodyText, `"delta":{}`) {
-		t.Fatalf("stream body missing OpenAI-compatible heartbeat: %q", bodyText)
+	if strings.Contains(bodyText, `"delta":{}`) {
+		t.Fatalf("stream body should not use empty delta heartbeat: %q", bodyText)
 	}
 }
 

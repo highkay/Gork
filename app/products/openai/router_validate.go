@@ -87,6 +87,15 @@ func routerMessagesToMaps(messages []MessageItem) []map[string]any {
 		if message.Content != nil {
 			item["content"] = message.Content
 		}
+		if len(message.ToolCalls) > 0 {
+			item["tool_calls"] = message.ToolCalls
+		}
+		if message.ToolCallID != "" {
+			item["tool_call_id"] = message.ToolCallID
+		}
+		if message.Name != "" {
+			item["name"] = message.Name
+		}
 		result = append(result, item)
 	}
 	return result

@@ -37,6 +37,8 @@ func Responses(ctx context.Context, options responseOptions) (chatCompletionResu
 			EmitThink:   &emitThink,
 			Temperature: options.Temperature,
 			TopP:        options.TopP,
+			Tools:       options.Tools,
+			ToolChoice:  options.ToolChoice,
 			ResponseID:  MakeRespID("resp"),
 			ReasoningID: MakeRespID("rs"),
 			MessageID:   MakeRespID("msg"),

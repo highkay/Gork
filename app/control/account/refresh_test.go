@@ -246,7 +246,7 @@ func TestRefreshCallAsyncConsoleStartsResetTimerAtThreshold(t *testing.T) {
 	refreshNowMS = func() int64 { return 3000 }
 	t.Cleanup(func() { refreshNowMS = oldNow })
 	quota := DefaultQuotaSet("basic")
-	quota.Console.Remaining = 16
+	quota.Console.Remaining = 13
 	quota.Console.ResetAt = nil
 	record := AccountRecord{Token: "tok-console-threshold", Pool: "basic", Status: AccountStatusActive, Quota: quota.ToDict()}
 	repo := &fakeRefreshRepo{records: []AccountRecord{record}}
@@ -257,7 +257,7 @@ func TestRefreshCallAsyncConsoleStartsResetTimerAtThreshold(t *testing.T) {
 	}
 
 	patch := repo.patches[0]
-	if patch.QuotaConsole["remaining"] != 15 || patch.QuotaConsole["reset_at"] != int64(903000) {
+	if patch.QuotaConsole["remaining"] != 12 || patch.QuotaConsole["reset_at"] != int64(3603000) {
 		t.Fatalf("console threshold quota patch = %#v", patch.QuotaConsole)
 	}
 }
@@ -277,10 +277,14 @@ func TestResetExpiredConsoleWindowsRestoresDefaultQuota(t *testing.T) {
 	activeQuota := DefaultQuotaSet("basic")
 	activeQuota.Console.Remaining = 5
 	activeQuota.Console.ResetAt = &activeAt
+	stuckQuota := DefaultQuotaSet("basic")
+	stuckQuota.Console.Remaining = 0
+	stuckQuota.Console.ResetAt = nil
 	repo := &fakeRefreshRepo{snapshot: RuntimeSnapshot{Items: []AccountRecord{
 		{Token: "tok-reset", Pool: "basic", Status: AccountStatusActive, Quota: needsResetQuota.ToDict()},
 		{Token: "tok-full", Pool: "basic", Status: AccountStatusActive, Quota: fullQuota.ToDict()},
 		{Token: "tok-active", Pool: "basic", Status: AccountStatusActive, Quota: activeQuota.ToDict()},
+		{Token: "tok-stuck", Pool: "basic", Status: AccountStatusActive, Quota: stuckQuota.ToDict()},
 	}}}
 	service := NewAccountRefreshService(repo, AccountRefreshOptions{Fetcher: &fakeUsageFetcher{}})
 
@@ -289,14 +293,14 @@ func TestResetExpiredConsoleWindowsRestoresDefaultQuota(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResetExpiredConsoleWindows returned error: %v", err)
 	}
-	if count != 1 {
-		t.Fatalf("reset count = %d, want 1", count)
+	if count != 2 {
+		t.Fatalf("reset count = %d, want 2", count)
 	}
-	if len(repo.patches) != 1 || repo.patches[0].Token != "tok-reset" {
+	if len(repo.patches) != 2 || repo.patches[0].Token != "tok-reset" || repo.patches[1].Token != "tok-stuck" {
 		t.Fatalf("reset patches = %#v", repo.patches)
 	}
 	patch := repo.patches[0].QuotaConsole
-	if patch["remaining"] != 30 || patch["total"] != 30 || patch["reset_at"] != nil || patch["source"] != int(QuotaSourceDefault) {
+	if patch["remaining"] != 20 || patch["total"] != 20 || patch["reset_at"] != nil || patch["source"] != int(QuotaSourceDefault) {
 		t.Fatalf("reset console quota patch = %#v", patch)
 	}
 }
