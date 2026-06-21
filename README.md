@@ -149,17 +149,19 @@ go build -o gork ./cmd/gork
 
 Vercel 部署使用 Go Runtime 和 `cmd/api` 入口，适合轻量 API 转发和低频后台维护。Hobby 免费套餐的 Cron Job 只能每日触发，且触发时间为小时级精度，因此 Vercel 版不会启动常驻后台轮询；账号同步、额度刷新、代理 clearance 刷新和 Console 配额重置会改为内部维护接口按需执行。
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/dslzl/gork&env=ACCOUNT_STORAGE,ACCOUNT_REDIS_URL,ACCOUNT_MYSQL_URL,ACCOUNT_POSTGRESQL_URL,RUNTIME_REDIS_URL,CRON_SECRET,GORK_APP_APP_KEY,GORK_APP_API_KEY,GORK_APP_APP_URL)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/dslzl/gork&env=CRON_SECRET,GORK_APP_APP_KEY,GORK_APP_API_KEY,GORK_APP_APP_URL)
 
-Vercel 正式部署不支持本地 SQLite/TOML 持久化，`ACCOUNT_STORAGE=local` 仅适合临时演示。请选择以下五种模式之一：
+Vercel 正式部署不支持本地 SQLite/TOML 持久化，`ACCOUNT_STORAGE=local` 仅适合临时演示。推荐在 Vercel 项目里通过 Marketplace 连接数据库或 Redis，项目会自动读取集成注入的环境变量，无需手动填写连接串。
 
-| 模式 | 必填环境变量 | 说明 |
+| 模式 | 推荐 Vercel 连接方式 | 自动识别变量 |
 | :-- | :-- | :-- |
-| Redis | `ACCOUNT_STORAGE=redis`、`ACCOUNT_REDIS_URL` | 账号和运行时配置都使用 Redis；`RUNTIME_REDIS_URL` 留空时复用 `ACCOUNT_REDIS_URL`。 |
-| MySQL | `ACCOUNT_STORAGE=mysql`、`ACCOUNT_MYSQL_URL` | 账号和运行时配置使用 MySQL；不启用 Redis 协调。 |
-| PostgreSQL | `ACCOUNT_STORAGE=postgresql`、`ACCOUNT_POSTGRESQL_URL` | 账号和运行时配置使用 PostgreSQL；不启用 Redis 协调。 |
-| MySQL + Redis | `ACCOUNT_STORAGE=mysql`、`ACCOUNT_MYSQL_URL`、`RUNTIME_REDIS_URL` | MySQL 存账号/配置，Redis 用于任务快照和维护任务协调。 |
-| PostgreSQL + Redis | `ACCOUNT_STORAGE=postgresql`、`ACCOUNT_POSTGRESQL_URL`、`RUNTIME_REDIS_URL` | PostgreSQL 存账号/配置，Redis 用于任务快照和维护任务协调。 |
+| Redis | Upstash Redis / Vercel KV | `REDIS_URL`、`KV_URL`、`UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN`、`KV_REST_API_URL` + `KV_REST_API_TOKEN` |
+| MySQL | MySQL 兼容 Marketplace 存储 | `MYSQL_URL`，或 scheme 为 `mysql://` 的 `DATABASE_URL` |
+| PostgreSQL | Neon / Supabase / PostgreSQL 兼容存储 | `POSTGRES_URL`、`POSTGRES_PRISMA_URL`、`POSTGRES_URL_NON_POOLING`、`DATABASE_URL_UNPOOLED`，或 scheme 为 `postgres://` / `postgresql://` 的 `DATABASE_URL` |
+| MySQL + Redis | 连接 MySQL 后再连接 Upstash Redis / Vercel KV | SQL 变量用于账号和配置，Redis/Upstash 变量用于任务快照和维护任务协调 |
+| PostgreSQL + Redis | 连接 PostgreSQL 后再连接 Upstash Redis / Vercel KV | SQL 变量用于账号和配置，Redis/Upstash 变量用于任务快照和维护任务协调 |
+
+高级用法仍可手动设置 `ACCOUNT_STORAGE`、`ACCOUNT_MYSQL_URL`、`ACCOUNT_POSTGRESQL_URL`、`ACCOUNT_REDIS_URL` 或 `RUNTIME_REDIS_URL`；显式 `ACCOUNT_*` 会优先于 Marketplace 自动识别。若同一项目同时连接了 MySQL 和 PostgreSQL，请设置 `ACCOUNT_STORAGE=mysql` 或 `ACCOUNT_STORAGE=postgresql` 明确选择账号/配置存储。
 
 还需要设置：
 
@@ -341,16 +343,19 @@ server {
 | `LOG_DIR` | 本地日志目录 | `./logs` |
 | `GORK_RUNTIME_MODE` | 运行模式；Vercel 使用 `serverless`，禁用常驻后台 loop | `""` |
 | `CRON_SECRET` | Vercel 内部维护接口鉴权密钥 | `""` |
-| `ACCOUNT_STORAGE` | 账号存储后端：`local` / `redis` / `mysql` / `postgresql` | `local` |
+| `ACCOUNT_STORAGE` | 账号存储后端：`local` / `redis` / `mysql` / `postgresql`；Vercel 未设置时会自动识别 Marketplace 存储 | `local` |
 | `ACCOUNT_LOCAL_PATH` | `local` 模式 SQLite 路径 | `${DATA_DIR}/accounts.db` |
-| `ACCOUNT_REDIS_URL` | `redis` 账号存储 DSN；也可被 Redis runtime 复用 | `""` |
-| `ACCOUNT_MYSQL_URL` | `mysql` 模式 DSN | `""` |
-| `ACCOUNT_POSTGRESQL_URL` | `postgresql` 模式 DSN | `""` |
+| `ACCOUNT_REDIS_URL` | 手动指定 `redis` 账号存储 TCP DSN；也可被 Redis runtime 复用 | `""` |
+| `ACCOUNT_MYSQL_URL` | 手动指定 `mysql` 模式 DSN | `""` |
+| `ACCOUNT_POSTGRESQL_URL` | 手动指定 `postgresql` 模式 DSN | `""` |
 | `ACCOUNT_SQL_POOL_SIZE` | SQL 连接池核心连接数 | `5` |
 | `ACCOUNT_SQL_MAX_OVERFLOW` | SQL 连接池最大溢出 | `10` |
 | `ACCOUNT_SQL_POOL_TIMEOUT` | 等待空闲连接超时（秒） | `30` |
 | `ACCOUNT_SQL_POOL_RECYCLE` | 连接最大复用时间（秒） | `1800` |
-| `RUNTIME_REDIS_URL` | 可选 Redis runtime DSN，用于任务快照、调度选主等运行时协调；留空时回退本地行为 | `""` |
+| `RUNTIME_REDIS_URL` | 手动指定 Redis runtime TCP DSN；留空时会复用 `ACCOUNT_REDIS_URL` 或自动识别 Upstash/Vercel KV REST 变量 | `""` |
+| `REDIS_URL` / `KV_URL` | Vercel/Redis 集成注入的 TCP Redis DSN，可自动作为账号存储或 runtime Redis | `""` |
+| `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis REST 变量，可自动作为账号存储或 runtime Redis | `""` |
+| `KV_REST_API_URL` + `KV_REST_API_TOKEN` | Vercel KV REST 变量，可自动作为账号存储或 runtime Redis | `""` |
 | `RUNTIME_TASK_TTL_S` | Redis task snapshot 保留时间（秒） | `300` |
 | `RUNTIME_REDIS_LOCK_TTL_MS` | Redis scheduler leader 锁租约时间（毫秒） | `300000` |
 | `CONFIG_LOCAL_PATH` | 运行时配置文件路径 | `${DATA_DIR}/config.toml` |

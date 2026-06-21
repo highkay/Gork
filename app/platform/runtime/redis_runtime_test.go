@@ -163,6 +163,8 @@ func TestRuntimeRedisURLAndCreateStoreFromEnv(t *testing.T) {
 
 	t.Setenv("ACCOUNT_REDIS_URL", "")
 	t.Setenv("RUNTIME_REDIS_URL", "")
+	t.Setenv("KV_REST_API_URL", "")
+	t.Setenv("KV_REST_API_TOKEN", "")
 	store, err = CreateRuntimeStoreFromEnv(func(rawURL string) (RedisRuntimeClient, error) {
 		t.Fatalf("factory should not be called without URL")
 		return nil, nil
@@ -172,6 +174,25 @@ func TestRuntimeRedisURLAndCreateStoreFromEnv(t *testing.T) {
 	}
 	if store != nil {
 		t.Fatalf("empty env store = %#v", store)
+	}
+
+	t.Setenv("KV_REST_API_URL", "https://example.upstash.io")
+	t.Setenv("KV_REST_API_TOKEN", "token")
+	if got := RuntimeRedisURL(); got != "" {
+		t.Fatalf("RuntimeRedisURL for REST = %q, want empty TCP URL", got)
+	}
+	store, err = CreateRuntimeStoreFromEnv(func(rawURL string) (RedisRuntimeClient, error) {
+		t.Fatalf("TCP factory should not be called for REST redis: %s", rawURL)
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatalf("CreateRuntimeStoreFromEnv REST returned error: %v", err)
+	}
+	if store == nil {
+		t.Fatalf("REST env store is nil")
+	}
+	if _, ok := store.Redis.(RedisTaskClient); !ok {
+		t.Fatalf("REST runtime Redis client should support task snapshots")
 	}
 }
 

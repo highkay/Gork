@@ -10,6 +10,7 @@ import (
 
 	account "github.com/dslzl/gork/app/control/account"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/deployenv"
 )
 
 var supportedBackends = map[string]struct{}{
@@ -20,10 +21,12 @@ var supportedBackends = map[string]struct{}{
 }
 
 type RepositoryConstructor func(string) (account.AccountRepository, error)
+type RepositoryRESTConstructor func(deployenv.RedisREST) (account.AccountRepository, error)
 
 type RepositoryConstructors struct {
 	Local      RepositoryConstructor
 	Redis      RepositoryConstructor
+	RedisREST  RepositoryRESTConstructor
 	MySQL      RepositoryConstructor
 	PostgreSQL RepositoryConstructor
 }
@@ -41,35 +44,39 @@ func CreateRepository(
 }
 
 func DescribeRepositoryTarget(env map[string]string) (string, string, error) {
-	backend, err := GetRepositoryBackend(env)
+	storage, err := deployenv.ResolveStorage(env)
 	if err != nil {
 		return "", "", err
 	}
-	switch backend {
+	switch storage.Backend {
 	case "local":
 		return "local", ResolveLocalDBPath(env), nil
 	case "redis":
-		value, err := requiredEnv(env, "ACCOUNT_REDIS_URL")
-		if err != nil {
-			return "", "", err
+		if storage.Redis.URL != "" {
+			return "redis", RedactRepositoryURL(storage.Redis.URL), nil
 		}
-		return "redis", RedactRepositoryURL(value), nil
+		if storage.Redis.REST != nil {
+			return "redis", RedactRepositoryURL(storage.Redis.REST.URL), nil
+		}
+		return "", "", fmt.Errorf("Redis account storage requires ACCOUNT_REDIS_URL or Upstash REST env")
 	case "mysql":
-		return "mysql", RedactRepositoryURL(envValue(env, "ACCOUNT_MYSQL_URL", "")), nil
+		return "mysql", RedactRepositoryURL(storage.MySQLURL), nil
 	case "postgresql":
-		value := envValue(env, "ACCOUNT_POSTGRESQL_URL", "")
-		return "postgresql", RedactRepositoryURL(value), nil
+		return "postgresql", RedactRepositoryURL(storage.PostgreSQLURL), nil
 	default:
-		return backend, "<unknown>", nil
+		return storage.Backend, "<unknown>", nil
 	}
 }
 
 func GetRepositoryBackend(env map[string]string) (string, error) {
-	backend := strings.ToLower(envValue(env, "ACCOUNT_STORAGE", "local"))
-	if _, ok := supportedBackends[backend]; !ok {
-		return "", unknownBackendError(backend)
+	storage, err := deployenv.ResolveStorage(env)
+	if err != nil {
+		return "", err
 	}
-	return backend, nil
+	if _, ok := supportedBackends[storage.Backend]; !ok {
+		return "", unknownBackendError(storage.Backend)
+	}
+	return storage.Backend, nil
 }
 
 func ResolveLocalDBPath(env map[string]string) string {
@@ -99,6 +106,9 @@ func (constructors RepositoryConstructors) WithDefaults() RepositoryConstructors
 	if constructors.Redis == nil {
 		constructors.Redis = newRedisRepository
 	}
+	if constructors.RedisREST == nil {
+		constructors.RedisREST = newRedisRESTRepository
+	}
 	if constructors.MySQL == nil {
 		constructors.MySQL = newMySQLRepository
 	}
@@ -113,20 +123,25 @@ func createRepositoryForBackend(
 	constructors RepositoryConstructors,
 	backend string,
 ) (account.AccountRepository, error) {
+	storage, err := deployenv.ResolveStorage(env)
+	if err != nil {
+		return nil, err
+	}
 	switch backend {
 	case "local":
 		return constructors.Local(ResolveLocalDBPath(env))
 	case "redis":
-		value, err := requiredEnv(env, "ACCOUNT_REDIS_URL")
-		if err != nil {
-			return nil, err
+		if storage.Redis.URL != "" {
+			return constructors.Redis(storage.Redis.URL)
 		}
-		return constructors.Redis(value)
+		if storage.Redis.REST != nil {
+			return constructors.RedisREST(*storage.Redis.REST)
+		}
+		return nil, fmt.Errorf("Redis account storage requires ACCOUNT_REDIS_URL or Upstash REST env")
 	case "mysql":
-		return constructors.MySQL(envValue(env, "ACCOUNT_MYSQL_URL", ""))
+		return constructors.MySQL(storage.MySQLURL)
 	case "postgresql":
-		value := envValue(env, "ACCOUNT_POSTGRESQL_URL", "")
-		return constructors.PostgreSQL(value)
+		return constructors.PostgreSQL(storage.PostgreSQLURL)
 	default:
 		return nil, unknownBackendError(backend)
 	}

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
+
+	"github.com/dslzl/gork/app/platform/deployenv"
 )
 
 type RedisRuntimeClient interface {
@@ -153,23 +155,30 @@ func (s *RedisRuntimeStore) Close(ctx context.Context) error {
 }
 
 func RuntimeRedisURL() string {
-	if value := strings.TrimSpace(os.Getenv("RUNTIME_REDIS_URL")); value != "" {
-		return value
-	}
-	return strings.TrimSpace(os.Getenv("ACCOUNT_REDIS_URL"))
+	return deployenv.ResolveRuntimeRedis(nil).URL
 }
 
 func CreateRuntimeStoreFromEnv(factory RedisRuntimeClientFactory) (*RedisRuntimeStore, error) {
-	rawURL := RuntimeRedisURL()
-	if rawURL == "" {
+	redisConfig := deployenv.ResolveRuntimeRedis(nil)
+	if redisConfig.URL == "" && redisConfig.REST == nil {
 		return nil, nil
 	}
-	if factory == nil {
-		factory = newGoRedisRuntimeClient
-	}
-	client, err := factory(rawURL)
-	if err != nil {
-		return nil, err
+	var client RedisRuntimeClient
+	if redisConfig.URL != "" {
+		if factory == nil {
+			factory = newGoRedisRuntimeClient
+		}
+		var err error
+		client, err = factory(redisConfig.URL)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		client, err = newRedisRESTRuntimeClient(*redisConfig.REST)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return NewRedisRuntimeStore(client, RedisRuntimeStoreOptions{}), nil
 }

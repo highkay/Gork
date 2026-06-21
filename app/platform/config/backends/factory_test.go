@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dslzl/gork/app/platform/deployenv"
 )
 
 func TestGetConfigBackendNameMatchesAccountStorage(t *testing.T) {
@@ -15,6 +17,12 @@ func TestGetConfigBackendNameMatchesAccountStorage(t *testing.T) {
 	}
 	if got := GetConfigBackendName(map[string]string{"ACCOUNT_STORAGE": " ReDiS "}); got != "redis" {
 		t.Fatalf("normalized backend = %q, want redis", got)
+	}
+	if got := GetConfigBackendName(map[string]string{"DATABASE_URL": "postgresql://db"}); got != "postgresql" {
+		t.Fatalf("auto backend = %q, want postgresql", got)
+	}
+	if got := GetConfigBackendName(map[string]string{"KV_REST_API_URL": "https://redis", "KV_REST_API_TOKEN": "token"}); got != "redis" {
+		t.Fatalf("auto redis backend = %q, want redis", got)
 	}
 }
 
@@ -136,8 +144,23 @@ func TestCreateConfigBackendRedisAndSQLValidateURLs(t *testing.T) {
 	}
 
 	_, err = CreateConfigBackend(FactoryOptions{Env: map[string]string{"ACCOUNT_STORAGE": "redis"}})
-	if err == nil || err.Error() != "Redis config backend requires ACCOUNT_REDIS_URL" {
+	if err == nil || err.Error() != "Redis config backend requires ACCOUNT_REDIS_URL or Upstash REST env" {
 		t.Fatalf("missing redis URL error = %v", err)
+	}
+
+	calls = &factoryCalls{}
+	backend, err = CreateConfigBackend(FactoryOptions{
+		Env: map[string]string{
+			"KV_REST_API_URL":   "https://redis",
+			"KV_REST_API_TOKEN": "token",
+		},
+		NewRedisREST: calls.newRedisREST,
+	})
+	if err != nil {
+		t.Fatalf("CreateConfigBackend redis rest returned error: %v", err)
+	}
+	if backend != calls.backend || calls.redisREST.URL != "https://redis" || calls.redisREST.Token != "token" {
+		t.Fatalf("redis rest call = %#v backend %#v", calls.redisREST, backend)
 	}
 
 	calls = &factoryCalls{}
@@ -194,6 +217,7 @@ type factoryCalls struct {
 	backend    *fakeFactoryBackend
 	tomlPath   string
 	redisURL   string
+	redisREST  deployenv.RedisREST
 	sqlDialect string
 	sqlURL     string
 }
@@ -212,6 +236,11 @@ func (c *factoryCalls) newToml(path string) (ConfigBackend, error) {
 
 func (c *factoryCalls) newRedis(rawURL string) (ConfigBackend, error) {
 	c.redisURL = rawURL
+	return c.ensureBackend(), nil
+}
+
+func (c *factoryCalls) newRedisREST(config deployenv.RedisREST) (ConfigBackend, error) {
+	c.redisREST = config
 	return c.ensureBackend(), nil
 }
 

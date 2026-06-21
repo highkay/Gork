@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	account "github.com/dslzl/gork/app/control/account"
+	"github.com/dslzl/gork/app/platform/deployenv"
 )
 
 type fakeRepository struct{}
@@ -48,6 +49,9 @@ func TestGetRepositoryBackend(t *testing.T) {
 		{name: "default", env: map[string]string{}, want: "local"},
 		{name: "empty", env: map[string]string{"ACCOUNT_STORAGE": ""}, want: "local"},
 		{name: "case normalized", env: map[string]string{"ACCOUNT_STORAGE": " REDIS "}, want: "redis"},
+		{name: "auto postgres", env: map[string]string{"POSTGRES_URL": "postgres://db"}, want: "postgresql"},
+		{name: "auto mysql", env: map[string]string{"MYSQL_URL": "mysql://db"}, want: "mysql"},
+		{name: "auto redis rest", env: map[string]string{"KV_REST_API_URL": "https://redis", "KV_REST_API_TOKEN": "token"}, want: "redis"},
 		{
 			name:    "bad",
 			env:     map[string]string{"ACCOUNT_STORAGE": "bad"},
@@ -107,6 +111,10 @@ func TestCreateRepositoryDispatchesConfiguredBackend(t *testing.T) {
 			calls = append(calls, "redis")
 			return fakeRepository{}, nil
 		},
+		RedisREST: func(deployenv.RedisREST) (account.AccountRepository, error) {
+			calls = append(calls, "redis-rest")
+			return fakeRepository{}, nil
+		},
 		MySQL: func(string) (account.AccountRepository, error) {
 			calls = append(calls, "mysql")
 			return fakeRepository{}, nil
@@ -122,6 +130,29 @@ func TestCreateRepositoryDispatchesConfiguredBackend(t *testing.T) {
 	}
 	if len(calls) != 1 || calls[0] != "postgresql" {
 		t.Fatalf("constructor calls = %#v", calls)
+	}
+	calls = []string{}
+	_, err = CreateRepository(map[string]string{
+		"KV_REST_API_URL":   "https://redis",
+		"KV_REST_API_TOKEN": "token",
+	}, constructors)
+	if err != nil {
+		t.Fatalf("CreateRepository auto redis rest returned error: %v", err)
+	}
+	if len(calls) != 1 || calls[0] != "redis-rest" {
+		t.Fatalf("redis rest constructor calls = %#v", calls)
+	}
+	calls = []string{}
+	_, err = CreateRepository(map[string]string{
+		"POSTGRES_URL":      "postgres://db",
+		"KV_REST_API_URL":   "https://redis",
+		"KV_REST_API_TOKEN": "token",
+	}, constructors)
+	if err != nil {
+		t.Fatalf("CreateRepository sql plus redis returned error: %v", err)
+	}
+	if len(calls) != 1 || calls[0] != "postgresql" {
+		t.Fatalf("sql plus redis constructor calls = %#v", calls)
 	}
 	_, err = CreateRepository(map[string]string{"ACCOUNT_STORAGE": "redis"}, constructors)
 	if err == nil {

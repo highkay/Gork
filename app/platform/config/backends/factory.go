@@ -9,23 +9,30 @@ import (
 	"strings"
 
 	platform "github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/deployenv"
 )
 
 type BackendConstructor func(path string) (ConfigBackend, error)
 type RedisBackendConstructor func(rawURL string) (ConfigBackend, error)
+type RedisRESTBackendConstructor func(deployenv.RedisREST) (ConfigBackend, error)
 type SQLBackendConstructor func(dialect, rawURL string) (ConfigBackend, error)
 
 type FactoryOptions struct {
-	Env         map[string]string
-	DataDir     string
-	ProjectRoot string
-	NewToml     BackendConstructor
-	NewRedis    RedisBackendConstructor
-	NewSQL      SQLBackendConstructor
+	Env          map[string]string
+	DataDir      string
+	ProjectRoot  string
+	NewToml      BackendConstructor
+	NewRedis     RedisBackendConstructor
+	NewRedisREST RedisRESTBackendConstructor
+	NewSQL       SQLBackendConstructor
 }
 
 func GetConfigBackendName(env map[string]string) string {
-	return strings.ToLower(strings.TrimSpace(factoryEnv(env, "ACCOUNT_STORAGE", "local")))
+	storage, err := deployenv.ResolveStorage(env)
+	if err != nil {
+		return strings.ToLower(strings.TrimSpace(factoryEnv(env, "ACCOUNT_STORAGE", "local")))
+	}
+	return storage.Backend
 }
 
 func CreateConfigBackend(options FactoryOptions) (ConfigBackend, error) {
@@ -58,25 +65,38 @@ func makeTomlBackend(options FactoryOptions) (ConfigBackend, error) {
 }
 
 func makeRedisBackend(options FactoryOptions) (ConfigBackend, error) {
-	rawURL := strings.TrimSpace(factoryEnv(options.Env, "ACCOUNT_REDIS_URL", ""))
-	if rawURL == "" {
-		return nil, fmt.Errorf("Redis config backend requires ACCOUNT_REDIS_URL")
+	storage, err := deployenv.ResolveStorage(options.Env)
+	if err != nil {
+		return nil, err
 	}
-	constructor := options.NewRedis
-	if constructor == nil {
-		constructor = newGoRedisConfigBackend
+	if storage.Redis.URL != "" {
+		constructor := options.NewRedis
+		if constructor == nil {
+			constructor = newGoRedisConfigBackend
+		}
+		return constructor(storage.Redis.URL)
 	}
-	return constructor(rawURL)
+	if storage.Redis.REST != nil {
+		constructor := options.NewRedisREST
+		if constructor == nil {
+			constructor = newRedisRESTConfigBackend
+		}
+		return constructor(*storage.Redis.REST)
+	}
+	return nil, fmt.Errorf("Redis config backend requires ACCOUNT_REDIS_URL or Upstash REST env")
 }
 
 func makeSQLBackend(dialect string, options FactoryOptions) (ConfigBackend, error) {
-	envName := "ACCOUNT_POSTGRESQL_URL"
+	storage, err := deployenv.ResolveStorage(options.Env)
+	if err != nil {
+		return nil, err
+	}
+	rawURL := storage.PostgreSQLURL
 	missingMessage := "PostgreSQL config backend requires ACCOUNT_POSTGRESQL_URL"
 	if dialect == "mysql" {
-		envName = "ACCOUNT_MYSQL_URL"
+		rawURL = storage.MySQLURL
 		missingMessage = "MySQL config backend requires ACCOUNT_MYSQL_URL"
 	}
-	rawURL := strings.TrimSpace(factoryEnv(options.Env, envName, ""))
 	if rawURL == "" {
 		return nil, errors.New(missingMessage)
 	}
