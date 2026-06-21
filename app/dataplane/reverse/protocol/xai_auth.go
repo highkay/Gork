@@ -205,7 +205,9 @@ func (c *XAIAuthClient) NSFWSequence(ctx context.Context, token string) error {
 	}
 	shared := authCallOptions{lease: &lease, session: struct{}{}}
 	if _, err := c.setBirthDate(ctx, token, shared); err != nil {
-		return c.sequenceFeedbackError(ctx, lease, err)
+		if !isLockedBirthDateLimitError(err) {
+			return c.sequenceFeedbackError(ctx, lease, err)
+		}
 	}
 	if _, err := c.grpcCall(ctx, NSFWMgmtURL, token, BuildNSFWMgmtPayload(true), "enable_nsfw", GrokOrigin, GrokOrigin+"/?_s=data", shared); err != nil {
 		return c.sequenceFeedbackError(ctx, lease, err)

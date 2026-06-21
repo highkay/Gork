@@ -15,6 +15,8 @@ type consoleResponseOptions struct {
 	EmitThink   *bool
 	Temperature float64
 	TopP        float64
+	Tools       []map[string]any
+	ToolChoice  any
 	ResponseID  string
 	ReasoningID string
 	MessageID   string
@@ -76,6 +78,7 @@ func ConsoleResponses(ctx context.Context, options consoleResponseOptions) (chat
 
 func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptions, account chatAccount, responseID, messageID string, isStream bool) (chatCompletionResult, error) {
 	upstreamStream := true
+	functionToolNames := protocol.ClientFunctionToolNames(options.Tools)
 	payload := protocol.BuildConsolePayload(protocol.ConsolePayloadOptions{
 		Messages:        options.Messages,
 		Model:           options.Model,
@@ -83,6 +86,8 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 		TopP:            options.TopP,
 		ReasoningEffort: consoleReasoningEffort(options.EmitThink),
 		Stream:          &upstreamStream,
+		Tools:           options.Tools,
+		ToolChoice:      options.ToolChoice,
 	})
 
 	events, err := consoleStreamChat(ctx, account.Token, payload, chatTimeoutSeconds())
@@ -90,8 +95,10 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 		return chatCompletionResult{}, err
 	}
 
-	adapter := protocol.NewConsoleStreamAdapter()
+	adapter := protocol.NewConsoleStreamAdapter(functionToolNames)
 	frames := consoleResponseInitialFrames(responseID, options.Model, messageID, isStream)
+	messageStarted := false
+	buffered := []string{}
 	for _, event := range events {
 		tokens, err := adapter.Feed(event.EventType, event.Data)
 		if err != nil {
@@ -99,6 +106,14 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 		}
 		if isStream {
 			for _, token := range tokens {
+				if adapter.HasFunctionTools() {
+					buffered = append(buffered, token)
+					continue
+				}
+				if !messageStarted {
+					messageStarted = true
+					frames = append(frames, consoleResponseMessageStartFrames(messageID)...)
+				}
 				frames = append(frames, consoleResponseTextDeltaFrame(messageID, token))
 			}
 		}
@@ -106,6 +121,29 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 
 	fullText := adapter.FullText()
 	usage := consoleResponseUsage(adapter, options.Messages)
+	if len(adapter.FunctionCalls) > 0 {
+		output := buildResponseFunctionCallItems(adapter.FunctionCalls)
+		usage = BuildRespUsage(
+			consoleInputTokens(adapter, options.Messages),
+			estimateToolCallTokens(output),
+		)
+		response := MakeRespObject(RespObjectParams{
+			ResponseID: responseID,
+			Model:      options.Model,
+			Status:     "completed",
+			Output:     output,
+			Usage:      usage,
+		})
+		if !isStream {
+			return chatCompletionResult{Response: response}, nil
+		}
+		frames = append(frames, emitResponseFunctionCallEvents(output, 0)...)
+		frames = append(frames, FormatSSE("response.completed", map[string]any{
+			"type":     "response.completed",
+			"response": response,
+		}), "data: [DONE]\n\n")
+		return chatCompletionResult{IsStream: true, StreamFrames: frames}, nil
+	}
 	output := []map[string]any{consoleResponseOutputItem(messageID, fullText)}
 	response := MakeRespObject(RespObjectParams{
 		ResponseID: responseID,
@@ -118,6 +156,13 @@ func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptio
 		return chatCompletionResult{Response: response}, nil
 	}
 
+	if !messageStarted {
+		messageStarted = true
+		frames = append(frames, consoleResponseMessageStartFrames(messageID)...)
+	}
+	for _, token := range buffered {
+		frames = append(frames, consoleResponseTextDeltaFrame(messageID, token))
+	}
 	frames = append(frames,
 		FormatSSE("response.output_text.done", map[string]any{
 			"type":          "response.output_text.done",
@@ -169,6 +214,11 @@ func consoleResponseInitialFrames(responseID, modelName, messageID string, isStr
 	return []string{
 		inProgress("response.created"),
 		inProgress("response.in_progress"),
+	}
+}
+
+func consoleResponseMessageStartFrames(messageID string) []string {
+	return []string{
 		FormatSSE("response.output_item.added", map[string]any{
 			"type":         "response.output_item.added",
 			"output_index": 0,

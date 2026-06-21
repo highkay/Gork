@@ -27,8 +27,8 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeRouterError(w, err)
 		return
 	}
-	if shouldStreamMedia {
-		streamChatMediaResult(w, r, req)
+	if shouldStreamMedia || routerRequestExplicitStream(req.Stream) {
+		streamChatResult(w, r, req)
 		return
 	}
 	result, err := dispatchChatRequest(r, req)
@@ -73,7 +73,7 @@ func shouldStartChatMediaStream(req ChatCompletionRequest) (bool, error) {
 	return false, nil
 }
 
-func streamChatMediaResult(w http.ResponseWriter, r *http.Request, req ChatCompletionRequest) {
+func streamChatResult(w http.ResponseWriter, r *http.Request, req ChatCompletionRequest) {
 	startRouterStream(w)
 	heartbeatID := MakeResponseID()
 	writeRouterStreamHeartbeat(w, req.Model, heartbeatID)
@@ -90,7 +90,7 @@ func streamChatMediaResult(w http.ResponseWriter, r *http.Request, req ChatCompl
 		select {
 		case outcome := <-done:
 			if outcome.err != nil {
-				logChatMediaStreamError(req.Model, outcome.err)
+				logChatStreamError(req.Model, outcome.err)
 				writeRouterStreamError(w, outcome.err)
 				return
 			}
@@ -109,7 +109,7 @@ type chatMediaStreamOutcome struct {
 	err    error
 }
 
-func logChatMediaStreamError(modelName string, err error) {
+func logChatStreamError(modelName string, err error) {
 	var upstream *platform.UpstreamError
 	if errors.As(err, &upstream) {
 		logging.Logger.Warn(
@@ -249,7 +249,7 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 	if req.Reasoning != nil {
 		emitThink = req.Reasoning["effort"] != "none"
 	}
-	result, err := routerResponses(r.Context(), responseOptions{
+	options := responseOptions{
 		Model:        req.Model,
 		Input:        req.Input,
 		Instructions: req.Instructions,
@@ -259,12 +259,49 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 		TopP:         routerFloatDefault(req.TopP, 0.95),
 		Tools:        routerToolMaps(req.Tools),
 		ToolChoice:   req.ToolChoice,
-	})
+	}
+	if routerRequestExplicitStream(req.Stream) {
+		streamResponsesResult(w, r, options)
+		return
+	}
+	result, err := routerResponses(r.Context(), options)
 	if err != nil {
 		writeRouterError(w, err)
 		return
 	}
 	writeChatResult(w, result)
+}
+
+func routerRequestExplicitStream(stream *bool) bool {
+	return stream != nil && *stream
+}
+
+func streamResponsesResult(w http.ResponseWriter, r *http.Request, options responseOptions) {
+	startRouterStream(w)
+	writeRouterStreamHeartbeat(w, options.Model, MakeResponseID())
+	done := make(chan chatMediaStreamOutcome, 1)
+	go func() {
+		result, err := routerResponses(r.Context(), options)
+		done <- chatMediaStreamOutcome{result: result, err: err}
+	}()
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case outcome := <-done:
+			if outcome.err != nil {
+				logChatStreamError(options.Model, outcome.err)
+				writeRouterStreamError(w, outcome.err)
+				return
+			}
+			writeRouterStreamFrames(w, outcome.result.StreamFrames)
+			return
+		case <-ticker.C:
+			writeRouterStreamHeartbeat(w, options.Model, MakeResponseID())
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 func handleImageGenerations(w http.ResponseWriter, r *http.Request) {

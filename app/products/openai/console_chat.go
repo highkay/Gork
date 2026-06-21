@@ -74,6 +74,7 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 
 func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOptions, account chatAccount, responseID string, isStream bool, timeoutS float64) (chatCompletionResult, error) {
 	upstreamStream := true
+	functionToolNames := protocol.ClientFunctionToolNames(options.Tools)
 	payload := protocol.BuildConsolePayload(protocol.ConsolePayloadOptions{
 		Messages:        options.Messages,
 		Model:           options.Model,
@@ -81,6 +82,8 @@ func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOpti
 		TopP:            options.TopP,
 		ReasoningEffort: consoleReasoningEffort(options.EmitThink),
 		Stream:          &upstreamStream,
+		Tools:           options.Tools,
+		ToolChoice:      options.ToolChoice,
 	})
 
 	events, err := consoleStreamChat(ctx, account.Token, payload, timeoutS)
@@ -88,8 +91,9 @@ func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOpti
 		return chatCompletionResult{}, err
 	}
 
-	adapter := protocol.NewConsoleStreamAdapter()
+	adapter := protocol.NewConsoleStreamAdapter(functionToolNames)
 	frames := []string{}
+	buffered := []string{}
 	for _, event := range events {
 		tokens, err := adapter.Feed(event.EventType, event.Data)
 		if err != nil {
@@ -97,6 +101,10 @@ func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOpti
 		}
 		if isStream {
 			for _, token := range tokens {
+				if adapter.HasFunctionTools() {
+					buffered = append(buffered, token)
+					continue
+				}
 				frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
 					ResponseID: responseID,
 					Model:      options.Model,
@@ -107,7 +115,47 @@ func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOpti
 	}
 
 	usage := consoleUsage(adapter, options.Messages)
+	if len(adapter.FunctionCalls) > 0 {
+		toolCalls := consoleToolCallsAny(adapter.FunctionCalls)
+		usage = BuildUsage(
+			consoleInputTokens(adapter, options.Messages),
+			platform.EstimateToolCallTokens(toolCalls),
+		)
+		if isStream {
+			for index, call := range adapter.FunctionCalls {
+				frames = append(frames, formatChatDataFrame(MakeToolCallChunk(ToolCallChunkParams{
+					ResponseID: responseID,
+					Model:      options.Model,
+					Index:      index,
+					CallID:     call.CallID,
+					Name:       call.Name,
+					Arguments:  call.Arguments,
+					IsFirst:    true,
+				})))
+			}
+			frames = append(frames, formatChatDataFrame(MakeToolCallDoneChunk(ToolCallDoneChunkParams{
+				ResponseID: responseID,
+				Model:      options.Model,
+				Usage:      usage,
+			})), "data: [DONE]\n\n")
+			return chatCompletionResult{IsStream: true, StreamFrames: frames}, nil
+		}
+		return chatCompletionResult{Response: MakeToolCallResponse(ToolCallResponseParams{
+			Model:         options.Model,
+			ToolCalls:     toolCalls,
+			PromptContent: options.Messages,
+			ResponseID:    responseID,
+			Usage:         usage,
+		})}, nil
+	}
 	if isStream {
+		for _, token := range buffered {
+			frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
+				ResponseID: responseID,
+				Model:      options.Model,
+				Content:    token,
+			})))
+		}
 		frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
 			ResponseID:   responseID,
 			Model:        options.Model,
@@ -126,6 +174,23 @@ func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOpti
 		ResponseID:    responseID,
 		Usage:         usage,
 	})}, nil
+}
+
+func consoleToolCallsAny(calls []protocol.ParsedToolCall) []any {
+	toolCalls := make([]any, 0, len(calls))
+	for _, call := range calls {
+		toolCalls = append(toolCalls, call)
+	}
+	return toolCalls
+}
+
+func consoleInputTokens(adapter *protocol.ConsoleStreamAdapter, messages []map[string]any) int {
+	if adapter.Usage != nil {
+		if tokens := intFromAny(adapter.Usage["input_tokens"]); tokens > 0 {
+			return tokens
+		}
+	}
+	return platform.EstimatePromptTokens(messages, platform.PromptOverhead)
 }
 
 func consoleUsage(adapter *protocol.ConsoleStreamAdapter, messages []map[string]any) map[string]any {

@@ -2,6 +2,7 @@ package backends
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	account "github.com/dslzl/gork/app/control/account"
@@ -10,18 +11,28 @@ import (
 
 func upsertLocalAccounts(
 	ctx context.Context,
-	tx localSQLRunner,
+	tx *sql.Tx,
 	items []account.AccountUpsert,
 	revision int,
 ) (int, error) {
 	ts := platformruntime.NowMS()
 	count := 0
+	stmt, err := tx.PrepareContext(ctx, localUpsertSQL)
+	if err != nil {
+		return 0, err
+	}
+	defer stmt.Close()
+	quotaCache := map[string]localQuotaJSON{}
 	for _, item := range items {
 		token, pool, ok := normalizeLocalUpsert(item)
 		if !ok {
 			continue
 		}
-		affected, err := upsertLocalAccount(ctx, tx, item, token, pool, ts, revision)
+		quota, err := cachedLocalQuotaJSON(quotaCache, pool)
+		if err != nil {
+			return 0, err
+		}
+		affected, err := upsertLocalAccount(ctx, stmt, item, token, pool, ts, revision, quota)
 		if err != nil {
 			return 0, err
 		}
@@ -43,17 +54,43 @@ func normalizeLocalUpsert(item account.AccountUpsert) (string, string, bool) {
 	return record.Token, pool, true
 }
 
+type localQuotaJSON struct {
+	Auto    string
+	Fast    string
+	Expert  string
+	Heavy   string
+	Grok43  string
+	Console string
+}
+
+func cachedLocalQuotaJSON(cache map[string]localQuotaJSON, pool string) (localQuotaJSON, error) {
+	if quota, ok := cache[pool]; ok {
+		return quota, nil
+	}
+	quotaSet := account.DefaultQuotaSet(pool)
+	quota := localQuotaJSON{
+		Auto:    mustQuotaJSON(quotaSet.Auto),
+		Fast:    mustQuotaJSON(quotaSet.Fast),
+		Expert:  mustQuotaJSON(quotaSet.Expert),
+		Heavy:   optionalQuotaJSON(quotaSet.Heavy),
+		Grok43:  optionalQuotaJSON(quotaSet.Grok43),
+		Console: optionalQuotaJSON(quotaSet.Console),
+	}
+	cache[pool] = quota
+	return quota, nil
+}
+
 func upsertLocalAccount(
 	ctx context.Context,
-	tx localSQLRunner,
+	stmt *sql.Stmt,
 	item account.AccountUpsert,
 	token string,
 	pool string,
 	ts int64,
 	revision int,
+	quota localQuotaJSON,
 ) (int, error) {
 	item.Normalize()
-	quota := account.DefaultQuotaSet(pool)
 	tags, err := jsonString(item.Tags)
 	if err != nil {
 		return 0, err
@@ -62,10 +99,8 @@ func upsertLocalAccount(
 	if err != nil {
 		return 0, err
 	}
-	result, err := tx.ExecContext(ctx, localUpsertSQL, token, pool, ts, ts, tags,
-		mustQuotaJSON(quota.Auto), mustQuotaJSON(quota.Fast), mustQuotaJSON(quota.Expert),
-		optionalQuotaJSON(quota.Heavy), optionalQuotaJSON(quota.Grok43),
-		optionalQuotaJSON(quota.Console), ext, revision)
+	result, err := stmt.ExecContext(ctx, token, pool, ts, ts, tags,
+		quota.Auto, quota.Fast, quota.Expert, quota.Heavy, quota.Grok43, quota.Console, ext, revision)
 	if err != nil {
 		return 0, err
 	}

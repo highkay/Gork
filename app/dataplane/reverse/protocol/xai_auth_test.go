@@ -326,3 +326,27 @@ func TestNSFWSequenceMatchesPythonCallOrderAndSharedLease(t *testing.T) {
 		t.Fatalf("feedbacks = %#v", proxy.feedbacks)
 	}
 }
+
+func TestNSFWSequenceSkipsLockedBirthDateLimit(t *testing.T) {
+	accountsLease := controlproxy.NewProxyLease("accounts")
+	grokLease := controlproxy.NewProxyLease("grok")
+	proxy := &fakeAuthProxy{leases: []controlproxy.ProxyLease{accountsLease, grokLease}}
+	grpc := &fakeGRPCPoster{}
+	jsonPoster := &fakeJSONPoster{errs: []error{
+		platform.NewUpstreamError("birth date locked", 429, `{"code":"birth-date-change-limit-reached"}`),
+	}}
+	client := NewXAIAuthClient(AuthClientOptions{Proxy: proxy, GRPC: grpc, JSON: jsonPoster})
+
+	if err := client.NSFWSequence(context.Background(), "token"); err != nil {
+		t.Fatalf("NSFWSequence() error = %v", err)
+	}
+	if len(jsonPoster.requests) != 1 {
+		t.Fatalf("json requests = %#v", jsonPoster.requests)
+	}
+	if len(grpc.requests) != 2 || grpc.requests[1].URL != NSFWMgmtURL {
+		t.Fatalf("grpc requests = %#v", grpc.requests)
+	}
+	if len(proxy.feedbacks) != 2 || proxy.feedbacks[1].Kind != controlproxy.ProxyFeedbackSuccess {
+		t.Fatalf("feedbacks = %#v", proxy.feedbacks)
+	}
+}

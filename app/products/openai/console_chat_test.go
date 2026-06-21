@@ -98,3 +98,43 @@ func TestConsoleCompletionsStreamFrames(t *testing.T) {
 		t.Fatalf("frames=%s", joined)
 	}
 }
+
+func TestConsoleCompletionsStreamEmitsNativeFunctionToolCall(t *testing.T) {
+	resetChatDepsForTest(t)
+	stream := true
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok1", ModeID: model.ModeConsole}}}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+	consoleStreamChat = func(_ context.Context, _ string, payload map[string]any, _ float64) ([]protocol.ConsoleStreamEvent, error) {
+		tools := payload["tools"].([]map[string]any)
+		if len(tools) < 3 || tools[2]["name"] != "lookup_order" {
+			t.Fatalf("payload tools=%#v", tools)
+		}
+		return []protocol.ConsoleStreamEvent{
+			{EventType: "response.output_text.delta", Data: `{"delta":"preface"}`},
+			{EventType: "response.output_item.done", Data: `{"output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"lookup_order","arguments":"{\"order_id\":\"A123\"}","status":"completed"}}`},
+			{EventType: "response.completed", Data: `{"response":{"usage":{"input_tokens":4,"output_tokens":5}}}`},
+		}, nil
+	}
+
+	result, err := ConsoleCompletions(context.Background(), chatCompletionOptions{
+		Model:    "grok-4.3-console",
+		Messages: []map[string]any{{"role": "user", "content": "lookup"}},
+		Stream:   &stream,
+		Tools: []map[string]any{{"type": "function", "function": map[string]any{
+			"name":       "lookup_order",
+			"parameters": map[string]any{"type": "object"},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("ConsoleCompletions tool stream err=%v", err)
+	}
+	joined := strings.Join(result.StreamFrames, "")
+	if strings.Contains(joined, "preface") {
+		t.Fatalf("buffered text leaked before tool call: %s", joined)
+	}
+	for _, want := range []string{`"tool_calls"`, `"name":"lookup_order"`, `"finish_reason":"tool_calls"`, "data: [DONE]"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("stream frames missing %q:\n%s", want, joined)
+		}
+	}
+}

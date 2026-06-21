@@ -145,17 +145,7 @@ func startRouterStream(w http.ResponseWriter) {
 }
 
 func writeRouterStreamHeartbeat(w http.ResponseWriter, modelName string, responseID string) {
-	frame := formatChatDataFrame(map[string]any{
-		"id":      responseID,
-		"object":  "chat.completion.chunk",
-		"created": formatNowUnix(),
-		"model":   modelName,
-		"choices": []any{map[string]any{
-			"index": 0,
-			"delta": map[string]any{},
-		}},
-	})
-	_, _ = w.Write([]byte(frame))
+	_, _ = w.Write([]byte(": heartbeat\n\n"))
 	flushRouterStream(w)
 }
 

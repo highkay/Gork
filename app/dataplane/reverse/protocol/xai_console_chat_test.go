@@ -98,6 +98,57 @@ func TestBuildConsolePayloadMatchesPythonContentFallbacks(t *testing.T) {
 	}
 }
 
+func TestBuildConsolePayloadMergesClientFunctionTools(t *testing.T) {
+	payload := BuildConsolePayload(ConsolePayloadOptions{
+		Messages: []map[string]any{{"role": "user", "content": "lookup order"}},
+		Model:    "grok-4.3-console",
+		Tools: []map[string]any{
+			{"type": "function", "function": map[string]any{
+				"name":        "lookup_order",
+				"description": "lookup an order",
+				"parameters":  map[string]any{"type": "object"},
+			}},
+			{"type": "web_search", "filters": map[string]any{"allowed_domains": []any{"x.ai"}}},
+		},
+	})
+
+	tools := payload["tools"].([]map[string]any)
+	if len(tools) != 3 || tools[0]["type"] != "x_search" || tools[1]["type"] != "function" || tools[2]["type"] != "web_search" {
+		t.Fatalf("merged tools = %#v", tools)
+	}
+	if tools[1]["name"] != "lookup_order" || payload["tool_choice"] != "auto" {
+		t.Fatalf("client function tool payload = %#v choice=%#v", tools[1], payload["tool_choice"])
+	}
+	names := ClientFunctionToolNames([]map[string]any{
+		{"type": "function", "function": map[string]any{"name": "lookup_order"}},
+		{"type": "function", "function": map[string]any{"name": "web_search_with_snippets"}},
+	})
+	if !reflect.DeepEqual(names, []string{"lookup_order"}) {
+		t.Fatalf("client function names = %#v", names)
+	}
+}
+
+func TestConsoleStreamAdapterCollectsClientFunctionCalls(t *testing.T) {
+	adapter := NewConsoleStreamAdapter([]string{"lookup_order"})
+	tokens, err := adapter.Feed("response.output_text.delta", `{"delta":"preface"}`)
+	if err != nil || !reflect.DeepEqual(tokens, []string{"preface"}) {
+		t.Fatalf("text feed = %#v/%v", tokens, err)
+	}
+	_, err = adapter.Feed("response.output_item.done", `{"output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"lookup_order","arguments":"{\"order_id\":\"A123\"}","status":"completed"}}`)
+	if err != nil {
+		t.Fatalf("function feed err=%v", err)
+	}
+	if len(adapter.FunctionCalls) != 1 || adapter.FunctionCalls[0].Name != "lookup_order" || adapter.FunctionCalls[0].CallID != "call_1" {
+		t.Fatalf("function calls = %#v", adapter.FunctionCalls)
+	}
+
+	defaultAdapter := NewConsoleStreamAdapter()
+	_, _ = defaultAdapter.Feed("response.output_item.done", `{"item":{"type":"function_call","call_id":"call_2","name":"lookup_order","arguments":"{}"}}`)
+	if len(defaultAdapter.FunctionCalls) != 0 {
+		t.Fatalf("default adapter should ignore function calls: %#v", defaultAdapter.FunctionCalls)
+	}
+}
+
 func TestStreamConsoleChatMatchesPythonFeedbackAndLinePairing(t *testing.T) {
 	proxy := &fakeConsoleProxy{}
 	poster := &fakeConsolePoster{response: ConsoleStreamResponse{

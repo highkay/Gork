@@ -118,6 +118,15 @@ func (c *XAIAuthClient) sequenceFeedbackError(ctx context.Context, lease control
 	return platform.NewUpstreamError(fmt.Sprintf("nsfw_sequence: transport error: %v", err), 0, "")
 }
 
+func isLockedBirthDateLimitError(err error) bool {
+	var upstream *platform.UpstreamError
+	if !errors.As(err, &upstream) || upstream.Status != 429 {
+		return false
+	}
+	return strings.Contains(upstream.Body, "birth-date-change-limit-reached") ||
+		strings.Contains(upstream.Message, "birth-date-change-limit-reached")
+}
+
 func encodeGRPCPayload(data []byte) []byte {
 	out := make([]byte, 5+len(data))
 	binary.BigEndian.PutUint32(out[1:5], uint32(len(data)))

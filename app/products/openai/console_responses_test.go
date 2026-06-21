@@ -119,6 +119,42 @@ func TestConsoleResponsesStreamFramesResponsesEvents(t *testing.T) {
 	}
 }
 
+func TestConsoleResponsesNonStreamEmitsNativeFunctionCall(t *testing.T) {
+	resetChatDepsForTest(t)
+	stream := false
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok1", ModeID: model.ModeConsole}}}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+	consoleStreamChat = func(context.Context, string, map[string]any, float64) ([]protocol.ConsoleStreamEvent, error) {
+		return []protocol.ConsoleStreamEvent{
+			{EventType: "response.output_text.delta", Data: `{"delta":"preface"}`},
+			{EventType: "response.output_item.done", Data: `{"output_index":0,"item":{"id":"fc_1","type":"function_call","call_id":"call_1","name":"lookup_order","arguments":"{\"order_id\":\"A123\"}","status":"completed"}}`},
+			{EventType: "response.completed", Data: `{"response":{"usage":{"input_tokens":3,"output_tokens":9}}}`},
+		}, nil
+	}
+
+	result, err := ConsoleResponses(context.Background(), consoleResponseOptions{
+		Model:      "grok-4.3-console",
+		Messages:   []map[string]any{{"role": "user", "content": "lookup"}},
+		Stream:     &stream,
+		ResponseID: "resp_tool",
+		MessageID:  "msg_tool",
+		Tools: []map[string]any{{"type": "function", "function": map[string]any{
+			"name":       "lookup_order",
+			"parameters": map[string]any{"type": "object"},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("ConsoleResponses function call err=%v", err)
+	}
+	output := result.Response["output"].([]map[string]any)
+	if len(output) != 1 || output[0]["type"] != "function_call" || output[0]["name"] != "lookup_order" {
+		t.Fatalf("output=%#v", output)
+	}
+	if output[0]["arguments"] != `{"order_id":"A123"}` {
+		t.Fatalf("arguments=%#v", output[0]["arguments"])
+	}
+}
+
 func TestConsoleResponsesRetriesRetryableUpstreamStatus(t *testing.T) {
 	resetChatDepsForTest(t)
 	stream := false
