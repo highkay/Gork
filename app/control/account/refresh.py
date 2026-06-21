@@ -607,7 +607,9 @@ class AccountRefreshService:
             if console_win is None:
                 continue
             # 只处理配额已消耗且窗口已过期的账号
-            if not console_win.is_window_expired(now):
+            # 额外处理卡死状态：remaining=0 但 reset_at=None（版本升级或并发跳过阈值导致）
+            is_stuck = console_win.remaining <= 0 and console_win.reset_at is None
+            if not console_win.is_window_expired(now) and not is_stuck:
                 continue
             if console_win.remaining >= console_win.total:
                 continue
