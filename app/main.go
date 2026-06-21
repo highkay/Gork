@@ -1,13 +1,16 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	gorkassets "github.com/dslzl/gork"
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	"github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/logging"
@@ -117,7 +120,7 @@ func newAppRouter(options AppOptions) http.Handler {
 		case r.URL.Path == "/favicon.ico":
 			serveAppFavicon(w, r, options.StaticsRoot)
 		case strings.HasPrefix(r.URL.Path, "/static/"):
-			http.StripPrefix("/static/", http.FileServer(http.Dir(options.StaticsRoot))).ServeHTTP(w, r)
+			http.StripPrefix("/static/", appStaticFileServer(options.StaticsRoot)).ServeHTTP(w, r)
 		case r.URL.Path == "/v1/messages":
 			options.AnthropicRouter.ServeHTTP(w, r)
 		case strings.HasPrefix(r.URL.Path, "/v1/"):
@@ -132,11 +135,23 @@ func newAppRouter(options AppOptions) http.Handler {
 
 func serveAppFavicon(w http.ResponseWriter, r *http.Request, staticsRoot string) {
 	path := filepath.Join(staticsRoot, "favicon.ico")
-	if _, err := os.Stat(path); err != nil {
+	if _, err := os.Stat(path); err == nil {
+		http.ServeFile(w, r, path)
+		return
+	}
+	raw, err := gorkassets.StaticFile("favicon.ico")
+	if err != nil {
 		writeAppJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
 		return
 	}
-	http.ServeFile(w, r, path)
+	http.ServeContent(w, r, "favicon.ico", time.Time{}, bytes.NewReader(raw))
+}
+
+func appStaticFileServer(staticsRoot string) http.Handler {
+	if info, err := os.Stat(staticsRoot); err == nil && info.IsDir() {
+		return http.FileServer(http.Dir(staticsRoot))
+	}
+	return http.FileServer(http.FS(gorkassets.StaticFS()))
 }
 
 func withAppMiddleware(next http.Handler) http.Handler {

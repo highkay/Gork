@@ -2,8 +2,10 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -11,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	gorkassets "github.com/dslzl/gork"
 	"github.com/dslzl/gork/app/platform/config/backends"
 )
 
@@ -44,7 +47,7 @@ func (s *ConfigSnapshot) Load(ctx context.Context, defaultsPath string) error {
 	if err != nil {
 		return err
 	}
-	mt, err := configFileModTime(defaultsPath)
+	mt, err := defaultsConfigModTime(defaultsPath)
 	if err != nil {
 		return fmt.Errorf("Missing required defaults config: %s", defaultsPath)
 	}
@@ -58,7 +61,7 @@ func (s *ConfigSnapshot) Load(ctx context.Context, defaultsPath string) error {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	mt, err = configFileModTime(defaultsPath)
+	mt, err = defaultsConfigModTime(defaultsPath)
 	if err != nil {
 		return fmt.Errorf("Missing required defaults config: %s", defaultsPath)
 	}
@@ -70,7 +73,7 @@ func (s *ConfigSnapshot) Load(ctx context.Context, defaultsPath string) error {
 		return nil
 	}
 
-	defaults, err := LoadTOML(defaultsPath)
+	defaults, err := loadDefaultsConfig(defaultsPath)
 	if err != nil {
 		return err
 	}
@@ -294,6 +297,34 @@ func configFileModTime(path string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return info.ModTime(), nil
+}
+
+func defaultsConfigModTime(path string) (time.Time, error) {
+	mt, err := configFileModTime(path)
+	if err == nil {
+		return mt, nil
+	}
+	if isDefaultConfigPath(path) && errors.Is(err, os.ErrNotExist) {
+		return time.Time{}, nil
+	}
+	return time.Time{}, err
+}
+
+func loadDefaultsConfig(path string) (map[string]any, error) {
+	if isDefaultConfigPath(path) {
+		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+			raw, embedErr := gorkassets.DefaultConfigTOML()
+			if embedErr != nil {
+				return nil, embedErr
+			}
+			return LoadTOMLBytes(raw)
+		}
+	}
+	return LoadTOML(path)
+}
+
+func isDefaultConfigPath(path string) bool {
+	return filepath.Base(path) == "config.defaults.toml"
 }
 
 var GlobalConfig = NewConfigSnapshot(nil, ConfigSnapshotOptions{})

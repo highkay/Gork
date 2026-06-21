@@ -58,6 +58,7 @@ htmlcov/
 .uv-cache/
 .tmp/
 tmp/
+.vercel/
 
 # Go build/test artifacts
 /gork

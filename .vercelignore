@@ -1,0 +1,6 @@
+.pytest_cache
+.tmp
+.vercel
+data
+docker-compose.demo.yml
+logs

@@ -2,6 +2,8 @@ package config
 
 import (
 	"bufio"
+	"bytes"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -63,6 +65,10 @@ func LoadTOML(path string) (map[string]any, error) {
 	return parseSimpleTOML(file)
 }
 
+func LoadTOMLBytes(raw []byte) (map[string]any, error) {
+	return parseSimpleTOML(bytes.NewReader(raw))
+}
+
 func LoadConfig(defaultsPath string, options LoadConfigOptions) (map[string]any, error) {
 	data, err := LoadTOML(defaultsPath)
 	if err != nil {
@@ -114,7 +120,7 @@ func GetNested(data map[string]any, dottedKey string, defaultValue any) any {
 	return node
 }
 
-func parseSimpleTOML(file *os.File) (map[string]any, error) {
+func parseSimpleTOML(file io.Reader) (map[string]any, error) {
 	data := map[string]any{}
 	current := data
 	scanner := bufio.NewScanner(file)
