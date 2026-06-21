@@ -169,53 +169,75 @@ class LocalAccountRepository:
         revision: int,
     ) -> int:
         ts = now_ms()
-        count = 0
+
+        # 按 pool 缓存配额 JSON，避免重复计算（同一 pool 的配额完全相同）
+        _quota_json_cache: dict[str, dict[str, str]] = {}
+
+        def _get_quota_json(pool: str) -> dict[str, str]:
+            cached = _quota_json_cache.get(pool)
+            if cached is not None:
+                return cached
+            qs = default_quota_set(pool)
+            result = {
+                "qa": json.dumps(qs.auto.to_dict()),
+                "qf": json.dumps(qs.fast.to_dict()),
+                "qe": json.dumps(qs.expert.to_dict()),
+                "qh": json.dumps(qs.heavy.to_dict())    if qs.heavy    else "{}",
+                "qg": json.dumps(qs.grok_4_3.to_dict()) if qs.grok_4_3 else "{}",
+                "qc": json.dumps(qs.console.to_dict())  if qs.console  else "{}",
+            }
+            _quota_json_cache[pool] = result
+            return result
+
+        # 批量准备参数
+        rows: list[tuple] = []
         for item in items:
-            try:
-                token = AccountRecord.model_validate({"token": item.token, "pool": item.pool}).token
-            except ValueError:
+            # 轻量 token 清洗（API 层 _sanitize 已做过完整清洗，此处仅做安全兜底）
+            token = str(item.token or "").strip()
+            if token.startswith("sso="):
+                token = token[4:]
+            token = token.encode("ascii", errors="ignore").decode("ascii").strip()
+            if not token:
                 continue
             pool = item.pool if item.pool in ("basic", "super", "heavy") else "basic"
-            qs   = default_quota_set(pool)
-            conn.execute(
-                f"""
-                INSERT INTO {_TBL} (
-                    token, pool, status, created_at, updated_at,
-                    tags, quota_auto, quota_fast, quota_expert, quota_heavy, quota_grok_4_3, quota_console,
-                    usage_use_count, usage_fail_count, usage_sync_count,
-                    ext, revision
-                ) VALUES (
-                    :token, :pool, 'active', :ts, :ts,
-                    :tags, :qa, :qf, :qe, :qh, :qg, :qc,
-                    0, 0, 0, :ext, :rev
-                )
-                ON CONFLICT(token) DO UPDATE SET
-                    pool           = excluded.pool,
-                    status         = 'active',
-                    deleted_at     = NULL,
-                    updated_at     = excluded.updated_at,
-                    tags           = excluded.tags,
-                    quota_console  = excluded.quota_console,
-                    ext            = excluded.ext,
-                    revision       = excluded.revision
-                """,
-                {
-                    "token": token,
-                    "pool":  pool,
-                    "ts":    ts,
-                    "tags":  json.dumps(item.tags),
-                    "qa":    json.dumps(qs.auto.to_dict()),
-                    "qf":    json.dumps(qs.fast.to_dict()),
-                    "qe":    json.dumps(qs.expert.to_dict()),
-                    "qh":    json.dumps(qs.heavy.to_dict())    if qs.heavy    else "{}",
-                    "qg":    json.dumps(qs.grok_4_3.to_dict()) if qs.grok_4_3 else "{}",
-                    "qc":    json.dumps(qs.console.to_dict())  if qs.console  else "{}",
-                    "ext":   json.dumps(item.ext),
-                    "rev":   revision,
-                },
+            q = _get_quota_json(pool)
+            rows.append((
+                token, pool, ts, ts,
+                json.dumps(item.tags),
+                q["qa"], q["qf"], q["qe"], q["qh"], q["qg"], q["qc"],
+                json.dumps(item.ext),
+                revision,
+            ))
+
+        if not rows:
+            return 0
+
+        # 批量插入（1 次 executemany 代替 N 次 execute）
+        conn.executemany(
+            f"""
+            INSERT INTO {_TBL} (
+                token, pool, status, created_at, updated_at,
+                tags, quota_auto, quota_fast, quota_expert, quota_heavy, quota_grok_4_3, quota_console,
+                usage_use_count, usage_fail_count, usage_sync_count,
+                ext, revision
+            ) VALUES (
+                ?, ?, 'active', ?, ?,
+                ?, ?, ?, ?, ?, ?, ?,
+                0, 0, 0, ?, ?
             )
-            count += conn.execute("SELECT changes()").fetchone()[0]
-        return count
+            ON CONFLICT(token) DO UPDATE SET
+                pool           = excluded.pool,
+                status         = 'active',
+                deleted_at     = NULL,
+                updated_at     = excluded.updated_at,
+                tags           = excluded.tags,
+                quota_console  = excluded.quota_console,
+                ext            = excluded.ext,
+                revision       = excluded.revision
+            """,
+            rows,
+        )
+        return len(rows)
 
     def _patch_sync(
         self,
