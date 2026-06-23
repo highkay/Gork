@@ -7,14 +7,23 @@ import (
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	"github.com/dslzl/gork/app/platform"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/logging"
 )
 
-const invalidCredentialsReason = "invalid_credentials"
+const (
+	invalidCredentialsReason = "invalid_credentials"
+	invalidCredentialsExtKey = "invalid_credentials"
+)
 
-var invalidCredentialsNowMS = func() int64 {
-	return time.Now().UnixMilli()
-}
+var (
+	invalidCredentialsNowMS = func() int64 {
+		return time.Now().UnixMilli()
+	}
+	invalidCredentialsMaxFailures = func() int {
+		return platformconfig.GlobalConfig.GetInt("account.invalid_credentials.max_failures", 3)
+	}
+)
 
 type InvalidCredentialRepository interface {
 	GetAccounts(context.Context, []string) ([]AccountRecord, error)
@@ -36,20 +45,27 @@ func MarkAccountInvalidCredentials(
 		return false, getErr
 	}
 	ts := invalidCredentialsNowMS()
-	status := AccountStatusExpired
 	reason := invalidCredentialsReason
+	failureCount := invalidCredentialsFailureCount(records) + 1
 	patch := AccountPatch{
 		Token:          token,
-		Status:         &status,
 		LastFailAt:     &ts,
 		LastFailReason: &reason,
 		StateReason:    &reason,
-		ExtMerge:       invalidCredentialsExt(records, ts, reason),
+		ExtMerge:       invalidCredentialsExt(records, ts, reason, failureCount, source, err),
+	}
+	if failureCount >= invalidCredentialsFailureThreshold() {
+		status := AccountStatusExpired
+		patch.Status = &status
+		patch.ExtMerge[expiredAtKey] = ts
+		patch.ExtMerge[expiredReasonKey] = reason
 	}
 	if _, patchErr := repo.PatchAccounts(ctx, []AccountPatch{patch}); patchErr != nil {
 		return false, patchErr
 	}
-	logInvalidCredentialsMarked(source, token, err)
+	if patch.Status != nil && *patch.Status == AccountStatusExpired {
+		logInvalidCredentialsMarked(source, token, err, failureCount)
+	}
 	return true, nil
 }
 
@@ -76,19 +92,49 @@ func FeedbackKindForError(err error) FeedbackKind {
 	}
 }
 
-func invalidCredentialsExt(records []AccountRecord, ts int64, reason string) map[string]any {
+func invalidCredentialsExt(records []AccountRecord, ts int64, reason string, failureCount int, source string, err error) map[string]any {
 	ext := map[string]any{}
 	if len(records) > 0 {
-		for key, value := range records[0].Ext {
-			ext[key] = value
-		}
+		ext = cloneAnyMap(records[0].Ext)
 	}
-	ext["expired_at"] = ts
-	ext["expired_reason"] = reason
+	ext[invalidCredentialsExtKey] = map[string]any{
+		"failure_count":    failureCount,
+		"last_fail_at":     ts,
+		"last_fail_reason": reason,
+		"last_fail_source": source,
+		"last_fail_error":  err.Error(),
+	}
 	return ext
 }
 
-func logInvalidCredentialsMarked(source string, token string, err error) {
+func invalidCredentialsFailureThreshold() int {
+	value := invalidCredentialsMaxFailures()
+	if value <= 0 {
+		return 3
+	}
+	return value
+}
+
+func invalidCredentialsFailureCount(records []AccountRecord) int {
+	if len(records) == 0 {
+		return 0
+	}
+	raw, ok := records[0].Ext[invalidCredentialsExtKey]
+	if !ok {
+		return 0
+	}
+	data, ok := raw.(map[string]any)
+	if !ok {
+		return 0
+	}
+	count, err := intFromAny(data["failure_count"], 0)
+	if err != nil || count < 0 {
+		return 0
+	}
+	return count
+}
+
+func logInvalidCredentialsMarked(source string, token string, err error, failureCount int) {
 	var upstream *platform.UpstreamError
 	upstreamStatus := 0
 	if errors.As(err, &upstream) {
@@ -99,6 +145,7 @@ func logInvalidCredentialsMarked(source string, token string, err error) {
 		"source", source,
 		"token", tokenPrefix(token),
 		"status", AccountStatusExpired,
+		"failure_count", failureCount,
 		"upstream_status", upstreamStatus,
 	)
 }

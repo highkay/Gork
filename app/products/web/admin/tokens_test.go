@@ -14,9 +14,15 @@ func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	repo := &fakeAdminTokensRepo{
 		listResults: []adminAssetsListResult{{Items: []adminAssetsAccount{{
-			Token: "tok-1", Pool: "basic", Status: "active", Tags: []string{"nsfw"},
-			Quota:         map[string]any{"auto": map[string]any{"remaining": 2, "total": 5}},
-			UsageUseCount: 3, LastUseAt: int64(123),
+			Token: "1234567890abcdefghijXYZ987654321", Pool: "basic", Status: "cooling", Tags: []string{"nsfw"},
+			Quota:          map[string]any{"auto": map[string]any{"remaining": 2, "total": 5}},
+			UsageUseCount:  3,
+			UsageFailCount: 2,
+			LastUseAt:      int64(123),
+			LastFailAt:     int64(456),
+			LastFailReason: "rate_limited",
+			StateReason:    "cooldown",
+			Ext:            map[string]any{"cooldown_until": int64(789000), "cooldown_reason": "rate_limited"},
 		}}, Total: 1, Page: 2, PageSize: 10, TotalPages: 1, Revision: 7}},
 		facetSnapshot: adminTokensFacetSnapshotFromRecords([]adminAssetsAccount{
 			{Token: "tok-1", Pool: "basic", Status: "active", Tags: []string{"nsfw"}, UsageUseCount: 3, UsageFailCount: 1, Quota: map[string]any{"auto": map[string]any{"remaining": 2}}},
@@ -36,8 +42,14 @@ func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
 	}
 	tokens := body["tokens"].([]any)
 	row := tokens[0].(map[string]any)
-	if row["token"] != "tok-1" || row["pool"] != "basic" || row["last_used_at"].(float64) != 123 {
+	if row["token"] != "1234567890abcdefghijXYZ987654321" || row["token_masked"] != "12345678...87654321" || row["pool"] != "basic" || row["last_used_at"].(float64) != 123 {
 		t.Fatalf("row = %#v", row)
+	}
+	if row["fail_count"].(float64) != 2 || row["last_failed_at"].(float64) != 456 || row["last_fail_reason"] != "rate_limited" {
+		t.Fatalf("failure fields = %#v", row)
+	}
+	if row["cooldown_until"].(float64) != 789000 || row["cooldown_reason"] != "rate_limited" || row["state_reason"] != "cooldown" {
+		t.Fatalf("cooldown fields = %#v", row)
 	}
 	facets := body["facets"].(map[string]any)
 	stats := facets["stats"].(map[string]any)

@@ -11,6 +11,7 @@ import (
 	accountbackends "github.com/dslzl/gork/app/control/account/backends"
 	proxycontrol "github.com/dslzl/gork/app/control/proxy"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 	platformstorage "github.com/dslzl/gork/app/platform/storage"
 	openaiproduct "github.com/dslzl/gork/app/products/openai"
@@ -21,8 +22,13 @@ type appMainLifecycleState struct {
 	runtimeStore *platformruntime.RedisRuntimeStore
 	repository   accountcontrol.AccountRepository
 	directory    *accountdataplane.AccountDirectory
-	schedulerKey *platformruntime.RedisRuntimeLease
+	schedulerKey appMainSchedulerLease
 	adminCleanup func()
+}
+
+type appMainSchedulerLease interface {
+	Renew(context.Context) (bool, error)
+	Release(context.Context) (bool, error)
 }
 
 type appMainLifecycleStep func(context.Context, *appMainLifecycleState) (Hook, error)
@@ -218,6 +224,9 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 		return nil, nil
 	}
 	service := accountcontrol.NewAccountRefreshService(state.repository, accountcontrol.AccountRefreshOptions{
+		UsageConcurrency: platformconfig.GlobalConfig.GetInt("account.refresh.usage_concurrency", 50),
+		PerTokenTimeout:  appMainConfigDurationSeconds("account.refresh.per_token_timeout_sec", 30),
+		BatchTimeout:     appMainConfigDurationSeconds("account.refresh.batch_timeout_sec", 600),
 		SSOModelVerifier: accountcontrol.SSOModelVerifierFunc(openaiproduct.ProbeConsoleListModels),
 	})
 	scheduler := accountcontrol.GetAccountRefreshScheduler(service)
@@ -235,8 +244,10 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 			}
 			leader = localLockCleanup != nil
 		} else {
-			state.schedulerKey = lease
 			leader = lease != nil
+			if leader {
+				state.schedulerKey = lease
+			}
 		}
 	} else {
 		cleanup, err := appMainAcquireSchedulerFileLock(ctx)
@@ -248,10 +259,18 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 	}
 	state.bindAdminRuntimeWithRefresh(service)
 	consoleResetCleanup := appMainStartConsoleQuotaResetLoop(service, appMainConsoleResetInterval)
+	leaseRenewalCleanup := Hook(nil)
 	accountcontrol.SetRefreshService(service)
 	accountcontrol.SetRefreshScheduler(scheduler)
 	accountcontrol.SetSSOValidationScheduler(validationScheduler)
 	accountcontrol.SetRefreshSchedulerLeader(leader)
+	if leader && state.schedulerKey != nil {
+		leaseRenewalCleanup = appMainStartSchedulerLeaderLeaseRenewal(
+			ctx,
+			state.schedulerKey,
+			time.Duration(appMainEnvInt("RUNTIME_REDIS_LOCK_TTL_MS", 300000))*time.Millisecond,
+		)
+	}
 	accountcontrol.ReconcileRefreshRuntime()
 	return func(ctx context.Context) error {
 		if consoleResetCleanup != nil {
@@ -260,6 +279,12 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 		}
 		scheduler.Stop()
 		validationScheduler.Stop()
+		if leaseRenewalCleanup != nil {
+			if err := leaseRenewalCleanup(ctx); err != nil {
+				return err
+			}
+			leaseRenewalCleanup = nil
+		}
 		if state.schedulerKey != nil {
 			_, _ = state.schedulerKey.Release(ctx)
 			state.schedulerKey = nil
@@ -277,6 +302,45 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 		state.bindAdminRuntime()
 		return nil
 	}, nil
+}
+
+func appMainStartSchedulerLeaderLeaseRenewal(ctx context.Context, lease appMainSchedulerLease, ttl time.Duration) Hook {
+	if lease == nil {
+		return nil
+	}
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+	interval := ttl / 3
+	if interval <= 0 {
+		interval = time.Second
+	}
+	renewCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		timer := time.NewTimer(interval)
+		defer timer.Stop()
+		for {
+			select {
+			case <-renewCtx.Done():
+				return
+			case <-timer.C:
+				ok, err := lease.Renew(renewCtx)
+				if err != nil || !ok {
+					accountcontrol.SetRefreshSchedulerLeader(false)
+					accountcontrol.ReconcileRefreshRuntime()
+					return
+				}
+				timer.Reset(interval)
+			}
+		}
+	}()
+	return func(context.Context) error {
+		cancel()
+		<-done
+		return nil
+	}
 }
 
 func appMainStartConsoleQuotaResetLoop(service *accountcontrol.AccountRefreshService, interval time.Duration) Hook {
@@ -360,4 +424,12 @@ func appMainEnvInt(key string, defaultValue int) int {
 		return defaultValue
 	}
 	return parsed
+}
+
+func appMainConfigDurationSeconds(key string, defaultSeconds int) time.Duration {
+	seconds := platformconfig.GlobalConfig.GetInt(key, defaultSeconds)
+	if seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }

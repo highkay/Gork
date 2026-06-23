@@ -98,18 +98,21 @@ func defaultChatDirectoryProvider() chatDirectory {
 
 func (d chatDataDirectory) ReserveChatAccount(ctx context.Context, spec model.ModelSpec, excluded []string) (chatAccount, bool, error) {
 	nowS := appruntime.NowS()
-	lease, selectedMode, ok, err := products.ReserveAccount(ctx, chatReserveDirectory{directory: d.directory}, spec, products.ReserveAccountOptions{
+	lease, result, err := products.ReserveAccountDetailed(ctx, chatReserveDirectory{directory: d.directory}, spec, products.ReserveAccountOptions{
 		ExcludeTokens: excluded,
 		NowSOverride:  &nowS,
 	})
-	if err != nil || !ok {
-		return chatAccount{}, ok, err
+	if err != nil {
+		return chatAccount{}, false, err
+	}
+	if !result.OK {
+		return chatAccount{}, false, products.AccountSelectionError(result)
 	}
 	accountLease, ok := lease.(dataaccount.AccountLease)
 	if !ok {
 		return chatAccount{}, false, fmt.Errorf("unexpected account lease type %T", lease)
 	}
-	return chatAccount{Token: accountLease.Token, ModeID: selectedMode, lease: accountLease}, true, nil
+	return chatAccount{Token: accountLease.Token, ModeID: result.SelectedMode, lease: accountLease}, true, nil
 }
 
 func (d chatDataDirectory) ReleaseChatAccount(_ context.Context, account chatAccount) error {
@@ -131,6 +134,17 @@ func (d chatReserveDirectory) Reserve(_ context.Context, query products.ReserveA
 		return nil, nil
 	}
 	return lease, nil
+}
+
+func (d chatReserveDirectory) ReserveDetailed(_ context.Context, query products.ReserveAccountQuery) (any, products.AccountSelectionFailureReason, error) {
+	lease, reason, ok := d.directory.ReserveDetailed(query.PoolCandidates, int(query.ModeID), dataaccount.ReserveOptions{
+		ExcludeTokens: query.ExcludeTokens,
+		NowS:          chatInt64PtrToIntPtr(query.NowSOverride),
+	})
+	if !ok {
+		return nil, products.AccountSelectionFailureFromData(reason), nil
+	}
+	return lease, products.AccountSelectionFailureNone, nil
 }
 
 func defaultChatRetryConfig() map[string]any {

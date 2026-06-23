@@ -3,12 +3,15 @@ package admin
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/dslzl/gork/app/platform"
 )
+
+const adminBatchMaxConcurrency = 100
 
 func handleAdminBatchNSFW(w http.ResponseWriter, r *http.Request) {
 	repo, err := adminBatchRepo()
@@ -132,11 +135,24 @@ func adminBatchBoolQuery(r *http.Request, key string, fallback bool) (bool, erro
 func adminBatchConcurrency(r *http.Request, configKey string) (int, error) {
 	raw := strings.TrimSpace(r.URL.Query().Get("concurrency"))
 	if raw == "" {
-		return maxAdminBatchInt(1, adminBatchConfigInt(configKey, 50)), nil
+		return clampAdminBatchConcurrency(adminBatchConfigInt(configKey, 50)), nil
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil || value < 1 {
 		return 0, platform.NewValidationError("concurrency must be >= 1", "concurrency", "invalid_query")
 	}
+	if value > adminBatchMaxConcurrency {
+		return 0, platform.NewValidationError(fmt.Sprintf("concurrency must be <= %d", adminBatchMaxConcurrency), "concurrency", "invalid_query")
+	}
 	return value, nil
+}
+
+func clampAdminBatchConcurrency(value int) int {
+	if value < 1 {
+		return 1
+	}
+	if value > adminBatchMaxConcurrency {
+		return adminBatchMaxConcurrency
+	}
+	return value
 }

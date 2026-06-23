@@ -231,15 +231,27 @@ func TestAdminBatchConcurrencyUsesQueryAndConfigFallback(t *testing.T) {
 		t.Fatalf("fallback value/err=%d/%v", value, err)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/admin/api/batch/refresh?concurrency=120", nil)
+	adminBatchConfigInt = func(string, int) int { return 120 }
+	req = httptest.NewRequest(http.MethodPost, "/admin/api/batch/refresh", nil)
 	value, err = adminBatchConcurrency(req, "batch.refresh_concurrency")
-	if err != nil || value != 120 {
+	if err != nil || value != 100 {
+		t.Fatalf("clamped fallback value/err=%d/%v", value, err)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/admin/api/batch/refresh?concurrency=100", nil)
+	value, err = adminBatchConcurrency(req, "batch.refresh_concurrency")
+	if err != nil || value != 100 {
 		t.Fatalf("override value/err=%d/%v", value, err)
 	}
 
 	req = httptest.NewRequest(http.MethodPost, "/admin/api/batch/refresh?concurrency=0", nil)
 	if _, err = adminBatchConcurrency(req, "batch.refresh_concurrency"); err == nil {
 		t.Fatalf("expected validation error")
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/admin/api/batch/refresh?concurrency=101", nil)
+	if _, err = adminBatchConcurrency(req, "batch.refresh_concurrency"); err == nil {
+		t.Fatalf("expected upper-bound validation error")
 	}
 }
 

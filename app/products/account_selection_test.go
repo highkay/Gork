@@ -11,6 +11,7 @@ import (
 	controlaccount "github.com/dslzl/gork/app/control/account"
 	"github.com/dslzl/gork/app/control/model"
 	dataaccount "github.com/dslzl/gork/app/dataplane/account"
+	"github.com/dslzl/gork/app/platform"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
@@ -18,6 +19,7 @@ type fakeDirectory struct {
 	leases  []any
 	queries []ReserveAccountQuery
 	err     error
+	reason  AccountSelectionFailureReason
 }
 
 func (d *fakeDirectory) Reserve(_ context.Context, query ReserveAccountQuery) (any, error) {
@@ -31,6 +33,14 @@ func (d *fakeDirectory) Reserve(_ context.Context, query ReserveAccountQuery) (a
 	lease := d.leases[0]
 	d.leases = d.leases[1:]
 	return lease, nil
+}
+
+func (d *fakeDirectory) ReserveDetailed(ctx context.Context, query ReserveAccountQuery) (any, AccountSelectionFailureReason, error) {
+	lease, err := d.Reserve(ctx, query)
+	if err != nil || lease != nil {
+		return lease, AccountSelectionFailureNone, err
+	}
+	return nil, d.reason, nil
 }
 
 type fakeRefreshService struct {
@@ -222,6 +232,41 @@ func TestReserveAccountPropagatesDirectoryAndRefreshErrors(t *testing.T) {
 	_, selected, ok, err = ReserveAccount(context.Background(), &fakeDirectory{}, spec, ReserveAccountOptions{})
 	if !errors.Is(err, refreshErr) || ok || selected != model.ModeAuto || refresh.calls != 1 {
 		t.Fatalf("refresh error selected=%v ok=%t calls=%d err=%v", selected, ok, refresh.calls, err)
+	}
+}
+
+func TestReserveAccountDetailedReportsFailureReasons(t *testing.T) {
+	resetAccountSelectionForTest(t)
+	accountSelectionStrategy = func() string { return "random" }
+	spec := model.ModelSpec{ModeID: model.ModeAuto, Capability: model.CapabilityChat}
+
+	_, result, err := ReserveAccountDetailed(context.Background(), &fakeDirectory{
+		reason: AccountSelectionFailureRateLimited,
+	}, spec, ReserveAccountOptions{})
+	if err != nil || result.OK || result.Reason != AccountSelectionFailureRateLimited || result.ErrorCode() != "account_pool_rate_limited" {
+		t.Fatalf("rate limited result=%#v err=%v", result, err)
+	}
+
+	_, result, err = ReserveAccountDetailed(context.Background(), &fakeDirectory{}, spec, ReserveAccountOptions{})
+	if err != nil || result.OK || result.Reason != AccountSelectionFailureNoAvailable || result.ErrorCode() != "no_available_account" {
+		t.Fatalf("fallback result=%#v err=%v", result, err)
+	}
+}
+
+func TestAccountSelectionErrorUsesSpecificCode(t *testing.T) {
+	err := AccountSelectionError(AccountSelectionResult{
+		SelectedMode: model.ModeFast,
+		Reason:       AccountSelectionFailureInvalidCredentials,
+	})
+	appErr, ok := err.(*platform.AppError)
+	if !ok {
+		t.Fatalf("error type = %T", err)
+	}
+	if appErr.Status != 429 || appErr.Code != "account_pool_invalid_credentials" || appErr.Kind != platform.ErrorKindRateLimit {
+		t.Fatalf("app error = %#v", appErr)
+	}
+	if appErr.Details["selection_reason"] != string(AccountSelectionFailureInvalidCredentials) || appErr.Details["selected_mode"] != int(model.ModeFast) {
+		t.Fatalf("error details = %#v", appErr.Details)
 	}
 }
 

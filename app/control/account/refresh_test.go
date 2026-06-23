@@ -472,6 +472,58 @@ func TestRunRefreshBatchHonorsUsageConcurrency(t *testing.T) {
 	}
 }
 
+func TestNewAccountRefreshServiceClampsUsageConcurrency(t *testing.T) {
+	service := NewAccountRefreshService(&fakeRefreshRepo{}, AccountRefreshOptions{UsageConcurrency: 500})
+	if service.usageConcurrency != 100 {
+		t.Fatalf("usage concurrency = %d, want 100", service.usageConcurrency)
+	}
+	service = NewAccountRefreshService(&fakeRefreshRepo{}, AccountRefreshOptions{UsageConcurrency: 0})
+	if service.usageConcurrency != 50 {
+		t.Fatalf("default usage concurrency = %d, want 50", service.usageConcurrency)
+	}
+}
+
+func TestRunRefreshBatchAppliesPerTokenTimeout(t *testing.T) {
+	fetcher := &blockingUsageFetcher{
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	service := NewAccountRefreshService(&fakeRefreshRepo{}, AccountRefreshOptions{
+		Fetcher:          fetcher,
+		UsageConcurrency: 1,
+		PerTokenTimeout:  time.Millisecond,
+	})
+	records := []AccountRecord{{Token: "tok-timeout", Pool: "basic", Status: AccountStatusActive, Quota: DefaultQuotaSet("basic").ToDict()}}
+
+	results, err := service.runRefreshBatch(context.Background(), records, false, false)
+
+	if err != nil {
+		t.Fatalf("runRefreshBatch returned error: %v", err)
+	}
+	if len(results) != 1 || results[0].Checked != 1 || results[0].Failed != 1 {
+		t.Fatalf("per-token timeout results = %#v", results)
+	}
+}
+
+func TestRunRefreshBatchAppliesBatchTimeout(t *testing.T) {
+	fetcher := &blockingUsageFetcher{
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	service := NewAccountRefreshService(&fakeRefreshRepo{}, AccountRefreshOptions{
+		Fetcher:          fetcher,
+		UsageConcurrency: 1,
+		BatchTimeout:     time.Millisecond,
+	})
+	records := []AccountRecord{{Token: "tok-timeout", Pool: "basic", Status: AccountStatusActive, Quota: DefaultQuotaSet("basic").ToDict()}}
+
+	_, err := service.runRefreshBatch(context.Background(), records, false, false)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("batch timeout error = %v", err)
+	}
+}
+
 func TestRefreshCallAsyncInvalidCredentialsRecordsSSOValidationFailure(t *testing.T) {
 	oldNow := refreshNowMS
 	refreshNowMS = func() int64 { return 8000 }

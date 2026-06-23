@@ -81,4 +81,5 @@ func clearFailureExt(ext map[string]any) {
 	delete(ext, expiredAtKey)
 	delete(ext, expiredReasonKey)
 	delete(ext, forbiddenStrikeKey)
+	delete(ext, invalidCredentialsExtKey)
 }

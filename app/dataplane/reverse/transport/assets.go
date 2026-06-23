@@ -214,10 +214,7 @@ func assetDeleteSlotChannel() chan struct{} {
 }
 
 func assetsConcurrency(value int) int {
-	if value < 1 {
-		return 1
-	}
-	return value
+	return clampAssetConcurrency(value)
 }
 
 func acquireAssetsSlot(ctx context.Context, slots chan struct{}) (func(), error) {

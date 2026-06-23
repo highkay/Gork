@@ -104,6 +104,13 @@ func TestAssetUploadConcurrencyFloorsInvalidConfigLikePython(t *testing.T) {
 	}
 }
 
+func TestAssetUploadConcurrencyCapsOversizedConfig(t *testing.T) {
+	resetAssetUploadConcurrencyForTest(t, 250)
+	if got := cap(assetUploadSlotChannel()); got != 100 {
+		t.Fatalf("asset upload slot cap = %d, want 100", got)
+	}
+}
+
 func TestAssetUploadOptionsUsesConfiguredUploadTimeoutLikePython(t *testing.T) {
 	resetAssetUploadTimeoutForTest(t, 2.5)
 

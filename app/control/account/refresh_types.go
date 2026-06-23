@@ -13,6 +13,11 @@ var refreshNowMS = appruntime.NowMS
 
 var allRefreshModeIDs = []int{0, 1, 2, 3, 4, 5}
 
+const (
+	defaultUsageConcurrency = 50
+	maxUsageConcurrency     = 100
+)
+
 type RefreshResult struct {
 	Checked     int
 	Refreshed   int
@@ -54,6 +59,8 @@ func (f SSOModelVerifierFunc) ProbeListModels(ctx context.Context, token string)
 type AccountRefreshOptions struct {
 	Fetcher                  protocol.UsageFetcher
 	UsageConcurrency         int
+	PerTokenTimeout          time.Duration
+	BatchTimeout             time.Duration
 	OnDemandMinInterval      time.Duration
 	SSOModelVerifier         SSOModelVerifier
 	SSOValidationConcurrency int
@@ -64,6 +71,8 @@ type AccountRefreshService struct {
 	repo                     AccountRefreshRepository
 	fetcher                  protocol.UsageFetcher
 	usageConcurrency         int
+	perTokenTimeout          time.Duration
+	batchTimeout             time.Duration
 	onDemandMinInterval      time.Duration
 	ssoModelVerifier         SSOModelVerifier
 	ssoValidationConcurrency int
@@ -74,10 +83,7 @@ type AccountRefreshService struct {
 }
 
 func NewAccountRefreshService(repo AccountRefreshRepository, options AccountRefreshOptions) *AccountRefreshService {
-	concurrency := options.UsageConcurrency
-	if concurrency <= 0 {
-		concurrency = 50
-	}
+	concurrency := clampRefreshConcurrency(options.UsageConcurrency, defaultUsageConcurrency, maxUsageConcurrency)
 	minInterval := options.OnDemandMinInterval
 	if minInterval <= 0 {
 		minInterval = 300 * time.Second
@@ -86,11 +92,26 @@ func NewAccountRefreshService(repo AccountRefreshRepository, options AccountRefr
 		repo:                     repo,
 		fetcher:                  options.Fetcher,
 		usageConcurrency:         concurrency,
+		perTokenTimeout:          options.PerTokenTimeout,
+		batchTimeout:             options.BatchTimeout,
 		onDemandMinInterval:      minInterval,
 		ssoModelVerifier:         options.SSOModelVerifier,
 		ssoValidationConcurrency: options.SSOValidationConcurrency,
 		ssoValidationMaxFailures: options.SSOValidationMaxFailures,
 	}
+}
+
+func clampRefreshConcurrency(value int, fallback int, limit int) int {
+	if value <= 0 {
+		value = fallback
+	}
+	if value < 1 {
+		return 1
+	}
+	if limit > 0 && value > limit {
+		return limit
+	}
+	return value
 }
 
 func isRefreshManageable(record AccountRecord, now int64) bool {

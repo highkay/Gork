@@ -205,12 +205,6 @@ func projectRoot() string {
 	return filepath.Clean(wd)
 }
 
-func notMigratedConstructor(name string) RepositoryConstructor {
-	return func(string) (account.AccountRepository, error) {
-		return nil, fmt.Errorf("%s account repository backend is not migrated to Go yet", name)
-	}
-}
-
 func unknownBackendError(backend string) error {
 	return fmt.Errorf("Unknown account storage backend: '%s'", backend)
 }

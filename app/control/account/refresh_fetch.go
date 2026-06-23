@@ -163,6 +163,12 @@ func (s *AccountRefreshService) runRefreshBatch(ctx context.Context, records []A
 	if len(records) == 0 {
 		return []RefreshResult{}, nil
 	}
+	batchCtx := ctx
+	cancelBatch := func() {}
+	if s.batchTimeout > 0 {
+		batchCtx, cancelBatch = context.WithTimeout(ctx, s.batchTimeout)
+	}
+	defer cancelBatch()
 	concurrency := maxInt(s.usageConcurrency, 1)
 	if concurrency > len(records) {
 		concurrency = len(records)
@@ -173,12 +179,24 @@ func (s *AccountRefreshService) runRefreshBatch(ctx context.Context, records []A
 	var wg sync.WaitGroup
 	for idx, record := range records {
 		idx, record := idx, record
-		sem <- struct{}{}
+		select {
+		case sem <- struct{}{}:
+		case <-batchCtx.Done():
+			wg.Wait()
+			close(errs)
+			return nil, batchCtx.Err()
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			result, err := s.refreshOne(ctx, record, applyFallback, bootstrap)
+			tokenCtx := batchCtx
+			cancelToken := func() {}
+			if s.perTokenTimeout > 0 {
+				tokenCtx, cancelToken = context.WithTimeout(batchCtx, s.perTokenTimeout)
+			}
+			defer cancelToken()
+			result, err := s.refreshOne(tokenCtx, record, applyFallback, bootstrap)
 			if err != nil {
 				errs <- err
 				return
@@ -190,6 +208,9 @@ func (s *AccountRefreshService) runRefreshBatch(ctx context.Context, records []A
 	close(errs)
 	if err, ok := <-errs; ok {
 		return nil, err
+	}
+	if s.batchTimeout > 0 && batchCtx.Err() != nil {
+		return nil, batchCtx.Err()
 	}
 	return results, nil
 }

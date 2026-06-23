@@ -73,8 +73,18 @@ func quotaSelect(table *AccountRuntimeTable, poolID int, modeID int, options Sel
 	windowCol := table.windowCol(modeID)
 	maybeResetWindows(table, candidates, modeID, resetCol, quotaCol, totalCol, windowCol, poolID, options.NowS)
 	working := map[int]bool{}
+	maxInflight := options.MaxInflight
+	if maxInflight <= 0 {
+		maxInflight = defaultMaxInflight
+	}
 	for idx := range candidates {
 		if options.ExcludeIdxs[idx] || quotaCol[idx] <= 0 {
+			continue
+		}
+		if table.CoolingUntilSByIdx[idx] > options.NowS {
+			continue
+		}
+		if table.InflightByIdx[idx] >= maxInflight {
 			continue
 		}
 		working[idx] = true
@@ -92,10 +102,21 @@ func quotaSelectAny(table *AccountRuntimeTable, poolID int, options SelectOption
 		return 0, false
 	}
 	working := map[int]bool{}
+	maxInflight := options.MaxInflight
+	if maxInflight <= 0 {
+		maxInflight = defaultMaxInflight
+	}
 	for idx := range candidates {
-		if !options.ExcludeIdxs[idx] {
-			working[idx] = true
+		if options.ExcludeIdxs[idx] {
+			continue
 		}
+		if table.CoolingUntilSByIdx[idx] > options.NowS {
+			continue
+		}
+		if table.InflightByIdx[idx] >= maxInflight {
+			continue
+		}
+		working[idx] = true
 	}
 	if len(working) == 0 {
 		return 0, false

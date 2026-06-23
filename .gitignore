@@ -66,3 +66,7 @@ tmp/
 *.out
 *.prof
 1.md
+.vercel/
+TODO.md
+DO.md
+docker-compose.demo.yml

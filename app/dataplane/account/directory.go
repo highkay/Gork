@@ -24,6 +24,27 @@ type ReserveOptions struct {
 	NowS          *int
 }
 
+type ReserveFailureReason string
+
+const (
+	ReserveFailureNone               ReserveFailureReason = ""
+	ReserveFailureNoAvailable        ReserveFailureReason = "no_available_account"
+	ReserveFailureRateLimited        ReserveFailureReason = "all_rate_limited"
+	ReserveFailureInvalidCredentials ReserveFailureReason = "all_invalid_credentials"
+	ReserveFailureDisabled           ReserveFailureReason = "all_disabled"
+)
+
+type SelectionStatus struct {
+	Strategy           string
+	MaxInflight        int
+	Total              int
+	Available          int
+	Cooling            int
+	InvalidCredentials int
+	Disabled           int
+	Inflight           int
+}
+
 type FeedbackOptions struct {
 	Remaining *int
 	ResetAtMS *int
@@ -109,30 +130,37 @@ func (d *AccountDirectory) SyncIfChanged(ctx context.Context) (bool, error) {
 }
 
 func (d *AccountDirectory) Reserve(poolCandidates any, modeID int, options ReserveOptions) (AccountLease, bool) {
-	return d.reserve(poolCandidates, modeID, options, false)
+	lease, _, ok := d.reserveDetailed(poolCandidates, modeID, options, false)
+	return lease, ok
 }
 
 func (d *AccountDirectory) ReserveAny(poolCandidates any, options ReserveOptions) (AccountLease, bool) {
-	return d.reserve(poolCandidates, -1, options, true)
+	lease, _, ok := d.reserveDetailed(poolCandidates, -1, options, true)
+	return lease, ok
 }
 
-func (d *AccountDirectory) reserve(poolCandidates any, modeID int, options ReserveOptions, anyMode bool) (AccountLease, bool) {
+func (d *AccountDirectory) ReserveDetailed(poolCandidates any, modeID int, options ReserveOptions) (AccountLease, ReserveFailureReason, bool) {
+	return d.reserveDetailed(poolCandidates, modeID, options, false)
+}
+
+func (d *AccountDirectory) reserveDetailed(poolCandidates any, modeID int, options ReserveOptions, anyMode bool) (AccountLease, ReserveFailureReason, bool) {
 	pools := normalizePoolCandidates(poolCandidates)
 	if len(pools) == 0 {
-		return AccountLease{}, false
+		return AccountLease{}, ReserveFailureNoAvailable, false
 	}
 	ts := optionNowS(options.NowS)
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.table == nil {
-		return AccountLease{}, false
+		return AccountLease{}, ReserveFailureNoAvailable, false
 	}
 
 	selectOptions := SelectOptions{
 		ExcludeIdxs:   excludeIdxs(d.table, options.ExcludeTokens),
 		PreferTagIdxs: preferTagIdxs(d.table, options.PreferTags),
 		NowS:          ts,
+		MaxInflight:   selectionMaxInflight(),
 	}
 	selectedIdx := 0
 	ok := false
@@ -147,7 +175,7 @@ func (d *AccountDirectory) reserve(poolCandidates any, modeID int, options Reser
 		}
 	}
 	if !ok {
-		return AccountLease{}, false
+		return AccountLease{}, classifyReserveFailure(d.table, pools, modeID, selectOptions, anyMode), false
 	}
 
 	IncrementInflight(d.table, selectedIdx)
@@ -158,7 +186,30 @@ func (d *AccountDirectory) reserve(poolCandidates any, modeID int, options Reser
 		d.table.GetPoolID(selectedIdx),
 		modeID,
 		ts,
-	), true
+	), ReserveFailureNone, true
+}
+
+func (d *AccountDirectory) SelectionStatus(nowS int) SelectionStatus {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	status := SelectionStatus{
+		Strategy:    CurrentStrategy(),
+		MaxInflight: selectionMaxInflight(),
+	}
+	if d.table == nil {
+		return status
+	}
+	counts := countSelectionCandidates(d.table, nil, -1, SelectOptions{
+		NowS:        nowS,
+		MaxInflight: status.MaxInflight,
+	}, true)
+	status.Total = counts.total
+	status.Available = counts.available
+	status.Cooling = counts.cooling
+	status.InvalidCredentials = counts.invalidCredentials
+	status.Disabled = counts.disabled
+	status.Inflight = counts.inflight
+	return status
 }
 
 func (d *AccountDirectory) Release(lease AccountLease) {

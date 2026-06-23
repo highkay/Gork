@@ -20,18 +20,22 @@ func redisHashFromRecord(record account.AccountRecord, revision int) (map[string
 	if err != nil {
 		return nil, err
 	}
+	quotaJSON, err := quotaJSONFromSet(quota)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]string{
 		"pool":             record.Pool,
 		"status":           record.Status.String(),
 		"created_at":       formatInt64(record.CreatedAt),
 		"updated_at":       formatInt64(record.UpdatedAt),
 		"tags":             tags,
-		"quota_auto":       mustQuotaJSON(quota.Auto),
-		"quota_fast":       mustQuotaJSON(quota.Fast),
-		"quota_expert":     mustQuotaJSON(quota.Expert),
-		"quota_heavy":      optionalQuotaJSON(quota.Heavy),
-		"quota_grok_4_3":   optionalQuotaJSON(quota.Grok43),
-		"quota_console":    optionalQuotaJSON(quota.Console),
+		"quota_auto":       quotaJSON.Auto,
+		"quota_fast":       quotaJSON.Fast,
+		"quota_expert":     quotaJSON.Expert,
+		"quota_heavy":      quotaJSON.Heavy,
+		"quota_grok_4_3":   quotaJSON.Grok43,
+		"quota_console":    quotaJSON.Console,
 		"usage_use_count":  strconv.Itoa(record.UsageUseCount),
 		"usage_fail_count": strconv.Itoa(record.UsageFailCount),
 		"usage_sync_count": strconv.Itoa(record.UsageSyncCount),

@@ -527,6 +527,13 @@ const SCHEMA_DEF = [
         ]
       },
       {
+        title: '凭证失效保护',
+        section: 'account.invalid_credentials',
+        fields: [
+          { key: 'max_failures', label: '自动禁用阈值', type: 'number', min: 1, desc: '运行时发现 invalid credentials 连续达到该次数后才将账号标记为 expired；显式恢复会清零计数。' },
+        ]
+      },
+      {
         title: '选号并发限制', titleKey: 'config.schema.groups.selection',
         section: 'account.selection',
         fields: [

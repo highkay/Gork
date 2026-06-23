@@ -56,6 +56,17 @@ func TestAssetsConcurrencyFloorsInvalidConfigLikePython(t *testing.T) {
 	}
 }
 
+func TestAssetsConcurrencyCapsOversizedConfig(t *testing.T) {
+	resetAssetsConcurrencyForTest(t, 150, 200)
+
+	if cap(assetListSlotChannel()) != 100 {
+		t.Fatalf("list slot cap = %d, want 100", cap(assetListSlotChannel()))
+	}
+	if cap(assetDeleteSlotChannel()) != 100 {
+		t.Fatalf("delete slot cap = %d, want 100", cap(assetDeleteSlotChannel()))
+	}
+}
+
 func TestAssetsOptionsUseConfiguredTimeoutsLikePython(t *testing.T) {
 	resetAssetsTimeoutsForTest(t, 1.5, 2.5, 3.25)
 

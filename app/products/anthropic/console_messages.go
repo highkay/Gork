@@ -99,18 +99,21 @@ func defaultConsoleMessagesDirectoryProvider() consoleMessagesDirectory {
 
 func (d consoleMessagesDataDirectory) ReserveConsoleMessagesAccount(ctx context.Context, spec model.ModelSpec, excluded []string) (consoleMessagesAccount, bool, error) {
 	nowS := appruntime.NowS()
-	lease, selectedMode, ok, err := products.ReserveAccount(ctx, consoleMessagesReserveDirectory{directory: d.directory}, spec, products.ReserveAccountOptions{
+	lease, result, err := products.ReserveAccountDetailed(ctx, consoleMessagesReserveDirectory{directory: d.directory}, spec, products.ReserveAccountOptions{
 		ExcludeTokens: excluded,
 		NowSOverride:  &nowS,
 	})
-	if err != nil || !ok {
+	if err != nil {
 		return consoleMessagesAccount{}, false, err
+	}
+	if !result.OK {
+		return consoleMessagesAccount{}, false, products.AccountSelectionError(result)
 	}
 	accountLease, ok := lease.(dataaccount.AccountLease)
 	if !ok {
 		return consoleMessagesAccount{}, false, fmt.Errorf("unexpected account lease type %T", lease)
 	}
-	return consoleMessagesAccount{Token: accountLease.Token, ModeID: selectedMode, lease: accountLease}, true, nil
+	return consoleMessagesAccount{Token: accountLease.Token, ModeID: result.SelectedMode, lease: accountLease}, true, nil
 }
 
 func (d consoleMessagesDataDirectory) ReleaseConsoleMessagesAccount(_ context.Context, account consoleMessagesAccount) error {
@@ -132,6 +135,17 @@ func (d consoleMessagesReserveDirectory) Reserve(_ context.Context, query produc
 		return nil, nil
 	}
 	return lease, nil
+}
+
+func (d consoleMessagesReserveDirectory) ReserveDetailed(_ context.Context, query products.ReserveAccountQuery) (any, products.AccountSelectionFailureReason, error) {
+	lease, reason, ok := d.directory.ReserveDetailed(query.PoolCandidates, int(query.ModeID), dataaccount.ReserveOptions{
+		ExcludeTokens: query.ExcludeTokens,
+		NowS:          int64PtrToIntPtr(query.NowSOverride),
+	})
+	if !ok {
+		return nil, products.AccountSelectionFailureFromData(reason), nil
+	}
+	return lease, products.AccountSelectionFailureNone, nil
 }
 
 func defaultConsoleMessagesRetryCodes() map[int]struct{} {

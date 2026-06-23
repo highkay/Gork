@@ -210,11 +210,7 @@ func assetUploadSlotChannel() chan struct{} {
 }
 
 func assetUploadConcurrency() int {
-	concurrency := assetUploadConcurrencyProvider()
-	if concurrency < 1 {
-		return 1
-	}
-	return concurrency
+	return clampAssetConcurrency(assetUploadConcurrencyProvider())
 }
 
 func acquireAssetProxy(ctx context.Context, runtime AssetProxyRuntime, label string) (*controlproxy.ProxyLease, error) {

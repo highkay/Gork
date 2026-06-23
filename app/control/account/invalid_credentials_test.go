@@ -119,13 +119,69 @@ func TestMarkAccountInvalidCredentialsPropagatesRepositoryErrors(t *testing.T) {
 	}
 }
 
-func TestMarkAccountInvalidCredentialsExpiresAccountAndMergesExt(t *testing.T) {
+func TestMarkAccountInvalidCredentialsRecordsFailureBeforeThreshold(t *testing.T) {
 	oldNow := invalidCredentialsNowMS
 	invalidCredentialsNowMS = func() int64 { return 123456789 }
 	t.Cleanup(func() { invalidCredentialsNowMS = oldNow })
 	repo := &fakeInvalidCredentialRepo{
 		records: []AccountRecord{{
-			Ext: map[string]any{"keep": "value"},
+			Ext: map[string]any{
+				"keep": "value",
+				"invalid_credentials": map[string]any{
+					"failure_count": 1,
+				},
+			},
+		}},
+	}
+
+	marked, err := MarkAccountInvalidCredentials(
+		context.Background(),
+		repo,
+		"token-abcdef",
+		platform.NewUpstreamError("bad", 400, "bad-credentials"),
+		"usage",
+	)
+
+	if err != nil {
+		t.Fatalf("MarkAccountInvalidCredentials returned error: %v", err)
+	}
+	if !marked {
+		t.Fatal("MarkAccountInvalidCredentials did not record invalid credentials")
+	}
+	if len(repo.patches) != 1 {
+		t.Fatalf("patch count = %d, want 1", len(repo.patches))
+	}
+	patch := repo.patches[0]
+	if patch.Status != nil {
+		t.Fatalf("patch status = %v, want nil before threshold", *patch.Status)
+	}
+	if patch.StateReason == nil || *patch.StateReason != "invalid_credentials" {
+		t.Fatalf("state_reason = %v, want invalid_credentials", patch.StateReason)
+	}
+	if got := patch.ExtMerge["keep"]; got != "value" {
+		t.Fatalf("ext keep = %v, want value", got)
+	}
+	invalid := patch.ExtMerge["invalid_credentials"].(map[string]any)
+	if got := invalid["failure_count"]; got != 2 {
+		t.Fatalf("failure_count = %v, want 2", got)
+	}
+	if _, ok := patch.ExtMerge["expired_at"]; ok {
+		t.Fatalf("expired_at should not be set before threshold: %#v", patch.ExtMerge)
+	}
+}
+
+func TestMarkAccountInvalidCredentialsExpiresAccountAndMergesExtAtThreshold(t *testing.T) {
+	oldNow := invalidCredentialsNowMS
+	invalidCredentialsNowMS = func() int64 { return 123456789 }
+	t.Cleanup(func() { invalidCredentialsNowMS = oldNow })
+	repo := &fakeInvalidCredentialRepo{
+		records: []AccountRecord{{
+			Ext: map[string]any{
+				"keep": "value",
+				"invalid_credentials": map[string]any{
+					"failure_count": 2,
+				},
+			},
 		}},
 	}
 
@@ -171,9 +227,13 @@ func TestMarkAccountInvalidCredentialsExpiresAccountAndMergesExt(t *testing.T) {
 	if got := patch.ExtMerge["expired_reason"]; got != "invalid_credentials" {
 		t.Fatalf("expired_reason = %v, want invalid_credentials", got)
 	}
+	invalid := patch.ExtMerge["invalid_credentials"].(map[string]any)
+	if got := invalid["failure_count"]; got != 3 {
+		t.Fatalf("failure_count = %v, want 3", got)
+	}
 }
 
-func TestMarkAccountInvalidCredentialsExpiresWithoutExistingRecord(t *testing.T) {
+func TestMarkAccountInvalidCredentialsRecordsWithoutExistingRecord(t *testing.T) {
 	oldNow := invalidCredentialsNowMS
 	invalidCredentialsNowMS = func() int64 { return 987654321 }
 	t.Cleanup(func() { invalidCredentialsNowMS = oldNow })
@@ -191,19 +251,21 @@ func TestMarkAccountInvalidCredentialsExpiresWithoutExistingRecord(t *testing.T)
 		t.Fatalf("MarkAccountInvalidCredentials returned error: %v", err)
 	}
 	if !marked {
-		t.Fatal("MarkAccountInvalidCredentials did not mark invalid credentials")
+		t.Fatal("MarkAccountInvalidCredentials did not record invalid credentials")
 	}
 	if len(repo.patches) != 1 {
 		t.Fatalf("patch count = %d, want 1", len(repo.patches))
 	}
-	ext := repo.patches[0].ExtMerge
-	if len(ext) != 2 {
-		t.Fatalf("ext = %#v, want only expired metadata", ext)
+	patch := repo.patches[0]
+	if patch.Status != nil {
+		t.Fatalf("patch status = %v, want nil before threshold", *patch.Status)
 	}
-	if got := ext["expired_at"]; got != int64(987654321) {
-		t.Fatalf("expired_at = %v, want 987654321", got)
+	ext := patch.ExtMerge
+	if len(ext) != 1 {
+		t.Fatalf("ext = %#v, want only invalid credential metadata", ext)
 	}
-	if got := ext["expired_reason"]; got != "invalid_credentials" {
-		t.Fatalf("expired_reason = %v, want invalid_credentials", got)
+	invalid := ext["invalid_credentials"].(map[string]any)
+	if got := invalid["failure_count"]; got != 1 {
+		t.Fatalf("failure_count = %v, want 1", got)
 	}
 }

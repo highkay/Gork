@@ -65,6 +65,10 @@ func upsertSQLAccount(
 ) error {
 	item.Normalize()
 	quota := account.DefaultQuotaSet(pool)
+	quotaJSON, err := quotaJSONFromSet(quota)
+	if err != nil {
+		return err
+	}
 	tags, err := jsonString(item.Tags)
 	if err != nil {
 		return err
@@ -74,9 +78,9 @@ func upsertSQLAccount(
 		return err
 	}
 	_, err = tx.ExecContext(ctx, sqlUpsertStatement(dialect), token, pool, account.AccountStatusActive.String(),
-		ts, ts, nil, tags, mustQuotaJSON(quota.Auto), mustQuotaJSON(quota.Fast),
-		mustQuotaJSON(quota.Expert), optionalQuotaJSON(quota.Heavy),
-		optionalQuotaJSON(quota.Grok43), optionalQuotaJSON(quota.Console),
+		ts, ts, nil, tags, quotaJSON.Auto, quotaJSON.Fast,
+		quotaJSON.Expert, quotaJSON.Heavy,
+		quotaJSON.Grok43, quotaJSON.Console,
 		0, 0, 0, ext, revision)
 	return err
 }

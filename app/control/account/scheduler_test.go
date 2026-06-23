@@ -2,12 +2,29 @@ package account
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
 
 type fakeScheduledRefresher struct {
 	calls chan string
+	err   error
+}
+
+func resetAccountRefreshSchedulerSingletonForTest(t *testing.T) {
+	t.Helper()
+	previous := accountRefreshSchedulerSingleton
+	if accountRefreshSchedulerSingleton != nil {
+		accountRefreshSchedulerSingleton.Stop()
+	}
+	accountRefreshSchedulerSingleton = nil
+	t.Cleanup(func() {
+		if accountRefreshSchedulerSingleton != nil {
+			accountRefreshSchedulerSingleton.Stop()
+		}
+		accountRefreshSchedulerSingleton = previous
+	})
 }
 
 func (f *fakeScheduledRefresher) RefreshScheduled(_ context.Context, pool *string) (RefreshResult, error) {
@@ -17,7 +34,7 @@ func (f *fakeScheduledRefresher) RefreshScheduled(_ context.Context, pool *strin
 		default:
 		}
 	}
-	return RefreshResult{Checked: 1}, nil
+	return RefreshResult{Checked: 1, Failed: 2}, f.err
 }
 
 func TestAccountRefreshIntervalDefaults(t *testing.T) {
@@ -57,6 +74,10 @@ func TestAccountRefreshIntervalReadsConfigAndHonorsOverrides(t *testing.T) {
 }
 
 func TestAccountRefreshSchedulerLifecycleAndSingleton(t *testing.T) {
+	oldRunOnStart := accountRefreshRunOnStart
+	accountRefreshRunOnStart = func() bool { return false }
+	t.Cleanup(func() { accountRefreshRunOnStart = oldRunOnStart })
+
 	service1 := &fakeScheduledRefresher{calls: make(chan string, 10)}
 	service2 := &fakeScheduledRefresher{calls: make(chan string, 10)}
 	scheduler := NewAccountRefreshScheduler(service1)
@@ -81,7 +102,7 @@ func TestAccountRefreshSchedulerLifecycleAndSingleton(t *testing.T) {
 		t.Fatal("scheduler should stop after Stop")
 	}
 
-	accountRefreshSchedulerSingleton = nil
+	resetAccountRefreshSchedulerSingletonForTest(t)
 	first := GetAccountRefreshScheduler(service1)
 	second := GetAccountRefreshScheduler(service2)
 	if first != second || second.service != service2 {
@@ -91,6 +112,10 @@ func TestAccountRefreshSchedulerLifecycleAndSingleton(t *testing.T) {
 }
 
 func TestAccountRefreshSchedulerRunsPoolLoop(t *testing.T) {
+	oldRunOnStart := accountRefreshRunOnStart
+	accountRefreshRunOnStart = func() bool { return false }
+	t.Cleanup(func() { accountRefreshRunOnStart = oldRunOnStart })
+
 	service := &fakeScheduledRefresher{calls: make(chan string, 10)}
 	scheduler := NewAccountRefreshScheduler(service)
 	scheduler.refreshPool(context.Background(), "heavy")
@@ -112,5 +137,71 @@ func TestAccountRefreshSchedulerRunsPoolLoop(t *testing.T) {
 		}
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("scheduler did not run basic pool loop")
+	}
+}
+
+func TestAccountRefreshSchedulerRecordsPoolStatusAndErrors(t *testing.T) {
+	service := &fakeScheduledRefresher{calls: make(chan string, 10), err: errors.New("quota failed")}
+	scheduler := NewAccountRefreshScheduler(service)
+
+	scheduler.refreshPool(context.Background(), "super")
+
+	status := scheduler.Status()
+	poolStatus := status.Pools["super"]
+	if poolStatus.LastError != "quota failed" {
+		t.Fatalf("last error = %q, want quota failed", poolStatus.LastError)
+	}
+	if poolStatus.ConsecutiveFailures != 1 {
+		t.Fatalf("consecutive failures = %d, want 1", poolStatus.ConsecutiveFailures)
+	}
+	if poolStatus.LastResult.Checked != 1 || poolStatus.LastResult.Failed != 2 {
+		t.Fatalf("last result = %#v, want checked=1 failed=2", poolStatus.LastResult)
+	}
+
+	service.err = nil
+	scheduler.refreshPool(context.Background(), "super")
+
+	status = scheduler.Status()
+	poolStatus = status.Pools["super"]
+	if poolStatus.LastError != "" || poolStatus.ConsecutiveFailures != 0 {
+		t.Fatalf("status after success error=%q failures=%d, want cleared", poolStatus.LastError, poolStatus.ConsecutiveFailures)
+	}
+}
+
+func TestAccountRefreshSchedulerRunOnStartAndJitterAreConfigurable(t *testing.T) {
+	oldRunOnStart := accountRefreshRunOnStart
+	oldJitter := accountRefreshJitterDuration
+	accountRefreshRunOnStart = func() bool { return true }
+	accountRefreshJitterDuration = func(pool string, interval time.Duration) time.Duration {
+		if pool == "basic" {
+			return 3 * time.Millisecond
+		}
+		return 0
+	}
+	t.Cleanup(func() {
+		accountRefreshRunOnStart = oldRunOnStart
+		accountRefreshJitterDuration = oldJitter
+	})
+
+	service := &fakeScheduledRefresher{calls: make(chan string, 10)}
+	scheduler := NewAccountRefreshScheduler(service)
+	scheduler.intervals = map[string]time.Duration{
+		"basic": 20 * time.Millisecond,
+		"super": time.Hour,
+		"heavy": time.Hour,
+	}
+
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	select {
+	case <-service.calls:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("scheduler did not run immediately on start")
+	}
+
+	status := scheduler.Status()
+	if status.Pools["basic"].NextRunAfter != 23*time.Millisecond {
+		t.Fatalf("basic next run after = %s, want 23ms", status.Pools["basic"].NextRunAfter)
 	}
 }

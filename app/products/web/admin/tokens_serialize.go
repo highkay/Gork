@@ -1,10 +1,16 @@
 package admin
 
 func adminTokenSerialize(account adminAssetsAccount) map[string]any {
+	cooldownReason := adminAnyString(account.Ext["cooldown_reason"])
+	if cooldownReason == "" {
+		cooldownReason = account.LastFailReason
+	}
 	return map[string]any{
-		"token": account.Token, "pool": adminTokenPool(account.Pool), "status": account.Status,
-		"quota": adminQuotaBrief(account.Quota), "use_count": account.UsageUseCount,
-		"last_used_at": account.LastUseAt, "tags": account.Tags,
+		"token": account.Token, "token_masked": adminTokenMask(account.Token), "pool": adminTokenPool(account.Pool), "status": account.Status,
+		"quota": adminQuotaBrief(account.Quota), "use_count": account.UsageUseCount, "fail_count": account.UsageFailCount,
+		"last_used_at": account.LastUseAt, "last_failed_at": account.LastFailAt, "last_fail_reason": account.LastFailReason,
+		"state_reason": account.StateReason, "cooldown_until": adminAnyInt64(account.Ext["cooldown_until"]), "cooldown_reason": cooldownReason,
+		"tags": account.Tags,
 	}
 }
 
@@ -98,5 +104,29 @@ func adminAnyInt(value any) int {
 		return 0
 	default:
 		return 0
+	}
+}
+
+func adminAnyInt64(value any) int64 {
+	switch v := value.(type) {
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	case nil:
+		return 0
+	default:
+		return 0
+	}
+}
+
+func adminAnyString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	default:
+		return ""
 	}
 }

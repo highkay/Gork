@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/storage"
 )
@@ -37,6 +38,29 @@ func TestAdminConfigAndStorageEndpointsMatchPythonShape(t *testing.T) {
 		"app": map[string]any{"admin_key": "gork"},
 	}}
 	adminStorageBackend = func() string { return "local" }
+	adminSchedulerStatus = func() map[string]any {
+		return map[string]any{
+			"leader": true,
+			"refresh": map[string]any{
+				"running":       true,
+				"last_error":    "quota failed",
+				"failure_count": 2,
+			},
+		}
+	}
+	adminSelectionStatus = func() map[string]any {
+		return map[string]any{
+			"strategy":        "quota",
+			"max_inflight":    8,
+			"inflight":        2,
+			"selectable":      5,
+			"cooling":         1,
+			"invalid":         1,
+			"disabled":        1,
+			"rate_limited":    1,
+			"last_error_code": "account_pool_rate_limited",
+		}
+	}
 
 	rec := adminRequest(http.MethodGet, "/admin/api/config", "", "Bearer gork")
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"admin_key":"gork"`) {
@@ -165,15 +189,61 @@ func TestAdminStatusAndSyncUseDirectory(t *testing.T) {
 	}
 }
 
+func TestDefaultAdminSelectionStatusUsesDirectorySnapshot(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	dir := &fakeAdminDirectory{selectionStatus: &accountdataplane.SelectionStatus{
+		Strategy:           "random",
+		MaxInflight:        3,
+		Total:              9,
+		Available:          4,
+		Cooling:            2,
+		InvalidCredentials: 1,
+		Disabled:           1,
+		Inflight:           6,
+	}}
+	adminAccountDirectory = func() adminDirectory { return dir }
+	adminSelectionStatus = defaultAdminSelectionStatus
+
+	got := defaultAdminSelectionStatus()
+	if got["strategy"] != "random" || got["max_inflight"] != 3 || got["inflight"] != 6 {
+		t.Fatalf("selection status = %#v", got)
+	}
+	if got["total"] != 9 || got["selectable"] != 4 || got["cooling"] != 2 || got["invalid"] != 1 || got["disabled"] != 1 {
+		t.Fatalf("selection counts = %#v", got)
+	}
+}
+
 func TestAdminRouterCoreRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	adminRouterConfig = &fakeAdminConfig{raw: map[string]any{
 		"app": map[string]any{"admin_key": "gork"},
 	}}
 	adminStorageBackend = func() string { return "local" }
-	dir := &fakeAdminDirectory{size: 2, revision: 7, changed: true}
+	dir := &fakeAdminDirectory{
+		size:     2,
+		revision: 7,
+		changed:  true,
+		selectionStatus: &accountdataplane.SelectionStatus{
+			Strategy:    "quota",
+			MaxInflight: 8,
+			Available:   5,
+			Cooling:     1,
+			Inflight:    2,
+		},
+	}
 	adminAccountDirectory = func() adminDirectory { return dir }
 	adminReconcileRefreshRuntime = func() string { return "quota" }
+	adminSelectionStatus = defaultAdminSelectionStatus
+	adminSchedulerStatus = func() map[string]any {
+		return map[string]any{
+			"leader": true,
+			"refresh": map[string]any{
+				"running":       true,
+				"last_error":    "quota failed",
+				"failure_count": 2,
+			},
+		}
+	}
 
 	for _, tt := range []struct {
 		name   string
@@ -188,7 +258,21 @@ func TestAdminRouterCoreRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		{name: "config post", method: http.MethodPost, path: "/admin/api/config", body: `{"cache":{"local":{"image_limit_mb":10}}}`, status: http.StatusOK, json: map[string]any{"status": "success", "selection_strategy": "quota"}},
 		{name: "config reset", method: http.MethodPost, path: "/admin/api/config/reset", status: http.StatusOK, json: map[string]any{"status": "success", "selection_strategy": "quota"}},
 		{name: "storage", method: http.MethodGet, path: "/admin/api/storage", status: http.StatusOK, json: map[string]any{"type": "local"}},
-		{name: "status", method: http.MethodGet, path: "/admin/api/status", status: http.StatusOK, json: map[string]any{"status": "ok", "size": float64(2), "revision": float64(7), "selection_strategy": "quota"}},
+		{name: "status", method: http.MethodGet, path: "/admin/api/status", status: http.StatusOK, json: map[string]any{
+			"status":                          "ok",
+			"size":                            float64(2),
+			"revision":                        float64(7),
+			"selection_strategy":              "quota",
+			"scheduler.leader":                true,
+			"scheduler.refresh.running":       true,
+			"scheduler.refresh.last_error":    "quota failed",
+			"scheduler.refresh.failure_count": float64(2),
+			"selection.max_inflight":          float64(8),
+			"selection.inflight":              float64(2),
+			"selection.selectable":            float64(5),
+			"selection.cooling":               float64(1),
+			"selection.rate_limited":          float64(1),
+		}},
 		{name: "sync", method: http.MethodPost, path: "/admin/api/sync", status: http.StatusOK, json: map[string]any{"changed": true, "revision": float64(7)}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -257,6 +341,8 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	oldAuth := adminRouterAuthSettings
 	oldConfig := adminRouterConfig
 	oldRuntime := adminReconcileRefreshRuntime
+	oldSchedulerStatus := adminSchedulerStatus
+	oldSelectionStatus := adminSelectionStatus
 	oldReload := adminReloadFileLogging
 	oldCache := adminReconcileLocalMediaCache
 	oldDirectory := adminAccountDirectory
@@ -281,6 +367,8 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{} }
 	adminRouterConfig = &fakeAdminConfig{}
 	adminReconcileRefreshRuntime = func() string { return "" }
+	adminSchedulerStatus = func() map[string]any { return nil }
+	adminSelectionStatus = func() map[string]any { return nil }
 	adminReloadFileLogging = func(string, int) error { return nil }
 	adminReconcileLocalMediaCache = func(context.Context) error { return nil }
 	adminAccountDirectory = func() adminDirectory { return nil }
@@ -308,6 +396,8 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 		adminRouterAuthSettings = oldAuth
 		adminRouterConfig = oldConfig
 		adminReconcileRefreshRuntime = oldRuntime
+		adminSchedulerStatus = oldSchedulerStatus
+		adminSelectionStatus = oldSelectionStatus
 		adminReloadFileLogging = oldReload
 		adminReconcileLocalMediaCache = oldCache
 		adminAccountDirectory = oldDirectory
@@ -375,10 +465,11 @@ func (c *fakeAdminConfig) GetInt(key string, fallback int) int {
 }
 
 type fakeAdminDirectory struct {
-	size     int
-	revision int
-	changed  bool
-	syncs    int
+	size            int
+	revision        int
+	changed         bool
+	syncs           int
+	selectionStatus *accountdataplane.SelectionStatus
 }
 
 func (d *fakeAdminDirectory) Size() int { return d.size }
@@ -388,6 +479,13 @@ func (d *fakeAdminDirectory) Revision() int { return d.revision }
 func (d *fakeAdminDirectory) SyncIfChanged(context.Context) (bool, error) {
 	d.syncs++
 	return d.changed, nil
+}
+
+func (d *fakeAdminDirectory) SelectionStatus(int) accountdataplane.SelectionStatus {
+	if d.selectionStatus == nil {
+		return accountdataplane.SelectionStatus{}
+	}
+	return *d.selectionStatus
 }
 
 func decodeAdminBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {

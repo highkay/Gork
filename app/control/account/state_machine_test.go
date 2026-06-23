@@ -264,7 +264,10 @@ func TestApplyFeedbackRestoreAndClearFailures(t *testing.T) {
 		"expired_at":        int64(12),
 		"expired_reason":    "bad",
 		"forbidden_strikes": 1,
-		"keep":              "value",
+		"invalid_credentials": map[string]any{
+			"failure_count": 2,
+		},
+		"keep": "value",
 	}
 	record.StateReason = stringPtr("blocked")
 	restored, err := ApplyFeedback(record, AccountFeedback{Kind: FeedbackKindRestore, At: 5000}, StatePolicy{})
@@ -274,7 +277,7 @@ func TestApplyFeedbackRestoreAndClearFailures(t *testing.T) {
 	if restored.Status != AccountStatusActive || restored.StateReason != nil {
 		t.Fatalf("restore status/state reason = %#v/%#v", restored.Status, restored.StateReason)
 	}
-	if _, ok := restored.Ext["keep"]; !ok || restored.Ext["disabled_at"] != nil || restored.Ext["forbidden_strikes"] != nil {
+	if _, ok := restored.Ext["keep"]; !ok || restored.Ext["disabled_at"] != nil || restored.Ext["forbidden_strikes"] != nil || restored.Ext["invalid_credentials"] != nil {
 		t.Fatalf("restore ext cleanup = %#v", restored.Ext)
 	}
 	quota, _ := restored.QuotaSet()
@@ -289,7 +292,7 @@ func TestApplyFeedbackRestoreAndClearFailures(t *testing.T) {
 	if cleared.Status != AccountStatusActive || cleared.UsageFailCount != 0 || cleared.LastFailAt != nil || cleared.LastFailReason != nil || cleared.StateReason != nil || cleared.UpdatedAt != 6000 {
 		t.Fatalf("clear failures result = %#v", cleared)
 	}
-	if _, ok := cleared.Ext["keep"]; !ok || cleared.Ext["cooldown_until"] != nil || cleared.Ext["disabled_at"] != nil {
+	if _, ok := cleared.Ext["keep"]; !ok || cleared.Ext["cooldown_until"] != nil || cleared.Ext["disabled_at"] != nil || cleared.Ext["invalid_credentials"] != nil {
 		t.Fatalf("clear failures ext = %#v", cleared.Ext)
 	}
 }

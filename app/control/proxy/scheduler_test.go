@@ -104,6 +104,10 @@ func TestProxyClearanceSchedulerWarmUpSwallowsErrors(t *testing.T) {
 	if directory.loadCalls != 1 || directory.warmUpCalls != 0 {
 		t.Fatalf("warmUp with load error calls load=%d warmUp=%d", directory.loadCalls, directory.warmUpCalls)
 	}
+	status := scheduler.Status()
+	if status.LastError != "load failed" || status.ConsecutiveFailures != 1 || status.LastOperation != "warm_up" {
+		t.Fatalf("warmUp status = %#v, want recorded load failure", status)
+	}
 }
 
 func TestProxyClearanceSchedulerRefreshMatchesPython(t *testing.T) {
@@ -123,6 +127,17 @@ func TestProxyClearanceSchedulerRefreshSwallowsErrors(t *testing.T) {
 	scheduler.refresh(context.Background())
 	if directory.loadCalls != 1 || directory.refreshCalls != 1 {
 		t.Fatalf("refresh with error calls load=%d refresh=%d", directory.loadCalls, directory.refreshCalls)
+	}
+	status := scheduler.Status()
+	if status.LastError != "refresh failed" || status.ConsecutiveFailures != 1 || status.LastOperation != "refresh" {
+		t.Fatalf("refresh status = %#v, want recorded refresh failure", status)
+	}
+
+	directory.refreshErr = nil
+	scheduler.refresh(context.Background())
+	status = scheduler.Status()
+	if status.LastError != "" || status.ConsecutiveFailures != 0 {
+		t.Fatalf("refresh status after success = %#v, want cleared failure", status)
 	}
 }
 

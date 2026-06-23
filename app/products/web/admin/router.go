@@ -6,11 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
+	accountcontrol "github.com/dslzl/gork/app/control/account"
+	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/logging"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 	"github.com/dslzl/gork/app/platform/storage"
 )
 
@@ -29,6 +33,10 @@ type adminDirectory interface {
 	SyncIfChanged(context.Context) (bool, error)
 }
 
+type adminSelectionStatusDirectory interface {
+	SelectionStatus(int) accountdataplane.SelectionStatus
+}
+
 var (
 	adminRouterAuthSettings = func() auth.AuthSettings {
 		return auth.AuthSettings{AdminKey: config.GetConfig("app.admin_key", nil)}
@@ -42,6 +50,8 @@ var (
 	}
 	adminReconcileRefreshRuntime = func() string { return "" }
 	adminAccountDirectory        = func() adminDirectory { return nil }
+	adminSchedulerStatus         = defaultAdminSchedulerStatus
+	adminSelectionStatus         = defaultAdminSelectionStatus
 	adminStorageBackend          = func() string {
 		return fmt.Sprint(config.GetConfig("account.storage", "local"))
 	}
@@ -144,13 +154,76 @@ func handleAdminStatus(w http.ResponseWriter, r *http.Request) {
 		writeAdminError(w, adminDirectoryError())
 		return
 	}
-	writeAdminJSON(w, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"status":             "ok",
 		"size":               directory.Size(),
 		"revision":           directory.Revision(),
 		"selection_strategy": adminReconcileRefreshRuntime(),
-	})
+	}
+	if scheduler := adminSchedulerStatus(); scheduler != nil {
+		payload["scheduler"] = scheduler
+	}
+	if selection := adminSelectionStatus(); selection != nil {
+		payload["selection"] = selection
+	}
+	writeAdminJSON(w, http.StatusOK, payload)
 	_ = r
+}
+
+func defaultAdminSchedulerStatus() map[string]any {
+	out := map[string]any{"leader": accountcontrol.IsRefreshSchedulerLeader()}
+	if scheduler := accountcontrol.GetRefreshScheduler(); scheduler != nil {
+		status := scheduler.Status()
+		refresh := map[string]any{"running": status.Running, "pools": map[string]any{}}
+		for pool, poolStatus := range status.Pools {
+			refresh["pools"].(map[string]any)[pool] = map[string]any{
+				"last_error":            poolStatus.LastError,
+				"failure_count":         poolStatus.ConsecutiveFailures,
+				"last_result":           poolStatus.LastResult,
+				"next_run_after_ms":     durationMillis(poolStatus.NextRunAfter),
+				"last_started_at_unix":  unixTime(poolStatus.LastStartedAt),
+				"last_finished_at_unix": unixTime(poolStatus.LastFinishedAt),
+				"next_run_at_unix":      unixTime(poolStatus.NextRunAt),
+			}
+		}
+		out["refresh"] = refresh
+	}
+	return out
+}
+
+func defaultAdminSelectionStatus() map[string]any {
+	if directory, ok := adminAccountDirectory().(adminSelectionStatusDirectory); ok {
+		status := directory.SelectionStatus(int(appruntime.NowS()))
+		return map[string]any{
+			"strategy":     status.Strategy,
+			"max_inflight": status.MaxInflight,
+			"total":        status.Total,
+			"selectable":   status.Available,
+			"cooling":      status.Cooling,
+			"rate_limited": status.Cooling,
+			"invalid":      status.InvalidCredentials,
+			"disabled":     status.Disabled,
+			"inflight":     status.Inflight,
+		}
+	}
+	return map[string]any{
+		"strategy":     accountcontrol.CurrentAccountSelectionStrategy(),
+		"max_inflight": config.GlobalConfig.GetInt("account.selection.max_inflight", 8),
+	}
+}
+
+func durationMillis(value time.Duration) int64 {
+	if value <= 0 {
+		return 0
+	}
+	return int64(value / time.Millisecond)
+}
+
+func unixTime(value time.Time) int64 {
+	if value.IsZero() {
+		return 0
+	}
+	return value.Unix()
 }
 
 func handleAdminSync(w http.ResponseWriter, r *http.Request) {

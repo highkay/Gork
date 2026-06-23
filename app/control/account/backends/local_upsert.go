@@ -3,7 +3,6 @@ package backends
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	account "github.com/dslzl/gork/app/control/account"
 	platformruntime "github.com/dslzl/gork/app/platform/runtime"
@@ -22,7 +21,7 @@ func upsertLocalAccounts(
 		return 0, err
 	}
 	defer stmt.Close()
-	quotaCache := map[string]localQuotaJSON{}
+	quotaCache := map[string]quotaJSONSet{}
 	for _, item := range items {
 		token, pool, ok := normalizeLocalUpsert(item)
 		if !ok {
@@ -54,7 +53,7 @@ func normalizeLocalUpsert(item account.AccountUpsert) (string, string, bool) {
 	return record.Token, pool, true
 }
 
-type localQuotaJSON struct {
+type quotaJSONSet struct {
 	Auto    string
 	Fast    string
 	Expert  string
@@ -63,18 +62,13 @@ type localQuotaJSON struct {
 	Console string
 }
 
-func cachedLocalQuotaJSON(cache map[string]localQuotaJSON, pool string) (localQuotaJSON, error) {
+func cachedLocalQuotaJSON(cache map[string]quotaJSONSet, pool string) (quotaJSONSet, error) {
 	if quota, ok := cache[pool]; ok {
 		return quota, nil
 	}
-	quotaSet := account.DefaultQuotaSet(pool)
-	quota := localQuotaJSON{
-		Auto:    mustQuotaJSON(quotaSet.Auto),
-		Fast:    mustQuotaJSON(quotaSet.Fast),
-		Expert:  mustQuotaJSON(quotaSet.Expert),
-		Heavy:   optionalQuotaJSON(quotaSet.Heavy),
-		Grok43:  optionalQuotaJSON(quotaSet.Grok43),
-		Console: optionalQuotaJSON(quotaSet.Console),
+	quota, err := quotaJSONFromSet(account.DefaultQuotaSet(pool))
+	if err != nil {
+		return quotaJSONSet{}, err
 	}
 	cache[pool] = quota
 	return quota, nil
@@ -88,7 +82,7 @@ func upsertLocalAccount(
 	pool string,
 	ts int64,
 	revision int,
-	quota localQuotaJSON,
+	quota quotaJSONSet,
 ) (int, error) {
 	item.Normalize()
 	tags, err := jsonString(item.Tags)
@@ -107,19 +101,47 @@ func upsertLocalAccount(
 	return affectedRows(result)
 }
 
-func mustQuotaJSON(window account.QuotaWindow) string {
-	raw, err := jsonString(window.ToDict())
+func quotaJSONFromSet(quotaSet account.AccountQuotaSet) (quotaJSONSet, error) {
+	auto, err := quotaJSON(quotaSet.Auto)
 	if err != nil {
-		panic(fmt.Errorf("quota json: %w", err))
+		return quotaJSONSet{}, err
 	}
-	return raw
+	fast, err := quotaJSON(quotaSet.Fast)
+	if err != nil {
+		return quotaJSONSet{}, err
+	}
+	expert, err := quotaJSON(quotaSet.Expert)
+	if err != nil {
+		return quotaJSONSet{}, err
+	}
+	heavy, err := optionalQuotaJSON(quotaSet.Heavy)
+	if err != nil {
+		return quotaJSONSet{}, err
+	}
+	grok43, err := optionalQuotaJSON(quotaSet.Grok43)
+	if err != nil {
+		return quotaJSONSet{}, err
+	}
+	console, err := optionalQuotaJSON(quotaSet.Console)
+	if err != nil {
+		return quotaJSONSet{}, err
+	}
+	return quotaJSONSet{Auto: auto, Fast: fast, Expert: expert, Heavy: heavy, Grok43: grok43, Console: console}, nil
 }
 
-func optionalQuotaJSON(window *account.QuotaWindow) string {
-	if window == nil {
-		return "{}"
+func quotaJSON(window account.QuotaWindow) (string, error) {
+	raw, err := jsonString(window.ToDict())
+	if err != nil {
+		return "", err
 	}
-	return mustQuotaJSON(*window)
+	return raw, nil
+}
+
+func optionalQuotaJSON(window *account.QuotaWindow) (string, error) {
+	if window == nil {
+		return "{}", nil
+	}
+	return quotaJSON(*window)
 }
 
 const localUpsertSQL = `

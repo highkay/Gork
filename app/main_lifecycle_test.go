@@ -10,6 +10,7 @@ import (
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	configbackends "github.com/dslzl/gork/app/platform/config/backends"
+	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 	platformstartup "github.com/dslzl/gork/app/platform/startup"
 )
 
@@ -177,6 +178,133 @@ func TestRefreshRuntimeFallsBackToLocalSchedulerLockWithoutRedis(t *testing.T) {
 	}
 }
 
+func TestRefreshRuntimeUsesRedisLeaderLockWhenAvailable(t *testing.T) {
+	redis := &lifecycleRuntimeRedis{locks: map[string]string{}}
+	state := &appMainLifecycleState{
+		repository:   &lifecycleAccountRepository{},
+		runtimeStore: platformruntime.NewRedisRuntimeStore(redis, platformruntime.RedisRuntimeStoreOptions{}),
+	}
+	localLockCalled := false
+	oldAcquireLocalLock := appMainAcquireSchedulerFileLock
+	t.Cleanup(func() {
+		appMainAcquireSchedulerFileLock = oldAcquireLocalLock
+		accountcontrol.SetRefreshScheduler(nil)
+		accountcontrol.SetSSOValidationScheduler(nil)
+		accountcontrol.SetRefreshSchedulerLeader(false)
+		accountcontrol.SetRefreshService(nil)
+	})
+	appMainAcquireSchedulerFileLock = func(context.Context) (Hook, error) {
+		localLockCalled = true
+		return nil, errors.New("local lock should not be used when redis lock is acquired")
+	}
+
+	cleanup, err := defaultAppMainStartRefreshRuntime(context.Background(), state)
+	if err != nil {
+		t.Fatalf("refresh runtime error: %v", err)
+	}
+	if cleanup == nil {
+		t.Fatalf("refresh runtime did not register cleanup")
+	}
+	if localLockCalled {
+		t.Fatalf("local scheduler lock should not be used when redis lock is acquired")
+	}
+	if state.schedulerKey == nil || !accountcontrol.IsRefreshSchedulerLeader() {
+		t.Fatalf("redis lock holder should be scheduler leader")
+	}
+	if err := cleanup(context.Background()); err != nil {
+		t.Fatalf("cleanup error: %v", err)
+	}
+	if redis.deletedKey != "runtime:lock:scheduler-leader" {
+		t.Fatalf("redis lock release key = %q", redis.deletedKey)
+	}
+}
+
+func TestRefreshRuntimeDoesNotFallbackWhenRedisLockIsHeld(t *testing.T) {
+	redis := &lifecycleRuntimeRedis{locks: map[string]string{"runtime:lock:scheduler-leader": "other-worker"}}
+	state := &appMainLifecycleState{
+		repository:   &lifecycleAccountRepository{},
+		runtimeStore: platformruntime.NewRedisRuntimeStore(redis, platformruntime.RedisRuntimeStoreOptions{}),
+	}
+	localLockCalled := false
+	oldAcquireLocalLock := appMainAcquireSchedulerFileLock
+	t.Cleanup(func() {
+		appMainAcquireSchedulerFileLock = oldAcquireLocalLock
+		accountcontrol.SetRefreshScheduler(nil)
+		accountcontrol.SetSSOValidationScheduler(nil)
+		accountcontrol.SetRefreshSchedulerLeader(false)
+		accountcontrol.SetRefreshService(nil)
+	})
+	appMainAcquireSchedulerFileLock = func(context.Context) (Hook, error) {
+		localLockCalled = true
+		return nil, errors.New("local lock should not be used when redis lock is held")
+	}
+
+	cleanup, err := defaultAppMainStartRefreshRuntime(context.Background(), state)
+	if err != nil {
+		t.Fatalf("refresh runtime error: %v", err)
+	}
+	if cleanup == nil {
+		t.Fatalf("refresh runtime did not register cleanup")
+	}
+	if localLockCalled {
+		t.Fatalf("local scheduler lock should not be used when redis lock is held")
+	}
+	if state.schedulerKey != nil {
+		t.Fatalf("redis follower scheduler key = %#v, set key=%q", state.schedulerKey, redis.setKey)
+	}
+	if accountcontrol.IsRefreshSchedulerLeader() {
+		t.Fatalf("redis follower should not be scheduler leader, set key=%q existing locks=%#v", redis.setKey, redis.locks)
+	}
+	if err := cleanup(context.Background()); err != nil {
+		t.Fatalf("cleanup error: %v", err)
+	}
+}
+
+func TestRefreshRuntimeFallsBackToLocalSchedulerLockWhenRedisUnavailable(t *testing.T) {
+	redis := &lifecycleRuntimeRedis{setErr: errors.New("redis unavailable")}
+	state := &appMainLifecycleState{
+		repository:   &lifecycleAccountRepository{},
+		runtimeStore: platformruntime.NewRedisRuntimeStore(redis, platformruntime.RedisRuntimeStoreOptions{}),
+	}
+	lockAcquired := false
+	lockReleased := false
+	oldAcquireLocalLock := appMainAcquireSchedulerFileLock
+	t.Cleanup(func() {
+		appMainAcquireSchedulerFileLock = oldAcquireLocalLock
+		accountcontrol.SetRefreshScheduler(nil)
+		accountcontrol.SetSSOValidationScheduler(nil)
+		accountcontrol.SetRefreshSchedulerLeader(false)
+		accountcontrol.SetRefreshService(nil)
+	})
+	appMainAcquireSchedulerFileLock = func(context.Context) (Hook, error) {
+		lockAcquired = true
+		return func(context.Context) error {
+			lockReleased = true
+			return nil
+		}, nil
+	}
+
+	cleanup, err := defaultAppMainStartRefreshRuntime(context.Background(), state)
+	if err != nil {
+		t.Fatalf("refresh runtime error: %v", err)
+	}
+	if cleanup == nil {
+		t.Fatalf("refresh runtime did not register cleanup")
+	}
+	if !lockAcquired || !accountcontrol.IsRefreshSchedulerLeader() {
+		t.Fatalf("redis failure should fall back to local scheduler leader")
+	}
+	if state.schedulerKey != nil {
+		t.Fatalf("redis scheduler key should not be set after fallback")
+	}
+	if err := cleanup(context.Background()); err != nil {
+		t.Fatalf("cleanup error: %v", err)
+	}
+	if !lockReleased {
+		t.Fatalf("local scheduler lock was not released")
+	}
+}
+
 func TestRefreshRuntimeStartsConsoleQuotaResetLoop(t *testing.T) {
 	expiredAt := int64(1)
 	repo := &lifecycleAccountRepository{snapshot: accountcontrol.RuntimeSnapshot{
@@ -230,6 +358,40 @@ func TestRefreshRuntimeStartsConsoleQuotaResetLoop(t *testing.T) {
 		repo.patches[0].QuotaConsole["window_seconds"] != 3600 ||
 		repo.patches[0].QuotaConsole["reset_at"] != nil {
 		t.Fatalf("console reset patch = %#v", repo.patches[0].QuotaConsole)
+	}
+}
+
+func TestSchedulerLeaderLeaseStopsSchedulersWhenRenewLosesOwnership(t *testing.T) {
+	renewed := make(chan struct{}, 2)
+	lease := &fakeSchedulerLease{
+		renew: func(context.Context) (bool, error) {
+			renewed <- struct{}{}
+			return false, nil
+		},
+	}
+	accountcontrol.SetRefreshSchedulerLeader(true)
+	t.Cleanup(func() { accountcontrol.SetRefreshSchedulerLeader(false) })
+
+	cleanup := appMainStartSchedulerLeaderLeaseRenewal(
+		context.Background(),
+		lease,
+		time.Millisecond,
+	)
+
+	select {
+	case <-renewed:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("lease renewal loop did not renew")
+	}
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) && accountcontrol.IsRefreshSchedulerLeader() {
+		time.Sleep(time.Millisecond)
+	}
+	if accountcontrol.IsRefreshSchedulerLeader() {
+		t.Fatal("scheduler leader flag should clear when lease renewal loses ownership")
+	}
+	if err := cleanup(context.Background()); err != nil {
+		t.Fatalf("cleanup error: %v", err)
 	}
 }
 
@@ -354,6 +516,72 @@ type blockingLifecycleAccountRepository struct {
 	lifecycleAccountRepository
 	entered chan struct{}
 	release <-chan struct{}
+}
+
+type fakeSchedulerLease struct {
+	renew        func(context.Context) (bool, error)
+	releaseCalls int
+}
+
+type lifecycleRuntimeRedis struct {
+	locks      map[string]string
+	setErr     error
+	setKey     string
+	setValue   string
+	setPX      int
+	deletedKey string
+}
+
+func (r *lifecycleRuntimeRedis) Get(_ context.Context, key string) (any, error) {
+	if r.locks == nil {
+		return nil, nil
+	}
+	value, ok := r.locks[key]
+	if !ok {
+		return nil, nil
+	}
+	return value, nil
+}
+
+func (r *lifecycleRuntimeRedis) SetNX(_ context.Context, key, value string, ttlMS int) (bool, error) {
+	r.setKey = key
+	r.setValue = value
+	r.setPX = ttlMS
+	if r.setErr != nil {
+		return false, r.setErr
+	}
+	if r.locks == nil {
+		return false, nil
+	}
+	if _, exists := r.locks[key]; exists {
+		return false, nil
+	}
+	r.locks[key] = value
+	return true, nil
+}
+
+func (r *lifecycleRuntimeRedis) Expire(context.Context, string, int) error {
+	return nil
+}
+
+func (r *lifecycleRuntimeRedis) Delete(_ context.Context, key string) error {
+	r.deletedKey = key
+	if r.locks != nil {
+		delete(r.locks, key)
+	}
+	return nil
+}
+
+func (f *fakeSchedulerLease) Renew(ctx context.Context) (bool, error) {
+	if f.renew != nil {
+		return f.renew(ctx)
+	}
+	return true, nil
+}
+
+func (f *fakeSchedulerLease) Release(context.Context) (bool, error) {
+	f.releaseCalls++
+	return true, nil
 }
 
 func (r *blockingLifecycleAccountRepository) RuntimeSnapshot(ctx context.Context) (accountcontrol.RuntimeSnapshot, error) {

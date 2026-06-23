@@ -120,18 +120,21 @@ func defaultMessagesDirectoryProvider() messagesDirectory {
 
 func (d messagesDataDirectory) ReserveMessagesAccount(ctx context.Context, spec model.ModelSpec, excluded []string) (messagesAccount, bool, error) {
 	nowS := appruntime.NowS()
-	lease, selectedMode, ok, err := products.ReserveAccount(ctx, messagesReserveDirectory{directory: d.directory}, spec, products.ReserveAccountOptions{
+	lease, result, err := products.ReserveAccountDetailed(ctx, messagesReserveDirectory{directory: d.directory}, spec, products.ReserveAccountOptions{
 		ExcludeTokens: excluded,
 		NowSOverride:  &nowS,
 	})
-	if err != nil || !ok {
+	if err != nil {
 		return messagesAccount{}, false, err
+	}
+	if !result.OK {
+		return messagesAccount{}, false, products.AccountSelectionError(result)
 	}
 	accountLease, ok := lease.(dataaccount.AccountLease)
 	if !ok {
 		return messagesAccount{}, false, fmt.Errorf("unexpected account lease type %T", lease)
 	}
-	return messagesAccount{Token: accountLease.Token, ModeID: selectedMode, lease: accountLease}, true, nil
+	return messagesAccount{Token: accountLease.Token, ModeID: result.SelectedMode, lease: accountLease}, true, nil
 }
 
 func (d messagesDataDirectory) ReleaseMessagesAccount(_ context.Context, account messagesAccount) error {
@@ -153,6 +156,17 @@ func (d messagesReserveDirectory) Reserve(_ context.Context, query products.Rese
 		return nil, nil
 	}
 	return lease, nil
+}
+
+func (d messagesReserveDirectory) ReserveDetailed(_ context.Context, query products.ReserveAccountQuery) (any, products.AccountSelectionFailureReason, error) {
+	lease, reason, ok := d.directory.ReserveDetailed(query.PoolCandidates, int(query.ModeID), dataaccount.ReserveOptions{
+		ExcludeTokens: query.ExcludeTokens,
+		NowS:          int64PtrToIntPtr(query.NowSOverride),
+	})
+	if !ok {
+		return nil, products.AccountSelectionFailureFromData(reason), nil
+	}
+	return lease, products.AccountSelectionFailureNone, nil
 }
 
 func defaultMessagesRetryCodes() map[int]struct{} {
