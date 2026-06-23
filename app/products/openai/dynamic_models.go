@@ -57,6 +57,27 @@ type dynamicConsoleModelSource struct {
 	expiresAt  time.Time
 	refreshing bool
 	lastErrAt  time.Time
+	lastErr    string
+
+	cacheHits        int
+	cacheMisses      int
+	refreshSuccesses int
+	refreshFailures  int
+	lastSuccessAt    time.Time
+	lastFailureAt    time.Time
+}
+
+type DynamicConsoleModelStatus struct {
+	CachedModels     int       `json:"cached_models"`
+	CacheHits        int       `json:"cache_hits"`
+	CacheMisses      int       `json:"cache_misses"`
+	RefreshSuccesses int       `json:"refresh_successes"`
+	RefreshFailures  int       `json:"refresh_failures"`
+	Refreshing       bool      `json:"refreshing"`
+	ExpiresAt        time.Time `json:"expires_at,omitempty"`
+	LastSuccessAt    time.Time `json:"last_success_at,omitempty"`
+	LastFailureAt    time.Time `json:"last_failure_at,omitempty"`
+	LastError        string    `json:"last_error,omitempty"`
 }
 
 func newDynamicConsoleModelSource(options dynamicConsoleModelSourceOptions) *dynamicConsoleModelSource {
@@ -98,9 +119,11 @@ func (s *dynamicConsoleModelSource) ListContext(ctx context.Context) []model.Mod
 	s.mu.Lock()
 	now := s.now()
 	if now.Before(s.expiresAt) {
+		s.cacheHits++
 		defer s.mu.Unlock()
 		return cloneModelSpecs(s.cache)
 	}
+	s.cacheMisses++
 
 	if len(s.cache) > 0 {
 		cached := cloneModelSpecs(s.cache)
@@ -117,9 +140,15 @@ func (s *dynamicConsoleModelSource) ListContext(ctx context.Context) []model.Mod
 		s.cache = cloneModelSpecs(specs)
 		s.expiresAt = now.Add(s.ttl)
 		s.lastErrAt = time.Time{}
+		s.lastErr = ""
+		s.refreshSuccesses++
+		s.lastSuccessAt = now
 		return cloneModelSpecs(s.cache)
 	}
 	s.lastErrAt = now
+	s.lastErr = err.Error()
+	s.refreshFailures++
+	s.lastFailureAt = now
 	s.expiresAt = now.Add(s.failureTTL)
 	return cloneModelSpecs(s.cache)
 }
@@ -128,6 +157,27 @@ func (s *dynamicConsoleModelSource) LastErrorTime() time.Time {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.lastErrAt
+}
+
+func (s *dynamicConsoleModelSource) Status() DynamicConsoleModelStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return DynamicConsoleModelStatus{
+		CachedModels:     len(s.cache),
+		CacheHits:        s.cacheHits,
+		CacheMisses:      s.cacheMisses,
+		RefreshSuccesses: s.refreshSuccesses,
+		RefreshFailures:  s.refreshFailures,
+		Refreshing:       s.refreshing,
+		ExpiresAt:        s.expiresAt,
+		LastSuccessAt:    s.lastSuccessAt,
+		LastFailureAt:    s.lastFailureAt,
+		LastError:        s.lastErr,
+	}
+}
+
+func DynamicModelStatus() DynamicConsoleModelStatus {
+	return defaultDynamicConsoleModels.Status()
 }
 
 func (s *dynamicConsoleModelSource) startRefreshLocked(ctx context.Context, now time.Time) {
@@ -143,12 +193,18 @@ func (s *dynamicConsoleModelSource) startRefreshLocked(ctx context.Context, now 
 		s.refreshing = false
 		if err != nil {
 			s.lastErrAt = finished
+			s.lastErr = err.Error()
 			s.expiresAt = finished.Add(s.failureTTL)
+			s.refreshFailures++
+			s.lastFailureAt = finished
 			return
 		}
 		s.cache = cloneModelSpecs(specs)
 		s.expiresAt = finished.Add(s.ttl)
 		s.lastErrAt = time.Time{}
+		s.lastErr = ""
+		s.refreshSuccesses++
+		s.lastSuccessAt = finished
 	}()
 	_ = now
 }

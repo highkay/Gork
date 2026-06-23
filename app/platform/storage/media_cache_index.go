@@ -179,6 +179,16 @@ func usageBytes(db *sql.DB, mediaType MediaType) (int64, error) {
 	return total, err
 }
 
+func mediaCacheUsage(db *sql.DB, mediaType MediaType) (int, int64, error) {
+	var count int
+	var total int64
+	err := db.QueryRow(`
+		SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM local_media_files
+		WHERE media_type = ?
+	`, string(mediaType)).Scan(&count, &total)
+	return count, total, err
+}
+
 func newestName(db *sql.DB, mediaType MediaType) (string, error) {
 	var name string
 	err := db.QueryRow(`

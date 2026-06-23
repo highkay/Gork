@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dslzl/gork/app/platform/observability"
 )
 
 func TestNewAppRoutesHealthStaticFaviconAndProductRouters(t *testing.T) {
@@ -73,6 +75,43 @@ func TestNewAppReloadsConfigAndReconcilesRefreshRuntimePerRequest(t *testing.T) 
 	if loadCalls != 1 || reconcileCalls != 1 {
 		t.Fatalf("middleware calls load=%d reconcile=%d", loadCalls, reconcileCalls)
 	}
+}
+
+func TestNewAppInjectsRequestIDAndGatesObservabilityRoutes(t *testing.T) {
+	stubAppMainRequestMiddleware(t)
+	observability.ResetForTest()
+	app := NewApp(AppOptions{WebRouter: textHandler("web")})
+
+	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	rec := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rec, req)
+	if rec.Header().Get("X-Request-ID") == "" {
+		t.Fatal("missing generated request id")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/admin", nil)
+	req.Header.Set("X-Request-ID", "req-test")
+	rec = httptest.NewRecorder()
+	app.Handler().ServeHTTP(rec, req)
+	if rec.Header().Get("X-Request-ID") != "req-test" {
+		t.Fatalf("preserved request id = %q", rec.Header().Get("X-Request-ID"))
+	}
+
+	assertAppResponse(t, app.Handler(), http.MethodGet, "/metrics", "", http.StatusNotFound, "not found")
+	assertAppResponse(t, app.Handler(), http.MethodGet, "/debug/pprof/", "", http.StatusNotFound, "not found")
+}
+
+func TestNewAppServesEnabledMetricsAndPprof(t *testing.T) {
+	stubAppMainRequestMiddleware(t)
+	observability.ResetForTest()
+	appMainObservabilityConfig = func() appMainObservabilitySettings {
+		return appMainObservabilitySettings{MetricsEnabled: true, PprofEnabled: true}
+	}
+	app := NewApp(AppOptions{WebRouter: textHandler("web")})
+
+	assertAppResponse(t, app.Handler(), http.MethodGet, "/admin", "", http.StatusOK, "web")
+	assertAppResponse(t, app.Handler(), http.MethodGet, "/metrics", "", http.StatusOK, "gork_http_requests_total")
+	assertAppResponse(t, app.Handler(), http.MethodGet, "/debug/pprof/", "", http.StatusOK, "Types of profiles")
 }
 
 func TestDefaultLifecycleWiresAdminAccountRuntime(t *testing.T) {
@@ -227,6 +266,7 @@ func resetAppMainDeps(t *testing.T) {
 	oldLoadRequestConfig := appMainLoadRequestConfig
 	oldReconcileRefreshRuntime := appMainReconcileRefreshRuntime
 	oldSetupLogging := appMainSetupLogging
+	oldObservabilityConfig := appMainObservabilityConfig
 	oldStartRuntimeStore := appMainStartRuntimeStore
 	oldConfigureTaskSnapshotStore := appMainConfigureTaskSnapshotStore
 	oldInitializeRepository := appMainInitializeRepository
@@ -240,6 +280,7 @@ func resetAppMainDeps(t *testing.T) {
 		appMainLoadRequestConfig = oldLoadRequestConfig
 		appMainReconcileRefreshRuntime = oldReconcileRefreshRuntime
 		appMainSetupLogging = oldSetupLogging
+		appMainObservabilityConfig = oldObservabilityConfig
 		appMainStartRuntimeStore = oldStartRuntimeStore
 		appMainConfigureTaskSnapshotStore = oldConfigureTaskSnapshotStore
 		appMainInitializeRepository = oldInitializeRepository

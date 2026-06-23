@@ -386,6 +386,9 @@ In Admin → Config → Proxy, switch `proxy.clearance.mode` to `manual` and pro
 **Q: Multi-worker deployment.**
 The Go version currently runs as a single-process HTTP service and no longer starts in-container workers through `SERVER_WORKERS`. For horizontal scaling, run multiple container replicas and configure Redis for account storage, task snapshots, and runtime coordination.
 
+**Q: Observability and operations.**
+Every request receives an `X-Request-ID` response header, and access logs record method, sanitized path, status, duration, and request id without raw query strings. Enable `[observability] metrics_enabled = true` to expose Prometheus text metrics at `/metrics`; enable `[observability] pprof_enabled = true` to expose `/debug/pprof/*`. Both are disabled by default. `/admin/api/status` includes runtime, scheduler, proxy clearance, dynamic model refresh, media cache, and recent upstream error summaries. Redis runtime task snapshots are retained according to `RUNTIME_TASK_TTL_S`, so recent batch task progress can be queried across restarts. `logging.max_files` is daily-file retention for `app_{time:YYYY-MM-DD}.log`; logs rotate on date change, not by file size.
+
 <br>
 
 ## Credits

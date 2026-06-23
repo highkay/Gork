@@ -107,6 +107,10 @@ func (d *ProxyDirectory) buildBundleAsWinner(ctx context.Context, mode Clearance
 	if err != nil || !ok {
 		return nil, err
 	}
+	now := d.clock()
+	bundle.LastRefreshAt = &now
+	bundle.RefreshCount++
+	bundle.LastRefreshError = ""
 	d.mu.Lock()
 	d.bundles[key] = bundle
 	d.mu.Unlock()

@@ -54,6 +54,38 @@ func TestLocalMediaCacheSavesWithoutLimitAndDoesNotOverwriteExisting(t *testing.
 	}
 }
 
+func TestLocalMediaCacheStatusReportsUsageAndCounters(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	store := NewLocalMediaCacheStore(LocalMediaCacheOptions{Config: staticMediaConfig{
+		"cache.local.image_max_mb": 1,
+		"cache.local.video_max_mb": 1,
+	}})
+
+	if _, err := store.SaveImage([]byte("image"), "image/png", "img-status"); err != nil {
+		t.Fatalf("SaveImage returned error: %v", err)
+	}
+	if _, err := store.SaveVideo([]byte("video"), "vid-status"); err != nil {
+		t.Fatalf("SaveVideo returned error: %v", err)
+	}
+	if err := store.Reconcile(MediaTypeImage); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	status, err := store.Status()
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	image := status.Media[MediaTypeImage]
+	video := status.Media[MediaTypeVideo]
+	if image.Count != 1 || image.Bytes != int64(len("image")) || image.SaveCount != 1 || image.ReconcileCount != 1 {
+		t.Fatalf("image status = %#v", image)
+	}
+	if video.Count != 1 || video.Bytes != int64(len("video")) || video.SaveCount != 1 {
+		t.Fatalf("video status = %#v", video)
+	}
+}
+
 func TestLocalMediaCacheDeleteAndClearValidateMediaNames(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("DATA_DIR", dataDir)

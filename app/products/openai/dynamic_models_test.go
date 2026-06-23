@@ -90,6 +90,37 @@ func TestDynamicConsoleModelSourceFallsBackToCachedModelsOnRefreshFailure(t *tes
 	}
 }
 
+func TestDynamicConsoleModelSourceStatusTracksCacheAndRefreshResults(t *testing.T) {
+	now := time.Unix(100, 0)
+	client := &fakeDynamicModelHTTPClient{body: sampleDynamicConsoleModelsResponse(t)}
+	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
+		Endpoint: "https://console.x.ai/auth_mgmt.AuthManagement/ListModels",
+		TTL:      time.Second,
+		Now:      func() time.Time { return now },
+		Client:   client,
+		Directory: func() chatDirectory {
+			return &fakeChatDirectory{accounts: []chatAccount{{Token: "sso-token", ModeID: model.ModeConsole}}}
+		},
+	})
+
+	source.List()
+	source.List()
+	now = now.Add(2 * time.Second)
+	client.err = errors.New("refresh failed")
+	source.List()
+	waitForDynamicRefresh(t, func() bool {
+		return source.Status().RefreshFailures == 1
+	})
+
+	status := source.Status()
+	if status.CacheHits != 1 || status.CacheMisses != 2 || status.RefreshSuccesses != 1 || status.RefreshFailures != 1 {
+		t.Fatalf("status = %#v", status)
+	}
+	if status.CachedModels != 3 || status.LastSuccessAt.IsZero() || status.LastFailureAt.IsZero() || status.LastError == "" {
+		t.Fatalf("status timestamps/cache = %#v", status)
+	}
+}
+
 func TestDynamicConsoleModelSourceListContextCancelsInitialRefresh(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

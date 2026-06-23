@@ -320,6 +320,15 @@ server {
 
 运行时配置也支持 `GROK_` 前缀环境变量覆盖，例如 `GROK_APP_API_KEY` 覆盖 `app.api_key`，`GROK_FEATURES_STREAM` 覆盖 `features.stream`。
 
+### 可观测性与运维
+
+- 每个 HTTP 请求都会注入 `X-Request-ID` 响应头；如果客户端传入同名 header，会沿用该值。access log 记录 method、脱敏 path、status、duration、request id，默认不写入 query。
+- `[observability] metrics_enabled = true` 后开放 `/metrics`，输出 Prometheus 文本格式的 HTTP 请求数、请求耗时和上游错误状态码计数；默认关闭。
+- `[observability] pprof_enabled = true` 后开放 `/debug/pprof/*`，用于临时 CPU/heap/goroutine 排查；默认关闭，建议只在内网或受保护环境启用。
+- `/admin/api/status` 会返回 runtime、scheduler、proxy clearance、dynamic model refresh、media cache 和最近上游错误摘要。上游错误只保留状态码、分类消息和截断摘要，不保存完整敏感响应。
+- Redis runtime 开启后，后台 batch task snapshot 会按 `RUNTIME_TASK_TTL_S` 保留，跨重启仍可查询最近任务进度；未配置 Redis 时仅使用进程内状态。
+- `logging.max_files` 控制日志文件保留数量。日志按天写入 `app_{time:YYYY-MM-DD}.log`，到自然日切换时轮转；当前实现不按单文件大小切分，超过保留数量的旧日志由文件 sink 清理。
+
 ### Redis 可选增强
 
 Redis 不是必需依赖。默认 `ACCOUNT_STORAGE=local` 时项目会使用本地 SQLite 账号库和进程内运行时状态，适合单机/单 worker 部署。

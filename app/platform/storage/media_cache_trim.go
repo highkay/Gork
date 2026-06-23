@@ -52,6 +52,7 @@ func (s *LocalMediaCacheStore) enforceLimitLocked(db *sql.DB, mediaType MediaTyp
 		`, string(mediaType), item.name); err != nil {
 			return err
 		}
+		s.recordEvict(mediaType)
 		usage -= item.size
 		if usage < 0 {
 			usage = 0

@@ -190,6 +190,48 @@ func TestAdminStatusAndSyncUseDirectory(t *testing.T) {
 	}
 }
 
+func TestAdminStatusIncludesRuntimeAndObservabilitySummary(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	dir := &fakeAdminDirectory{size: 2, revision: 7}
+	adminAccountDirectory = func() adminDirectory { return dir }
+	adminReconcileRefreshRuntime = func() string { return "quota" }
+	adminRuntimeStatus = func() map[string]any {
+		return map[string]any{"uptime_ms": int64(12), "goroutines": 3}
+	}
+	adminObservabilityStatus = func() map[string]any {
+		return map[string]any{
+			"http_requests_total": 4,
+			"upstream_errors": []map[string]any{{
+				"product":     "openai",
+				"model":       "gpt-test",
+				"status_code": 502,
+				"message":     "bad gateway",
+			}},
+		}
+	}
+
+	rec := adminRequest(http.MethodGet, "/admin/api/status", "", "Bearer gork")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid status JSON: %v", err)
+	}
+	runtimeSummary, ok := payload["runtime"].(map[string]any)
+	if !ok || runtimeSummary["selection_strategy"] != "quota" || runtimeSummary["goroutines"] != float64(3) {
+		t.Fatalf("runtime summary = %#v", payload["runtime"])
+	}
+	observabilitySummary, ok := payload["observability"].(map[string]any)
+	if !ok || observabilitySummary["http_requests_total"] != float64(4) {
+		t.Fatalf("observability summary = %#v", payload["observability"])
+	}
+	errors, ok := observabilitySummary["upstream_errors"].([]any)
+	if !ok || len(errors) != 1 {
+		t.Fatalf("upstream errors = %#v", observabilitySummary["upstream_errors"])
+	}
+}
+
 func TestAdminProtocolCheckRunsAndReturnsLatest(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	adminProtocolCheckRunner = func(ctx context.Context, targets []string) []reverse.ProtocolCheckResult {
@@ -365,6 +407,11 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	oldAuth := adminRouterAuthSettings
 	oldConfig := adminRouterConfig
 	oldRuntime := adminReconcileRefreshRuntime
+	oldRuntimeStatus := adminRuntimeStatus
+	oldObservabilityStatus := adminObservabilityStatus
+	oldProxyStatus := adminProxyStatus
+	oldDynamicModelStatus := adminDynamicModelStatus
+	oldMediaCacheStatus := adminMediaCacheStatus
 	oldSchedulerStatus := adminSchedulerStatus
 	oldSelectionStatus := adminSelectionStatus
 	oldReload := adminReloadFileLogging
@@ -393,6 +440,11 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{} }
 	adminRouterConfig = &fakeAdminConfig{}
 	adminReconcileRefreshRuntime = func() string { return "" }
+	adminRuntimeStatus = func() map[string]any { return nil }
+	adminObservabilityStatus = func() map[string]any { return nil }
+	adminProxyStatus = func(context.Context) map[string]any { return nil }
+	adminDynamicModelStatus = func() any { return nil }
+	adminMediaCacheStatus = func() any { return nil }
 	adminSchedulerStatus = func() map[string]any { return nil }
 	adminSelectionStatus = func() map[string]any { return nil }
 	adminReloadFileLogging = func(string, int) error { return nil }
@@ -426,6 +478,11 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 		adminRouterAuthSettings = oldAuth
 		adminRouterConfig = oldConfig
 		adminReconcileRefreshRuntime = oldRuntime
+		adminRuntimeStatus = oldRuntimeStatus
+		adminObservabilityStatus = oldObservabilityStatus
+		adminProxyStatus = oldProxyStatus
+		adminDynamicModelStatus = oldDynamicModelStatus
+		adminMediaCacheStatus = oldMediaCacheStatus
 		adminSchedulerStatus = oldSchedulerStatus
 		adminSelectionStatus = oldSelectionStatus
 		adminReloadFileLogging = oldReload

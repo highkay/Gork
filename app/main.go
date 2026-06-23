@@ -4,19 +4,25 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	"github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/logging"
+	"github.com/dslzl/gork/app/platform/observability"
 	"github.com/dslzl/gork/app/products/anthropic"
 	"github.com/dslzl/gork/app/products/openai"
 	"github.com/dslzl/gork/app/products/web"
 )
 
 var (
+	appStartedAt = time.Now()
+
 	appMainEnsureConfig = func(ctx context.Context) error {
 		return config.GlobalConfig.EnsureLoaded(ctx, "")
 	}
@@ -29,9 +35,20 @@ var (
 	appMainSetupLogging = func() error {
 		return logging.SetupLogging(logging.LoggingOptions{})
 	}
+	appMainObservabilityConfig = func() appMainObservabilitySettings {
+		return appMainObservabilitySettings{
+			MetricsEnabled: config.GlobalConfig.GetBool("observability.metrics_enabled", false),
+			PprofEnabled:   config.GlobalConfig.GetBool("observability.pprof_enabled", false),
+		}
+	}
 )
 
 type Hook func(context.Context) error
+
+type appMainObservabilitySettings struct {
+	MetricsEnabled bool
+	PprofEnabled   bool
+}
 
 type AppOptions struct {
 	StaticsRoot     string
@@ -55,7 +72,7 @@ func NewApp(options AppOptions) *App {
 		options.StartupHooks = defaultStartupHooks()
 	}
 	return &App{
-		handler:       withAppMiddleware(newAppRouter(normalizeAppOptions(options))),
+		handler:       observability.Middleware(withAppMiddleware(newAppRouter(normalizeAppOptions(options)))),
 		startupHooks:  append([]Hook(nil), options.StartupHooks...),
 		shutdownHooks: append([]Hook(nil), options.ShutdownHooks...),
 	}
@@ -107,6 +124,19 @@ func normalizeAppOptions(options AppOptions) AppOptions {
 func newAppRouter(options AppOptions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.URL.Path == "/metrics":
+			if !appMainObservabilityConfig().MetricsEnabled {
+				writeAppJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+			_, _ = w.Write([]byte(observability.MetricsText()))
+		case strings.HasPrefix(r.URL.Path, "/debug/pprof"):
+			if !appMainObservabilityConfig().PprofEnabled {
+				writeAppJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
+				return
+			}
+			serveAppPprof(w, r)
 		case r.URL.Path == "/health":
 			writeAppJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 		case r.URL.Path == "/favicon.ico":
@@ -121,6 +151,32 @@ func newAppRouter(options AppOptions) http.Handler {
 			options.WebRouter.ServeHTTP(w, r)
 		}
 	})
+}
+
+func appRuntimeSummary(selectionStrategy string) map[string]any {
+	return map[string]any{
+		"selection_strategy": selectionStrategy,
+		"uptime_ms":          time.Since(appStartedAt).Milliseconds(),
+		"goroutines":         runtime.NumGoroutine(),
+	}
+}
+
+func serveAppPprof(w http.ResponseWriter, r *http.Request) {
+	switch r.URL.Path {
+	case "/debug/pprof/", "/debug/pprof":
+		pprof.Index(w, r)
+	case "/debug/pprof/cmdline":
+		pprof.Cmdline(w, r)
+	case "/debug/pprof/profile":
+		pprof.Profile(w, r)
+	case "/debug/pprof/symbol":
+		pprof.Symbol(w, r)
+	case "/debug/pprof/trace":
+		pprof.Trace(w, r)
+	default:
+		name := strings.TrimPrefix(r.URL.Path, "/debug/pprof/")
+		pprof.Handler(name).ServeHTTP(w, r)
+	}
 }
 
 func serveAppFavicon(w http.ResponseWriter, r *http.Request, staticsRoot string) {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
@@ -32,8 +33,10 @@ type LocalMediaCacheOptions struct {
 }
 
 type LocalMediaCacheStore struct {
-	config MediaCacheConfig
-	locks  map[MediaType]*sync.Mutex
+	config  MediaCacheConfig
+	locks   map[MediaType]*sync.Mutex
+	statsMu sync.Mutex
+	stats   map[MediaType]LocalMediaCacheMediaStatus
 }
 
 func NewLocalMediaCacheStore(options LocalMediaCacheOptions) *LocalMediaCacheStore {
@@ -47,6 +50,7 @@ func NewLocalMediaCacheStore(options LocalMediaCacheOptions) *LocalMediaCacheSto
 			MediaTypeImage: {},
 			MediaTypeVideo: {},
 		},
+		stats: map[MediaType]LocalMediaCacheMediaStatus{},
 	}
 }
 
@@ -138,7 +142,11 @@ func (s *LocalMediaCacheStore) Reconcile(mediaType MediaType) error {
 		return err
 	}
 	defer unlock()
-	return s.reconcileIndexed(mediaType)
+	if err := s.reconcileIndexed(mediaType); err != nil {
+		return err
+	}
+	s.recordReconcile(mediaType)
+	return nil
 }
 
 func (s *LocalMediaCacheStore) save(mediaType MediaType, fileID string, raw []byte, suffix string) (string, error) {
@@ -151,6 +159,7 @@ func (s *LocalMediaCacheStore) save(mediaType MediaType, fileID string, raw []by
 		if err := writeIfMissing(path, raw); err != nil {
 			return "", err
 		}
+		s.recordSave(mediaType)
 		return path, nil
 	}
 	unlock, err := s.guard(mediaType)
@@ -161,7 +170,33 @@ func (s *LocalMediaCacheStore) save(mediaType MediaType, fileID string, raw []by
 	if err := s.saveIndexed(mediaType, path, raw); err != nil {
 		return "", err
 	}
+	s.recordSave(mediaType)
 	return path, nil
+}
+
+func (s *LocalMediaCacheStore) recordSave(mediaType MediaType) {
+	s.statsMu.Lock()
+	defer s.statsMu.Unlock()
+	item := s.stats[mediaType]
+	item.SaveCount++
+	s.stats[mediaType] = item
+}
+
+func (s *LocalMediaCacheStore) recordReconcile(mediaType MediaType) {
+	s.statsMu.Lock()
+	defer s.statsMu.Unlock()
+	item := s.stats[mediaType]
+	item.ReconcileCount++
+	item.LastReconcileAt = time.Now().UnixMilli()
+	s.stats[mediaType] = item
+}
+
+func (s *LocalMediaCacheStore) recordEvict(mediaType MediaType) {
+	s.statsMu.Lock()
+	defer s.statsMu.Unlock()
+	item := s.stats[mediaType]
+	item.EvictCount++
+	s.stats[mediaType] = item
 }
 
 func (s *LocalMediaCacheStore) limitBytes(mediaType MediaType) int {

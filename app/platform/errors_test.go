@@ -1,6 +1,20 @@
 package platform
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/dslzl/gork/app/platform/observability"
+)
+
+func TestNewUpstreamErrorRecordsObservabilitySummary(t *testing.T) {
+	observability.ResetForTest()
+	_ = NewUpstreamError("bad upstream", 503, "body")
+
+	recent := observability.RecentUpstreamErrors(1)
+	if len(recent) != 1 || recent[0].StatusCode != 503 || recent[0].Message != "bad upstream" {
+		t.Fatalf("recent upstream errors = %#v", recent)
+	}
+}
 
 func TestAppErrorToDictMatchesOpenAIErrorShape(t *testing.T) {
 	err := NewAppError("bad input", ErrorKindValidation, "invalid_value", 400, map[string]any{"param": "model"})

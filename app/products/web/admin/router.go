@@ -6,18 +6,24 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	goruntime "runtime"
+	"strings"
 	"sync"
 	"time"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
+	proxycontrol "github.com/dslzl/gork/app/control/proxy"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	reverse "github.com/dslzl/gork/app/dataplane/reverse"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/logging"
+	"github.com/dslzl/gork/app/platform/observability"
 	appruntime "github.com/dslzl/gork/app/platform/runtime"
 	"github.com/dslzl/gork/app/platform/storage"
+	"github.com/dslzl/gork/app/products/openai"
 )
 
 type adminConfigStore interface {
@@ -40,6 +46,8 @@ type adminSelectionStatusDirectory interface {
 }
 
 var (
+	adminStartedAt = time.Now()
+
 	adminRouterAuthSettings = func() auth.AuthSettings {
 		return auth.AuthSettings{AdminKey: config.GetConfig("app.admin_key", nil)}
 	}
@@ -51,10 +59,44 @@ var (
 		return storage.ReconcileLocalMediaCache()
 	}
 	adminReconcileRefreshRuntime = func() string { return "" }
-	adminAccountDirectory        = func() adminDirectory { return nil }
-	adminSchedulerStatus         = defaultAdminSchedulerStatus
-	adminSelectionStatus         = defaultAdminSelectionStatus
-	adminStorageBackend          = func() string {
+	adminRuntimeStatus           = func() map[string]any {
+		return map[string]any{
+			"version":         platform.GetProjectVersion(),
+			"commit":          "",
+			"go_version":      goruntime.Version(),
+			"uptime_ms":       time.Since(adminStartedAt).Milliseconds(),
+			"goroutines":      goruntime.NumGoroutine(),
+			"account_storage": fmt.Sprint(config.GetConfig("account.storage", "local")),
+			"runtime_store":   adminRuntimeStoreType(),
+		}
+	}
+	adminObservabilityStatus = func() map[string]any {
+		status := observability.Snapshot()
+		status["metrics_enabled"] = config.GlobalConfig.GetBool("observability.metrics_enabled", false)
+		status["pprof_enabled"] = config.GlobalConfig.GetBool("observability.pprof_enabled", false)
+		return status
+	}
+	adminProxyStatus = func(ctx context.Context) map[string]any {
+		directory, err := proxycontrol.GetProxyDirectory(ctx)
+		if err != nil {
+			return map[string]any{"error": err.Error()}
+		}
+		return directory.ObservabilityStatus()
+	}
+	adminDynamicModelStatus = func() any {
+		return openai.DynamicModelStatus()
+	}
+	adminMediaCacheStatus = func() any {
+		status, err := storage.NewLocalMediaCacheStore(storage.LocalMediaCacheOptions{}).Status()
+		if err != nil {
+			return map[string]any{"error": err.Error()}
+		}
+		return status
+	}
+	adminAccountDirectory = func() adminDirectory { return nil }
+	adminSchedulerStatus  = defaultAdminSchedulerStatus
+	adminSelectionStatus  = defaultAdminSelectionStatus
+	adminStorageBackend   = func() string {
 		return fmt.Sprint(config.GetConfig("account.storage", "local"))
 	}
 	adminProtocolCheckRunner = func(ctx context.Context, targets []string) []reverse.ProtocolCheckResult {
@@ -185,11 +227,30 @@ func handleAdminStatus(w http.ResponseWriter, r *http.Request) {
 		writeAdminError(w, adminDirectoryError())
 		return
 	}
+	selectionStrategy := adminReconcileRefreshRuntime()
+	runtimeSummary := adminRuntimeStatus()
+	if runtimeSummary == nil {
+		runtimeSummary = map[string]any{}
+	}
+	runtimeSummary["selection_strategy"] = selectionStrategy
 	payload := map[string]any{
 		"status":             "ok",
 		"size":               directory.Size(),
 		"revision":           directory.Revision(),
-		"selection_strategy": adminReconcileRefreshRuntime(),
+		"selection_strategy": selectionStrategy,
+		"runtime":            runtimeSummary,
+	}
+	if observability := adminObservabilityStatus(); observability != nil {
+		payload["observability"] = observability
+	}
+	if proxy := adminProxyStatus(r.Context()); proxy != nil {
+		payload["proxy"] = proxy
+	}
+	if dynamic := adminDynamicModelStatus(); dynamic != nil {
+		payload["dynamic_models"] = dynamic
+	}
+	if mediaCache := adminMediaCacheStatus(); mediaCache != nil {
+		payload["media_cache"] = mediaCache
 	}
 	if scheduler := adminSchedulerStatus(); scheduler != nil {
 		payload["scheduler"] = scheduler
@@ -199,6 +260,13 @@ func handleAdminStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	writeAdminJSON(w, http.StatusOK, payload)
 	_ = r
+}
+
+func adminRuntimeStoreType() string {
+	if strings.TrimSpace(os.Getenv("RUNTIME_REDIS_URL")) != "" {
+		return "redis"
+	}
+	return "local"
 }
 
 func defaultAdminSchedulerStatus() map[string]any {
