@@ -90,6 +90,99 @@ func TestDynamicConsoleModelSourceFallsBackToCachedModelsOnRefreshFailure(t *tes
 	}
 }
 
+func TestDynamicConsoleModelSourceListContextCancelsInitialRefresh(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	client := &fakeDynamicModelHTTPClient{body: sampleDynamicConsoleModelsResponse(t)}
+	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
+		Client: client,
+		Directory: func() chatDirectory {
+			return &fakeChatDirectory{accounts: []chatAccount{{Token: "sso-token", ModeID: model.ModeConsole}}}
+		},
+	})
+
+	if got := source.ListContext(ctx); len(got) != 0 {
+		t.Fatalf("cancelled initial list = %#v, want empty fallback", got)
+	}
+	if client.calls != 0 {
+		t.Fatalf("cancelled context should not start HTTP refresh, calls=%d", client.calls)
+	}
+	if source.LastErrorTime().IsZero() {
+		t.Fatalf("cancelled refresh should expose last error time")
+	}
+}
+
+func TestDynamicConsoleModelSourceReturnsStaleCacheWhileRefreshing(t *testing.T) {
+	now := time.Unix(100, 0)
+	release := make(chan struct{})
+	client := &fakeDynamicModelHTTPClient{body: sampleDynamicConsoleModelsResponse(t)}
+	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
+		TTL:    time.Second,
+		Now:    func() time.Time { return now },
+		Client: client,
+		Directory: func() chatDirectory {
+			return &fakeChatDirectory{accounts: []chatAccount{{Token: "sso-token", ModeID: model.ModeConsole}}}
+		},
+	})
+	if got := modelNamesForSpecs(source.ListContext(context.Background())); len(got) == 0 {
+		t.Fatalf("initial list is empty")
+	}
+
+	now = now.Add(2 * time.Second)
+	client.block = release
+	got := modelNamesForSpecs(source.ListContext(context.Background()))
+	if !reflect.DeepEqual(got, []string{"grok-4.20-dynamic", "grok-4.20-dynamic-latest", "grok-code-fast"}) {
+		t.Fatalf("stale list = %#v", got)
+	}
+	waitForDynamicRefresh(t, func() bool { return client.calls == 2 })
+	if client.calls != 2 {
+		t.Fatalf("expired cache should start one background refresh, calls=%d", client.calls)
+	}
+	close(release)
+}
+
+func TestDynamicConsoleModelSourceKeepsStaleCacheAndRecordsError(t *testing.T) {
+	now := time.Unix(100, 0)
+	client := &fakeDynamicModelHTTPClient{body: sampleDynamicConsoleModelsResponse(t)}
+	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
+		TTL:    time.Second,
+		Now:    func() time.Time { return now },
+		Client: client,
+		Directory: func() chatDirectory {
+			return &fakeChatDirectory{accounts: []chatAccount{{Token: "sso-token", ModeID: model.ModeConsole}}}
+		},
+	})
+	if got := modelNamesForSpecs(source.ListContext(context.Background())); len(got) == 0 {
+		t.Fatalf("initial list is empty")
+	}
+
+	now = now.Add(2 * time.Second)
+	client.err = errors.New("account unavailable")
+	if got := modelNamesForSpecs(source.ListContext(context.Background())); !reflect.DeepEqual(got, []string{"grok-4.20-dynamic", "grok-4.20-dynamic-latest", "grok-code-fast"}) {
+		t.Fatalf("refresh failure should return stale cache, got %#v", got)
+	}
+	waitForDynamicRefresh(t, func() bool { return !source.LastErrorTime().IsZero() })
+	if got := modelNamesForSpecs(source.ListContext(context.Background())); !reflect.DeepEqual(got, []string{"grok-4.20-dynamic", "grok-4.20-dynamic-latest", "grok-code-fast"}) {
+		t.Fatalf("failed background refresh should keep stale cache, got %#v", got)
+	}
+}
+
+func TestDynamicConsoleModelSourceNoAccountReturnsEmptyWithoutBlockingModels(t *testing.T) {
+	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
+		Client: &fakeDynamicModelHTTPClient{body: sampleDynamicConsoleModelsResponse(t)},
+		Directory: func() chatDirectory {
+			return &fakeChatDirectory{}
+		},
+	})
+
+	if got := source.ListContext(context.Background()); len(got) != 0 {
+		t.Fatalf("no-account list = %#v, want empty degradation", got)
+	}
+	if source.LastErrorTime().IsZero() {
+		t.Fatalf("no-account degradation should expose last error time")
+	}
+}
+
 func TestDynamicConsoleModelSourceProbeListModelsBypassesCache(t *testing.T) {
 	client := &fakeDynamicModelHTTPClient{body: sampleDynamicConsoleModelsResponse(t)}
 	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
@@ -226,12 +319,16 @@ type fakeDynamicModelHTTPClient struct {
 	err      error
 	status   int
 	calls    int
+	block    <-chan struct{}
 	requests []*http.Request
 }
 
 func (c *fakeDynamicModelHTTPClient) Do(request *http.Request) (*http.Response, error) {
 	c.calls++
 	c.requests = append(c.requests, request)
+	if c.block != nil {
+		<-c.block
+	}
 	if c.err != nil {
 		return nil, c.err
 	}
@@ -244,4 +341,16 @@ func (c *fakeDynamicModelHTTPClient) Do(request *http.Request) (*http.Response, 
 		Header:     http.Header{"Content-Type": []string{"application/grpc-web+proto"}},
 		Body:       io.NopCloser(bytes.NewReader(c.body)),
 	}, nil
+}
+
+func waitForDynamicRefresh(t *testing.T, done func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if done() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("background dynamic refresh did not finish before deadline")
 }

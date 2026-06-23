@@ -95,3 +95,35 @@ func TestValidationErrorParamOnlyAppearsWhenProvided(t *testing.T) {
 		t.Fatalf("AppError without param details should not include param")
 	}
 }
+
+func TestAdaptErrorResponseMapsStatusPayloadAndRetryHeaders(t *testing.T) {
+	upstream := NewUpstreamErrorWithHeaders("busy", 503, "body", map[string]string{
+		"Retry-After":             "12",
+		"X-RateLimit-Reset":       "12345",
+		"X-Internal-Debug-Secret": "do-not-pass",
+	})
+
+	adapted := AdaptErrorResponse(upstream)
+	if adapted.Status != 503 {
+		t.Fatalf("status=%d", adapted.Status)
+	}
+	errBody := adapted.Payload["error"].(map[string]any)
+	if errBody["type"] != ErrorKindUpstream || errBody["code"] != "upstream_error" || errBody["message"] != "busy" {
+		t.Fatalf("payload=%#v", adapted.Payload)
+	}
+	if adapted.Headers["Retry-After"] != "12" || adapted.Headers["X-RateLimit-Reset"] != "12345" {
+		t.Fatalf("headers=%#v", adapted.Headers)
+	}
+	if _, ok := adapted.Headers["X-Internal-Debug-Secret"]; ok {
+		t.Fatalf("unexpected private header pass-through: %#v", adapted.Headers)
+	}
+
+	fallback := AdaptErrorResponse(assertionError("plain"))
+	if fallback.Status != 500 || fallback.Payload["error"].(map[string]any)["code"] != "internal_error" {
+		t.Fatalf("fallback=%#v", fallback)
+	}
+}
+
+type assertionError string
+
+func (e assertionError) Error() string { return string(e) }

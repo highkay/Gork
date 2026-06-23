@@ -302,8 +302,8 @@ Runtime config can also be overridden via `GROK_`-prefixed env vars, e.g. `GROK_
 | `POST /v1/videos` | yes | Async video job creation |
 | `GET /v1/videos/{video_id}` | yes | Query a video job |
 | `GET /v1/videos/{video_id}/content` | yes | Download the final video |
-| `GET /v1/files/video?id=...` | no | Locally cached video |
-| `GET /v1/files/image?id=...` | no | Locally cached image |
+| `GET /v1/files/video?id=...` | no | Gork private extension for locally cached video; not part of the official OpenAI Files API |
+| `GET /v1/files/image?id=...` | no | Gork private extension for locally cached image; not part of the official OpenAI Files API |
 
 <br>
 

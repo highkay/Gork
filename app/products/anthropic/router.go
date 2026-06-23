@@ -2,7 +2,6 @@ package anthropic
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/dslzl/gork/app/platform"
@@ -29,6 +28,14 @@ func NewRouter() http.Handler {
 
 func anthropicMethod(method string, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Allow", method)
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", method)
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, x-api-key")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		if r.Method != method {
 			w.Header().Set("Allow", method)
 			writeAnthropicJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{
@@ -58,19 +65,11 @@ func writeAnthropicJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func writeAnthropicError(w http.ResponseWriter, err error) {
-	var validation *platform.ValidationError
-	if errors.As(err, &validation) && validation.AppError != nil {
-		writeAnthropicJSON(w, validation.Status, validation.ToDict())
-		return
+	adapted := platform.AdaptErrorResponse(err)
+	for key, value := range adapted.Headers {
+		w.Header().Set(key, value)
 	}
-	var appErr *platform.AppError
-	if errors.As(err, &appErr) && appErr != nil {
-		writeAnthropicJSON(w, appErr.Status, appErr.ToDict())
-		return
-	}
-	writeAnthropicJSON(w, http.StatusInternalServerError, map[string]any{"error": map[string]any{
-		"message": err.Error(), "type": "server_error", "code": "internal_error",
-	}})
+	writeAnthropicJSON(w, adapted.Status, adapted.Payload)
 }
 
 func writeAnthropicStream(w http.ResponseWriter, frames []string) {

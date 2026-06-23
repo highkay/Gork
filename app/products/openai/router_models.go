@@ -18,7 +18,7 @@ func handleListModels(w http.ResponseWriter, r *http.Request) {
 	pools := routerAvailablePools(r)
 	created := time.Now().Unix()
 	data := make([]map[string]any, 0)
-	for _, spec := range model.ListEnabled() {
+	for _, spec := range model.ListEnabledContext(r.Context()) {
 		if !modelAvailableForPools(spec, pools) {
 			continue
 		}
@@ -32,7 +32,7 @@ func handleListModels(w http.ResponseWriter, r *http.Request) {
 
 func handleGetModel(w http.ResponseWriter, r *http.Request) {
 	modelID := strings.TrimPrefix(r.URL.Path, "/v1/models/")
-	spec, ok := model.Get(modelID)
+	spec, ok := model.GetContext(r.Context(), modelID)
 	if !ok || !modelAvailableForPools(spec, routerAvailablePools(r)) {
 		writeRouterJSON(w, http.StatusNotFound, map[string]any{
 			"error": map[string]any{

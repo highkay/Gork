@@ -12,6 +12,7 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -257,6 +258,59 @@ func TestRouterChatCompletionsDispatchesOptions(t *testing.T) {
 	}
 }
 
+func TestRouterChatCompletionsCompatibilityMatrixGolden(t *testing.T) {
+	resetRouterDepsForTest(t)
+	calls := 0
+	routerCompletions = func(_ context.Context, options chatCompletionOptions) (chatCompletionResult, error) {
+		calls++
+		if options.Model != "grok-4.20-fast" || len(options.Messages) != 1 || options.Messages[0]["role"] != "user" {
+			t.Fatalf("supported request options=%#v", options)
+		}
+		if options.Stream == nil || *options.Stream {
+			t.Fatalf("stream default/options=%#v", options.Stream)
+		}
+		if options.EmitThink == nil || !*options.EmitThink {
+			t.Fatalf("reasoning_effort low should enable thinking: %#v", options.EmitThink)
+		}
+		if options.Temperature != 0.7 || options.TopP != 0.8 {
+			t.Fatalf("sampling options=%v/%v", options.Temperature, options.TopP)
+		}
+		if len(options.Tools) != 1 || options.Tools[0]["type"] != "function" || options.ToolChoice != "auto" {
+			t.Fatalf("tool options=%#v choice=%#v", options.Tools, options.ToolChoice)
+		}
+		return chatCompletionResult{Response: map[string]any{"id": "chat-matrix"}}, nil
+	}
+
+	supported := `{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hello"}],"stream":false,"reasoning_effort":"low","temperature":0.7,"top_p":0.8,"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object"}}}],"tool_choice":"auto","parallel_tool_calls":false,"max_tokens":32,"metadata":{"ignored":true}}`
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(supported)))
+	assertRouterGoldenJSON(t, rec, http.StatusOK, map[string]any{"id": "chat-matrix"})
+	if calls != 1 {
+		t.Fatalf("supported request calls=%d", calls)
+	}
+
+	for _, tt := range []struct {
+		name  string
+		body  string
+		param string
+	}{
+		{name: "missing messages", body: `{"model":"grok-4.20-fast"}`, param: "messages"},
+		{name: "bad role", body: `{"model":"grok-4.20-fast","messages":[{"role":"alien","content":"hello"}]}`, param: "messages.0.role"},
+		{name: "bad temperature", body: `{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hello"}],"temperature":3}`, param: "temperature"},
+		{name: "bad top_p", body: `{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hello"}],"top_p":2}`, param: "top_p"},
+		{name: "bad reasoning effort", body: `{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hello"}],"reasoning_effort":"extreme"}`, param: "reasoning_effort"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(tt.body)))
+			assertRouterGoldenJSON(t, rec, http.StatusBadRequest, map[string]any{
+				"error.type":  "invalid_request_error",
+				"error.param": tt.param,
+			})
+		})
+	}
+}
+
 func TestRouterChatImageStreamStartsBeforeGenerationCompletes(t *testing.T) {
 	resetRouterDepsForTest(t)
 	started := make(chan struct{})
@@ -349,6 +403,32 @@ func TestRouterUpstreamErrorPreservesStatus(t *testing.T) {
 	})
 }
 
+func TestRouterUpstreamErrorPassesRetryHeaders(t *testing.T) {
+	resetRouterDepsForTest(t)
+	routerCompletions = func(context.Context, chatCompletionOptions) (chatCompletionResult, error) {
+		return chatCompletionResult{}, platform.NewUpstreamErrorWithHeaders("rate limited", http.StatusTooManyRequests, "busy", map[string]string{
+			"Retry-After":       "7",
+			"X-RateLimit-Reset": "123",
+			"X-Private-Trace":   "hidden",
+		})
+	}
+
+	body := `{"model":"grok-4.20-fast","messages":[{"role":"user","content":"hello"}]}`
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+
+	assertRouterGoldenJSON(t, rec, http.StatusTooManyRequests, map[string]any{
+		"error.type": "upstream_error",
+		"error.code": "upstream_error",
+	})
+	if rec.Header().Get("Retry-After") != "7" || rec.Header().Get("X-RateLimit-Reset") != "123" {
+		t.Fatalf("retry headers=%#v", rec.Header())
+	}
+	if rec.Header().Get("X-Private-Trace") != "" {
+		t.Fatalf("private header leaked: %#v", rec.Header())
+	}
+}
+
 func TestRouterResponsesDispatchesOptions(t *testing.T) {
 	resetRouterDepsForTest(t)
 	var got responseOptions
@@ -374,6 +454,26 @@ func TestRouterResponsesDispatchesOptions(t *testing.T) {
 	}
 	if len(got.Tools) != 1 || got.Tools[0]["name"] != "lookup" {
 		t.Fatalf("tools=%#v", got.Tools)
+	}
+}
+
+func TestRouterResponsesStreamErrorEndsWithDone(t *testing.T) {
+	resetRouterDepsForTest(t)
+	routerResponses = func(context.Context, responseOptions) (chatCompletionResult, error) {
+		return chatCompletionResult{}, platform.NewUpstreamError("upstream failed", http.StatusServiceUnavailable, "busy")
+	}
+
+	rec := httptest.NewRecorder()
+	body := `{"model":"grok-4.20-fast","input":"hello","stream":true}`
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body)))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	events := responseStreamEventNames(rec.Body.String())
+	want := []string{"error", "[DONE]"}
+	if len(events) < len(want) || !reflect.DeepEqual(events[len(events)-len(want):], want) {
+		t.Fatalf("error stream events=%#v body=%s", events, rec.Body.String())
 	}
 }
 
@@ -460,6 +560,42 @@ func TestRouterImageEditsMultipartDispatchesOptions(t *testing.T) {
 	}
 	if got.Stream || got.ChatFormat {
 		t.Fatalf("stream/chat_format=%v/%v", got.Stream, got.ChatFormat)
+	}
+}
+
+func TestRouterRejectsUnsupportedImageAndVideoParameters(t *testing.T) {
+	resetRouterDepsForTest(t)
+	resetVideoDepsForTest(t)
+
+	for _, tt := range []struct {
+		name   string
+		method string
+		path   string
+		body   string
+		ct     string
+		param  string
+	}{
+		{name: "image unknown size", method: http.MethodPost, path: "/v1/images/generations", body: `{"model":"grok-imagine-image-lite","prompt":"draw","size":"999x999"}`, param: "size"},
+		{name: "image unsupported quality", method: http.MethodPost, path: "/v1/images/generations", body: `{"model":"grok-imagine-image-lite","prompt":"draw","quality":"hd"}`, param: "quality"},
+		{name: "image unsupported background", method: http.MethodPost, path: "/v1/images/generations", body: `{"model":"grok-imagine-image-lite","prompt":"draw","background":"transparent"}`, param: "background"},
+		{name: "image unsupported moderation", method: http.MethodPost, path: "/v1/images/generations", body: `{"model":"grok-imagine-image-lite","prompt":"draw","moderation":"low"}`, param: "moderation"},
+		{name: "image unsupported response format", method: http.MethodPost, path: "/v1/images/generations", body: `{"model":"grok-imagine-image-lite","prompt":"draw","response_format":"url_json"}`, param: "response_format"},
+		{name: "video unknown size", method: http.MethodPost, path: "/v1/videos", body: "model=grok-imagine-video&prompt=draw&size=999x999", ct: "application/x-www-form-urlencoded", param: "size"},
+		{name: "video unsupported response format", method: http.MethodPost, path: "/v1/videos", body: "model=grok-imagine-video&prompt=draw&response_format=b64_json", ct: "application/x-www-form-urlencoded", param: "response_format"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := routerRequest(t, tt.method, tt.path, strings.NewReader(tt.body))
+			if tt.ct != "" {
+				req.Header.Set("Content-Type", tt.ct)
+			}
+			rec := httptest.NewRecorder()
+			NewRouter().ServeHTTP(rec, req)
+			assertRouterGoldenJSON(t, rec, http.StatusBadRequest, map[string]any{
+				"error.type":  "invalid_request_error",
+				"error.code":  "invalid_parameter",
+				"error.param": tt.param,
+			})
+		})
 	}
 }
 
@@ -574,6 +710,16 @@ func TestRouterRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 	assertRouterGoldenJSON(t, rec, http.StatusMethodNotAllowed, map[string]any{"error.type": "invalid_request_error", "error.message": "Method not allowed"})
 	if rec.Header().Get("Allow") != http.MethodGet {
 		t.Fatalf("allow=%q want GET", rec.Header().Get("Allow"))
+	}
+
+	req = routerRequest(t, http.MethodOptions, "/v1/chat/completions", nil)
+	rec = httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("cors status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Access-Control-Allow-Methods") != http.MethodPost || !strings.Contains(rec.Header().Get("Access-Control-Allow-Headers"), "Authorization") {
+		t.Fatalf("cors headers=%#v", rec.Header())
 	}
 }
 

@@ -1,7 +1,9 @@
 package model
 
 import (
+	"context"
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -46,7 +48,7 @@ var (
 	modelsByName       = buildModelsByName()
 	modelsByCapability = buildModelsByCapability()
 	dynamicProviderMu  sync.RWMutex
-	dynamicProvider    func() []ModelSpec
+	dynamicProvider    func(context.Context) []ModelSpec
 )
 
 func buildModelsByName() map[string]ModelSpec {
@@ -67,10 +69,14 @@ func buildModelsByCapability() map[int][]ModelSpec {
 }
 
 func Get(modelName string) (ModelSpec, bool) {
+	return GetContext(context.Background(), modelName)
+}
+
+func GetContext(ctx context.Context, modelName string) (ModelSpec, bool) {
 	if spec, ok := modelsByName[modelName]; ok {
 		return spec, true
 	}
-	for _, spec := range dynamicModels() {
+	for _, spec := range dynamicModels(ctx) {
 		if spec.ModelName == modelName {
 			return spec, true
 		}
@@ -87,7 +93,11 @@ func Resolve(modelName string) (ModelSpec, error) {
 }
 
 func ListEnabled() []ModelSpec {
-	all := allModels()
+	return ListEnabledContext(context.Background())
+}
+
+func ListEnabledContext(ctx context.Context) []ModelSpec {
+	all := allModels(ctx)
 	enabled := make([]ModelSpec, 0, len(all))
 	for _, spec := range all {
 		if spec.Enabled {
@@ -98,8 +108,12 @@ func ListEnabled() []ModelSpec {
 }
 
 func ListByCapability(cap Capability) []ModelSpec {
+	return ListByCapabilityContext(context.Background(), cap)
+}
+
+func ListByCapabilityContext(ctx context.Context, cap Capability) []ModelSpec {
 	matches := make([]ModelSpec, 0, len(modelsByCapability[int(cap)]))
-	for _, spec := range allModels() {
+	for _, spec := range allModels(ctx) {
 		if spec.Enabled && spec.Capability&cap != 0 {
 			matches = append(matches, spec)
 		}
@@ -108,6 +122,16 @@ func ListByCapability(cap Capability) []ModelSpec {
 }
 
 func SetDynamicProvider(provider func() []ModelSpec) func() {
+	var contextProvider func(context.Context) []ModelSpec
+	if provider != nil {
+		contextProvider = func(context.Context) []ModelSpec {
+			return provider()
+		}
+	}
+	return SetDynamicProviderContext(contextProvider)
+}
+
+func SetDynamicProviderContext(provider func(context.Context) []ModelSpec) func() {
 	dynamicProviderMu.Lock()
 	previous := dynamicProvider
 	dynamicProvider = provider
@@ -119,13 +143,17 @@ func SetDynamicProvider(provider func() []ModelSpec) func() {
 	}
 }
 
-func allModels() []ModelSpec {
+func allModels(ctx context.Context) []ModelSpec {
 	all := append([]ModelSpec{}, Models...)
 	seen := make(map[string]struct{}, len(all))
 	for _, spec := range all {
 		seen[spec.ModelName] = struct{}{}
 	}
-	for _, spec := range dynamicModels() {
+	dynamic := dynamicModels(ctx)
+	sort.SliceStable(dynamic, func(i, j int) bool {
+		return dynamic[i].ModelName < dynamic[j].ModelName
+	})
+	for _, spec := range dynamic {
 		if spec.ModelName == "" {
 			continue
 		}
@@ -138,7 +166,7 @@ func allModels() []ModelSpec {
 	return all
 }
 
-func dynamicModels() (models []ModelSpec) {
+func dynamicModels(ctx context.Context) (models []ModelSpec) {
 	dynamicProviderMu.RLock()
 	provider := dynamicProvider
 	dynamicProviderMu.RUnlock()
@@ -150,5 +178,5 @@ func dynamicModels() (models []ModelSpec) {
 			models = nil
 		}
 	}()
-	return provider()
+	return provider(ctx)
 }

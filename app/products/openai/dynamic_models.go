@@ -29,7 +29,7 @@ var defaultDynamicConsoleModels = newDynamicConsoleModelSource(dynamicConsoleMod
 })
 
 func init() {
-	model.SetDynamicProvider(defaultDynamicConsoleModels.List)
+	model.SetDynamicProviderContext(defaultDynamicConsoleModels.ListContext)
 }
 
 type dynamicConsoleHTTPClient interface {
@@ -55,6 +55,8 @@ type dynamicConsoleModelSource struct {
 	directory  func() chatDirectory
 	cache      []model.ModelSpec
 	expiresAt  time.Time
+	refreshing bool
+	lastErrAt  time.Time
 }
 
 func newDynamicConsoleModelSource(options dynamicConsoleModelSourceOptions) *dynamicConsoleModelSource {
@@ -89,24 +91,72 @@ func newDynamicConsoleModelSource(options dynamicConsoleModelSourceOptions) *dyn
 }
 
 func (s *dynamicConsoleModelSource) List() []model.ModelSpec {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	return s.ListContext(context.Background())
+}
 
+func (s *dynamicConsoleModelSource) ListContext(ctx context.Context) []model.ModelSpec {
+	s.mu.Lock()
 	now := s.now()
 	if now.Before(s.expiresAt) {
+		defer s.mu.Unlock()
 		return cloneModelSpecs(s.cache)
 	}
-	specs, err := s.fetch(context.Background())
+
+	if len(s.cache) > 0 {
+		cached := cloneModelSpecs(s.cache)
+		s.startRefreshLocked(context.WithoutCancel(ctx), now)
+		s.mu.Unlock()
+		return cached
+	}
+	s.mu.Unlock()
+
+	specs, err := s.fetch(ctx)
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if err == nil {
 		s.cache = cloneModelSpecs(specs)
 		s.expiresAt = now.Add(s.ttl)
+		s.lastErrAt = time.Time{}
 		return cloneModelSpecs(s.cache)
 	}
+	s.lastErrAt = now
 	s.expiresAt = now.Add(s.failureTTL)
 	return cloneModelSpecs(s.cache)
 }
 
+func (s *dynamicConsoleModelSource) LastErrorTime() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastErrAt
+}
+
+func (s *dynamicConsoleModelSource) startRefreshLocked(ctx context.Context, now time.Time) {
+	if s.refreshing {
+		return
+	}
+	s.refreshing = true
+	go func() {
+		specs, err := s.fetch(ctx)
+		finished := s.now()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.refreshing = false
+		if err != nil {
+			s.lastErrAt = finished
+			s.expiresAt = finished.Add(s.failureTTL)
+			return
+		}
+		s.cache = cloneModelSpecs(specs)
+		s.expiresAt = finished.Add(s.ttl)
+		s.lastErrAt = time.Time{}
+	}()
+	_ = now
+}
+
 func (s *dynamicConsoleModelSource) fetch(ctx context.Context) ([]model.ModelSpec, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	directory := s.directory()
 	if directory == nil {
 		return nil, errors.New("account directory is not initialised")

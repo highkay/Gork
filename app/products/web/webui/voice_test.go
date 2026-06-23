@@ -108,6 +108,31 @@ func TestWebUIVoiceTokenResponseAliasesAndDefaults(t *testing.T) {
 	}
 }
 
+func TestWebUIVoiceTokenReturnsModelRegionAndExpiryFields(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	webUIVoiceDirectory = func() webUIVoiceAccountDirectory {
+		return &fakeWebUIVoiceDirectory{lease: &reverse.AccountLease{Token: "sso-token"}}
+	}
+	webUIVoiceFetchToken = func(context.Context, string, webUIVoiceOptions) (map[string]any, error) {
+		return map[string]any{
+			"token":     "lk-token",
+			"model":     "grok-voice",
+			"region":    "us-east-1",
+			"expiresAt": float64(1710000000),
+		}, nil
+	}
+
+	rec := webUIRequest(http.MethodPost, "/webui/api/voice/token", `{}`, "Bearer web")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	body := decodeWebUIBody(t, rec)
+	if body["model"] != "grok-voice" || body["region"] != "us-east-1" || body["expires_at"] != float64(1710000000) {
+		t.Fatalf("voice metadata body=%#v", body)
+	}
+}
+
 func TestWebUIVoiceTokenDefaultsAndErrors(t *testing.T) {
 	resetWebUITestDeps(t)
 	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }

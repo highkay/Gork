@@ -22,6 +22,18 @@ type ParseResult struct {
 	SawToolSyntax bool
 }
 
+type ToolArgumentsMode string
+
+const (
+	ToolArgumentsFix   ToolArgumentsMode = "fix"
+	ToolArgumentsError ToolArgumentsMode = "error"
+	ToolArgumentsText  ToolArgumentsMode = "text"
+)
+
+type ToolCallParseOptions struct {
+	InvalidArguments ToolArgumentsMode
+}
+
 func NewParsedToolCall(name string, arguments any) ParsedToolCall {
 	return ParsedToolCall{
 		CallID:    newToolCallID(),
@@ -31,12 +43,17 @@ func NewParsedToolCall(name string, arguments any) ParsedToolCall {
 }
 
 func ParseToolCalls(text string, availableTools []string) ParseResult {
+	result, _ := ParseToolCallsWithOptions(text, availableTools, ToolCallParseOptions{InvalidArguments: ToolArgumentsFix})
+	return result
+}
+
+func ParseToolCallsWithOptions(text string, availableTools []string, options ToolCallParseOptions) (ParseResult, error) {
 	result := ParseResult{}
 	if strings.TrimSpace(text) == "" {
-		return result
+		return result, nil
 	}
 	if !hasToolSyntax(text) {
-		return result
+		return result, nil
 	}
 	result.SawToolSyntax = true
 
@@ -54,7 +71,24 @@ func ParseToolCalls(text string, availableTools []string) ParseResult {
 		calls = filterAvailableTools(calls, availableTools)
 	}
 	result.Calls = calls
-	return result
+	if len(calls) == 0 {
+		switch normalizedToolArgumentsMode(options.InvalidArguments) {
+		case ToolArgumentsError:
+			return result, fmt.Errorf("tool call arguments are not valid JSON")
+		case ToolArgumentsText:
+			return ParseResult{}, nil
+		}
+	}
+	return result, nil
+}
+
+func normalizedToolArgumentsMode(mode ToolArgumentsMode) ToolArgumentsMode {
+	switch mode {
+	case ToolArgumentsError, ToolArgumentsText:
+		return mode
+	default:
+		return ToolArgumentsFix
+	}
 }
 
 var toolSyntaxRE = regexp.MustCompile(`(?i)<tool_calls|<tool_call|<function_call|<invoke\s|"tool_calls"\s*:|\btool_calls\b`)

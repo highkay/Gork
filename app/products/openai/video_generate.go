@@ -239,11 +239,16 @@ func prepareVideoReference(ctx context.Context, token string, inputReference map
 	if imageInput == "" {
 		return videoReference{}, platform.NewValidationError("input_reference.image_url is required", "input_reference.image_url", "")
 	}
+	if !strings.HasPrefix(imageInput, "data:") {
+		if _, err := url.ParseRequestURI(imageInput); err != nil {
+			return videoReference{}, platform.NewValidationError("input_reference.image_url is not a valid URL", "input_reference.image_url", "invalid_video_reference_url")
+		}
+	}
 	contentURL := imageInput
 	if !isUpstreamAssetContentURL(imageInput) {
 		upload, err := videoUploadFromInput(ctx, token, imageInput)
 		if err != nil {
-			return videoReference{}, platform.NewUpstreamError("Video input reference upload failed: "+err.Error(), 502, "")
+			return videoReference{}, newVideoUpstreamError("Video input reference upload failed: "+err.Error(), 502, "video_reference_upload_failed", "")
 		}
 		resolved, err := videoResolveUploadedAssetReference(token, upload.FileID, upload.FileURI)
 		if err != nil {
@@ -388,7 +393,7 @@ func collectVideoSegment(ctx context.Context, token string, payload map[string]a
 			continue
 		}
 		if err := protocol.StreamErrorFromPayload(obj); err != nil {
-			return VideoArtifact{}, err
+			return VideoArtifact{}, newVideoUpstreamError(err.Message, err.Status, "video_upstream_task_failed", err.Body)
 		}
 		if stream := nestedMap(obj, "result", "response", "streamingVideoGenerationResponse"); stream != nil {
 			progress := intFromAny(stream["progress"])
@@ -418,10 +423,10 @@ func collectVideoSegment(ctx context.Context, token string, payload map[string]a
 		}
 	}
 	if finalURL == "" && finalAssetID != "" {
-		return VideoArtifact{}, platform.NewUpstreamError("Video segment returned only assetId without a resolvable URL", 502, strings.Join(streamData, "\n"))
+		return VideoArtifact{}, newVideoUpstreamError("Video segment returned only assetId without a resolvable URL", 502, "video_upstream_task_failed", strings.Join(streamData, "\n"))
 	}
 	if finalURL == "" {
-		return VideoArtifact{}, platform.NewUpstreamError("Video generation returned no final video URL", 502, strings.Join(streamData, "\n"))
+		return VideoArtifact{}, newVideoUpstreamError("Video generation returned no final video URL", 502, "video_upstream_task_failed", strings.Join(streamData, "\n"))
 	}
 	return VideoArtifact{VideoURL: finalURL, VideoPostID: firstNonEmpty(videoPostID, finalAssetID), AssetID: finalAssetID, ThumbnailURL: finalThumbnail}, nil
 }
@@ -429,16 +434,26 @@ func collectVideoSegment(ctx context.Context, token string, payload map[string]a
 func downloadAndSaveVideo(ctx context.Context, token, rawURL, fileID string) (string, error) {
 	raw, _, err := videoDownloadBytes(ctx, token, rawURL)
 	if err != nil {
-		return "", err
+		return "", newVideoUpstreamError("Video download failed: "+err.Error(), 502, "video_download_failed", "")
 	}
 	if len(raw) == 0 {
-		return "", platform.NewUpstreamError("Video download returned empty content", 502, "")
+		return "", newVideoUpstreamError("Video download returned empty content", 502, "video_download_failed", "")
 	}
 	trimmed := strings.TrimLeft(string(raw[:minInt(len(raw), 16)]), " \t\r\n")
 	if strings.HasPrefix(trimmed, "<") || strings.HasPrefix(trimmed, "{") {
-		return "", platform.NewUpstreamError("Video download returned non-video content", 502, "")
+		return "", newVideoUpstreamError("Video download returned non-video content", 502, "video_download_failed", "")
 	}
-	return videoSaveLocal(raw, fileID)
+	path, err := videoSaveLocal(raw, fileID)
+	if err != nil {
+		return "", newVideoUpstreamError("Video cache save failed: "+err.Error(), 502, "video_cache_save_failed", "")
+	}
+	return path, nil
+}
+
+func newVideoUpstreamError(message string, status int, code string, body string) *platform.UpstreamError {
+	err := platform.NewUpstreamError(message, status, body)
+	err.Code = code
+	return err
 }
 
 func buildVideoMessage(prompt, preset string) string {

@@ -89,6 +89,23 @@ func TestRegistryMergesDynamicConsoleModels(t *testing.T) {
 	}
 }
 
+func TestRegistryAppendsDynamicModelsInStableNameOrder(t *testing.T) {
+	restore := SetDynamicProvider(func() []ModelSpec {
+		return []ModelSpec{
+			{ModelName: "grok-dynamic-z", ModeID: ModeConsole, Tier: TierBasic, Capability: CapabilityConsoleChat, Enabled: true, PublicName: "Z"},
+			{ModelName: "grok-4.20-auto", ModeID: ModeConsole, Tier: TierBasic, Capability: CapabilityConsoleChat, Enabled: true, PublicName: "Static Duplicate"},
+			{ModelName: "grok-dynamic-a", ModeID: ModeConsole, Tier: TierBasic, Capability: CapabilityConsoleChat, Enabled: true, PublicName: "A"},
+		}
+	})
+	t.Cleanup(restore)
+
+	names := modelNames(ListEnabled())
+	wantSuffix := []string{"grok-dynamic-a", "grok-dynamic-z"}
+	if len(names) < len(wantSuffix) || !reflect.DeepEqual(names[len(names)-len(wantSuffix):], wantSuffix) {
+		t.Fatalf("dynamic suffix = %#v, want %#v", names, wantSuffix)
+	}
+}
+
 func TestRegistryListEnabledMatchesPython(t *testing.T) {
 	got := ListEnabled()
 	want := expectedRegistryModels()

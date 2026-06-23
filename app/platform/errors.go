@@ -1,6 +1,10 @@
 package platform
 
-import "strconv"
+import (
+	"errors"
+	"strconv"
+	"strings"
+)
 
 // ErrorKind is the OpenAI-compatible error type string.
 type ErrorKind string
@@ -111,17 +115,24 @@ func NewRateLimitError(message string) *RateLimitError {
 // UpstreamError represents an upstream XAI/Grok failure.
 type UpstreamError struct {
 	*AppError
-	Body string
+	Body    string
+	Headers map[string]string
 }
 
 // NewUpstreamError creates an upstream error.
 func NewUpstreamError(message string, status int, body string) *UpstreamError {
+	return NewUpstreamErrorWithHeaders(message, status, body, nil)
+}
+
+// NewUpstreamErrorWithHeaders creates an upstream error with retry-safe headers.
+func NewUpstreamErrorWithHeaders(message string, status int, body string, headers map[string]string) *UpstreamError {
 	if status == 0 {
 		status = 502
 	}
 	return &UpstreamError{
 		AppError: NewAppError(message, ErrorKindUpstream, "upstream_error", status, map[string]any{"body": body}),
 		Body:     body,
+		Headers:  cloneStringMap(headers),
 	}
 }
 
@@ -138,4 +149,81 @@ func NewStreamIdleTimeout(timeoutSeconds float64) *StreamIdleTimeout {
 		AppError:       NewAppError("Stream idle timeout after "+value+"s", ErrorKindUpstream, "stream_idle_timeout", 504, nil),
 		TimeoutSeconds: timeoutSeconds,
 	}
+}
+
+// ErrorResponse is the HTTP-ready shape shared by product routers.
+type ErrorResponse struct {
+	Status  int
+	Payload map[string]any
+	Headers map[string]string
+}
+
+// AdaptErrorResponse maps internal errors to OpenAI-compatible HTTP errors.
+func AdaptErrorResponse(err error) ErrorResponse {
+	var validation *ValidationError
+	if errors.As(err, &validation) && validation.AppError != nil {
+		return ErrorResponse{Status: validation.Status, Payload: validation.ToDict()}
+	}
+	var upstream *UpstreamError
+	if errors.As(err, &upstream) && upstream.AppError != nil {
+		return ErrorResponse{
+			Status:  upstream.Status,
+			Payload: upstream.ToDict(),
+			Headers: retryHeaderAllowlist(upstream.Headers),
+		}
+	}
+	var appErr *AppError
+	if errors.As(err, &appErr) && appErr != nil {
+		return ErrorResponse{Status: appErr.Status, Payload: appErr.ToDict()}
+	}
+	return ErrorResponse{Status: 500, Payload: map[string]any{
+		"error": map[string]any{
+			"message": err.Error(),
+			"type":    ErrorKindServer,
+			"code":    "internal_error",
+		},
+	}}
+}
+
+func retryHeaderAllowlist(headers map[string]string) map[string]string {
+	out := map[string]string{}
+	for key, value := range headers {
+		canonical := canonicalRetryHeader(key)
+		if canonical == "" || strings.TrimSpace(value) == "" {
+			continue
+		}
+		out[canonical] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func canonicalRetryHeader(key string) string {
+	switch strings.ToLower(strings.TrimSpace(key)) {
+	case "retry-after":
+		return "Retry-After"
+	case "x-ratelimit-limit":
+		return "X-RateLimit-Limit"
+	case "x-ratelimit-remaining":
+		return "X-RateLimit-Remaining"
+	case "x-ratelimit-reset":
+		return "X-RateLimit-Reset"
+	case "x-gork-retry-after":
+		return "X-Gork-Retry-After"
+	default:
+		return ""
+	}
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
 }

@@ -135,12 +135,22 @@ func writeWebUIVoiceResponse(w http.ResponseWriter, data map[string]any) {
 		writeWebUIError(w, platform.NewUpstreamError("Upstream returned no voice token", 502, ""))
 		return
 	}
-	writeWebUIJSON(w, http.StatusOK, map[string]any{
+	payload := map[string]any{
 		"token":            token,
 		"url":              stringValueWithDefault(data["livekitUrl"], protocol.LiveKitWSBase),
 		"participant_name": firstVoiceString(data, "participantName", "participant_name", "identity"),
 		"room_name":        firstVoiceString(data, "roomName", "room_name", "room"),
-	})
+	}
+	if model := firstVoiceString(data, "model", "voiceModel", "voice_model"); model != "" {
+		payload["model"] = model
+	}
+	if region := firstVoiceString(data, "region", "livekitRegion", "livekit_region"); region != "" {
+		payload["region"] = region
+	}
+	if expiresAt, ok := firstVoiceValue(data, "expiresAt", "expires_at", "expiry", "exp"); ok {
+		payload["expires_at"] = expiresAt
+	}
+	writeWebUIJSON(w, http.StatusOK, payload)
 }
 
 func firstVoiceString(data map[string]any, keys ...string) string {
@@ -150,6 +160,16 @@ func firstVoiceString(data map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func firstVoiceValue(data map[string]any, keys ...string) (any, bool) {
+	for _, key := range keys {
+		value, ok := data[key]
+		if ok && value != nil {
+			return value, true
+		}
+	}
+	return nil, false
 }
 
 func writeWebUIVoiceError(w http.ResponseWriter, err error) {

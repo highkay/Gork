@@ -1,6 +1,9 @@
 package protocol
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseToolCallsCanonicalXMLMatchesPython(t *testing.T) {
 	text := `<tool_calls>
@@ -108,4 +111,39 @@ world"}</parameters></tool_call></tool_calls>`
 	if result.Calls[0].Arguments != `{"text":"hello\nworld"}` {
 		t.Fatalf("arguments = %q", result.Calls[0].Arguments)
 	}
+}
+
+func TestParseToolCallsInvalidArgumentModes(t *testing.T) {
+	text := `<tool_calls><tool_call><tool_name>lookup</tool_name><parameters>{"q":</parameters></tool_call></tool_calls>`
+
+	fixed, err := ParseToolCallsWithOptions(text, nil, ToolCallParseOptions{InvalidArguments: ToolArgumentsFix})
+	if err != nil || !fixed.SawToolSyntax || len(fixed.Calls) != 0 {
+		t.Fatalf("fix mode result=%#v err=%v", fixed, err)
+	}
+
+	strict, err := ParseToolCallsWithOptions(text, nil, ToolCallParseOptions{InvalidArguments: ToolArgumentsError})
+	if err == nil || !strict.SawToolSyntax {
+		t.Fatalf("error mode result=%#v err=%v", strict, err)
+	}
+
+	downgraded, err := ParseToolCallsWithOptions(text, nil, ToolCallParseOptions{InvalidArguments: ToolArgumentsText})
+	if err != nil || downgraded.SawToolSyntax || len(downgraded.Calls) != 0 {
+		t.Fatalf("text mode result=%#v err=%v", downgraded, err)
+	}
+}
+
+func FuzzParseToolCallsRobustInputs(f *testing.F) {
+	for _, seed := range []string{
+		`<tool_calls><tool_call><tool_name>search</tool_name><parameters>{"q":"x"}</parameters></tool_call></tool_calls>`,
+		`{"tool_calls":[{"name":"search","input":{"q":"x"}}]}`,
+		`{"tool_calls":[{"name":"search","input":{"q":`,
+		`tool_calls [{"tool_name":"lookup","parameters":{"nested":{"a":[1,2,{"b":3}]}}}]`,
+		`<tool_calls>` + strings.Repeat(`{"x":`, 64),
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, text string) {
+		_ = ParseToolCalls(text, []string{"search", "lookup"})
+		_, _ = ParseToolCallsWithOptions(text, []string{"search", "lookup"}, ToolCallParseOptions{InvalidArguments: ToolArgumentsText})
+	})
 }

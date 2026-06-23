@@ -84,6 +84,12 @@ func handleVideosCreate(w http.ResponseWriter, r *http.Request) {
 		writeRouterError(w, platform.NewValidationError("Invalid form body", "body", ""))
 		return
 	}
+	if err := validateRouterVideoParams(r.FormValue("size"), func(param string) bool {
+		return strings.TrimSpace(r.FormValue(param)) != ""
+	}); err != nil {
+		writeRouterError(w, err)
+		return
+	}
 	inputReferences := []map[string]any(nil)
 	for _, upload := range filesForField(r, "input_reference[]") {
 		dataURI, err := uploadFileToDataURI(upload, "input_reference")

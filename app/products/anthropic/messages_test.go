@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -90,6 +91,48 @@ func TestMessagesStreamBuildsAnthropicSSE(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("stream missing %q in %s", want, joined)
 		}
+	}
+}
+
+func TestMessagesStreamClaudeSDKEventOrderFixture(t *testing.T) {
+	resetMessagesDepsForTest(t)
+	directory := &fakeMessagesDirectory{accounts: []messagesAccount{{Token: "tok1", ModeID: model.ModeAuto}}}
+	messagesDirectoryProvider = func() messagesDirectory { return directory }
+	messagesStream = func(context.Context, messagesStreamOptions) ([]string, error) {
+		return []string{
+			`data: {"result":{"response":{"token":"thinking","isThinking":true,"messageTag":"thought"}}}`,
+			`data: {"result":{"response":{"token":"answer","isThinking":false,"messageTag":"final"}}}`,
+			`data: [DONE]`,
+		}, nil
+	}
+
+	result, err := Messages(context.Background(), MessagesOptions{
+		Model:     "grok-4.20-auto",
+		Messages:  []map[string]any{{"role": "user", "content": "hi"}},
+		Stream:    true,
+		EmitThink: true,
+		MessageID: "msg_fixture",
+	})
+	if err != nil {
+		t.Fatalf("Messages stream fixture err=%v", err)
+	}
+
+	got := anthropicStreamEventNames(strings.Join(result.StreamFrames, ""))
+	want := []string{
+		"message_start",
+		"ping",
+		"content_block_start",
+		"content_block_delta",
+		"content_block_stop",
+		"content_block_start",
+		"content_block_delta",
+		"content_block_stop",
+		"message_delta",
+		"message_stop",
+		"[DONE]",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("event order=%#v want %#v\nframes=%s", got, want, strings.Join(result.StreamFrames, ""))
 	}
 }
 
@@ -231,6 +274,20 @@ func TestMessagesUsesConfiguredTimeoutAndFeedbackMapping(t *testing.T) {
 	if len(directory.feedback) != 1 || directory.feedback[0].Kind != messagesFeedbackUnauthorized {
 		t.Fatalf("feedback=%#v", directory.feedback)
 	}
+}
+
+func anthropicStreamEventNames(stream string) []string {
+	names := []string{}
+	for _, line := range strings.Split(stream, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "event: ") {
+			names = append(names, strings.TrimPrefix(line, "event: "))
+		}
+		if line == "data: [DONE]" {
+			names = append(names, "[DONE]")
+		}
+	}
+	return names
 }
 
 func TestMessagesProductionDefaultsUseConfigAndRefreshRuntime(t *testing.T) {

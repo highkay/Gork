@@ -428,8 +428,8 @@ Console 账号采用延迟恢复轮换策略：本地调用会扣减剩余额度
 | `POST /v1/videos` | 是 | 异步视频任务创建 |
 | `GET /v1/videos/{video_id}` | 是 | 查询视频任务 |
 | `GET /v1/videos/{video_id}/content` | 是 | 获取最终视频文件 |
-| `GET /v1/files/video?id=...` | 否 | 获取本地缓存视频 |
-| `GET /v1/files/image?id=...` | 否 | 获取本地缓存图片 |
+| `GET /v1/files/video?id=...` | 否 | Gork 私有扩展：获取本地缓存视频，不属于 OpenAI 官方 Files API |
+| `GET /v1/files/image?id=...` | 否 | Gork 私有扩展：获取本地缓存图片，不属于 OpenAI 官方 Files API |
 
 <br>
 

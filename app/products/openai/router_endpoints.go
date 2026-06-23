@@ -3,6 +3,7 @@ package openai
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -305,9 +306,23 @@ func streamResponsesResult(w http.ResponseWriter, r *http.Request, options respo
 }
 
 func handleImageGenerations(w http.ResponseWriter, r *http.Request) {
-	var req ImageGenerationRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	raw, err := io.ReadAll(r.Body)
+	if err != nil {
 		writeRouterError(w, platform.NewValidationError("Invalid JSON body", "body", ""))
+		return
+	}
+	var req ImageGenerationRequest
+	if err := json.Unmarshal(raw, &req); err != nil {
+		writeRouterError(w, platform.NewValidationError("Invalid JSON body", "body", ""))
+		return
+	}
+	rawFields := map[string]json.RawMessage{}
+	_ = json.Unmarshal(raw, &rawFields)
+	if err := validateRouterImageParams(req.Size, req.ResponseFormat, func(param string) bool {
+		_, ok := rawFields[param]
+		return ok
+	}); err != nil {
+		writeRouterError(w, err)
 		return
 	}
 	spec, ok := model.Get(req.Model)

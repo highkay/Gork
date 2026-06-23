@@ -2,7 +2,6 @@ package openai
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/dslzl/gork/app/platform"
@@ -41,6 +40,14 @@ func NewRouter() http.Handler {
 
 func routerMethod(method string, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Allow", method)
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", method)
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, x-api-key")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		if r.Method != method {
 			w.Header().Set("Allow", method)
 			writeRouterJSON(w, http.StatusMethodNotAllowed, map[string]any{
@@ -79,30 +86,16 @@ func writeRouterJSON(w http.ResponseWriter, status int, payload any) {
 }
 
 func writeRouterError(w http.ResponseWriter, err error) {
-	status, payload := routerErrorResponse(err)
-	writeRouterJSON(w, status, payload)
+	adapted := platform.AdaptErrorResponse(err)
+	for key, value := range adapted.Headers {
+		w.Header().Set(key, value)
+	}
+	writeRouterJSON(w, adapted.Status, adapted.Payload)
 }
 
 func routerErrorResponse(err error) (int, map[string]any) {
-	var validation *platform.ValidationError
-	if errors.As(err, &validation) && validation.AppError != nil {
-		return validation.Status, validation.ToDict()
-	}
-	var upstream *platform.UpstreamError
-	if errors.As(err, &upstream) && upstream.AppError != nil {
-		return upstream.Status, upstream.ToDict()
-	}
-	var appErr *platform.AppError
-	if errors.As(err, &appErr) && appErr != nil {
-		return appErr.Status, appErr.ToDict()
-	}
-	return http.StatusInternalServerError, map[string]any{
-		"error": map[string]any{
-			"message": err.Error(),
-			"type":    "server_error",
-			"code":    "internal_error",
-		},
-	}
+	adapted := platform.AdaptErrorResponse(err)
+	return adapted.Status, adapted.Payload
 }
 
 func routerBoolConfig(key string, defaultValue bool) bool {
@@ -165,7 +158,7 @@ func writeRouterStreamError(w http.ResponseWriter, err error) {
 	_, _ = w.Write([]byte("event: error\n"))
 	_, _ = w.Write([]byte("data: "))
 	_, _ = w.Write(raw)
-	_, _ = w.Write([]byte("\n\n"))
+	_, _ = w.Write([]byte("\n\ndata: [DONE]\n\n"))
 	flushRouterStream(w)
 }
 

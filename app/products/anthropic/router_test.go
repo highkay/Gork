@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
 )
 
@@ -105,6 +106,62 @@ func TestAnthropicRouterForwardsPayloadAndIgnoresTopLevelExtra(t *testing.T) {
 	}
 }
 
+func TestAnthropicMessagesCompatibilityMatrixGolden(t *testing.T) {
+	resetAnthropicRouterDepsForTest(t)
+	var seen MessagesOptions
+	anthropicRouterMessages = func(_ context.Context, options MessagesOptions) (MessagesResult, error) {
+		seen = options
+		return MessagesResult{Response: map[string]any{"id": "msg_matrix", "type": "message"}}, nil
+	}
+	body := `{
+		"model":"grok-4.20-auto",
+		"system":"sys",
+		"messages":[
+			{"role":"user","content":[
+				{"type":"text","text":"describe"},
+				{"type":"image","source":{"type":"base64","media_type":"image/png","data":"aW1n"}},
+				{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"ZG9j"}}
+			]},
+			{"role":"assistant","content":[{"type":"tool_use","id":"toolu_1","name":"lookup","input":{"q":"x"}}]},
+			{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"done"}]}
+		],
+		"tools":[{"name":"lookup","input_schema":{"type":"object"}}],
+		"tool_choice":{"type":"auto"},
+		"thinking":{"type":"enabled"},
+		"stream":true
+	}`
+	rec := postAnthropicMessages(body, "")
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if seen.System != "sys" || !seen.Stream || !seen.EmitThink {
+		t.Fatalf("system/stream/thinking=%#v", seen)
+	}
+	if len(seen.Messages) != 3 {
+		t.Fatalf("messages=%#v", seen.Messages)
+	}
+	userContent := seen.Messages[0]["content"].([]any)
+	if userContent[1].(map[string]any)["type"] != "image" || userContent[2].(map[string]any)["type"] != "document" {
+		t.Fatalf("image/document blocks=%#v", userContent)
+	}
+	assistantContent := seen.Messages[1]["content"].([]any)
+	if assistantContent[0].(map[string]any)["type"] != "tool_use" {
+		t.Fatalf("tool_use block=%#v", assistantContent)
+	}
+	toolResultContent := seen.Messages[2]["content"].([]any)
+	if toolResultContent[0].(map[string]any)["type"] != "tool_result" {
+		t.Fatalf("tool_result block=%#v", toolResultContent)
+	}
+	if len(seen.Tools) != 1 || seen.Tools[0]["name"] != "lookup" {
+		t.Fatalf("tools=%#v", seen.Tools)
+	}
+	choice := seen.ToolChoice.(map[string]any)
+	if choice["type"] != "auto" {
+		t.Fatalf("tool_choice=%#v", seen.ToolChoice)
+	}
+}
+
 func TestAnthropicRouterValidatesModelAndMessages(t *testing.T) {
 	resetAnthropicRouterDepsForTest(t)
 	rec := postAnthropicMessages(`{"model":"missing","messages":[{"role":"user","content":"hi"}]}`, "")
@@ -152,6 +209,30 @@ func TestAnthropicRouterRequiresAPIKeyWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestAnthropicRouterUpstreamErrorPassesRetryHeaders(t *testing.T) {
+	resetAnthropicRouterDepsForTest(t)
+	anthropicRouterMessages = func(context.Context, MessagesOptions) (MessagesResult, error) {
+		return MessagesResult{}, platform.NewUpstreamErrorWithHeaders("busy", http.StatusServiceUnavailable, "body", map[string]string{
+			"Retry-After":             "9",
+			"X-RateLimit-Remaining":   "0",
+			"X-Internal-Debug-Secret": "hidden",
+		})
+	}
+
+	rec := postAnthropicMessages(`{"model":"grok-4.20-auto","messages":[{"role":"user","content":"hi"}]}`, "")
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Retry-After") != "9" || rec.Header().Get("X-RateLimit-Remaining") != "0" {
+		t.Fatalf("retry headers=%#v", rec.Header())
+	}
+	if rec.Header().Get("X-Internal-Debug-Secret") != "" {
+		t.Fatalf("private header leaked: %#v", rec.Header())
+	}
+	assertAnthropicRouterGoldenJSON(t, rec, map[string]any{"error.type": "upstream_error", "error.code": "upstream_error"})
+}
+
 func TestAnthropicRouterRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 	resetAnthropicRouterDepsForTest(t)
 	anthropicRouterMessages = func(_ context.Context, options MessagesOptions) (MessagesResult, error) {
@@ -176,6 +257,7 @@ func TestAnthropicRouterRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		{name: "non stream", method: http.MethodPost, body: `{"model":"grok-4.20-auto","messages":[{"role":"user","content":"hi"}],"stream":false}`, status: http.StatusOK, contentType: "application/json", json: map[string]any{"id": "msg_golden", "type": "message", "role": "assistant"}},
 		{name: "stream", method: http.MethodPost, body: `{"model":"grok-4.20-auto","messages":[{"role":"user","content":"hi"}],"stream":true}`, status: http.StatusOK, contentType: "text/event-stream", bodyHas: "data: [DONE]"},
 		{name: "method guard", method: http.MethodGet, status: http.StatusMethodNotAllowed, contentType: "application/json", allow: http.MethodPost, json: map[string]any{"error.type": "invalid_request_error", "error.message": "Method not allowed"}},
+		{name: "cors preflight", method: http.MethodOptions, status: http.StatusNoContent, allow: http.MethodPost},
 		{name: "auth error", method: http.MethodPost, body: `{"model":"grok-4.20-auto","messages":[{"role":"user","content":"hi"}]}`, auth: "require-secret", status: http.StatusUnauthorized, contentType: "application/json", json: map[string]any{"error.type": "authentication_error"}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -194,6 +276,12 @@ func TestAnthropicRouterRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 			}
 			if tt.allow != "" && rec.Header().Get("Allow") != tt.allow {
 				t.Fatalf("allow=%q want=%q", rec.Header().Get("Allow"), tt.allow)
+			}
+			if tt.method == http.MethodOptions {
+				if rec.Header().Get("Access-Control-Allow-Methods") != http.MethodPost || !strings.Contains(rec.Header().Get("Access-Control-Allow-Headers"), "Authorization") {
+					t.Fatalf("cors headers=%#v", rec.Header())
+				}
+				return
 			}
 			if tt.contentType != "" && !strings.Contains(rec.Header().Get("Content-Type"), tt.contentType) {
 				t.Fatalf("content-type=%q want %q", rec.Header().Get("Content-Type"), tt.contentType)

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/dslzl/gork/app/control/model"
+	"github.com/dslzl/gork/app/platform"
 )
 
 func TestResponsesParseInputMatchesPythonShapes(t *testing.T) {
@@ -44,6 +45,36 @@ func TestResponsesToolHelpersMatchResponsesAPIShape(t *testing.T) {
 	}
 	if tools[1]["function"].(map[string]any)["name"] != "wrapped" {
 		t.Fatalf("wrapped tool changed: %#v", tools[1])
+	}
+}
+
+func TestResponsesTokenEstimateCrossModelLanguageGolden(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		model string
+		state chatCompletionState
+		want  int
+	}{
+		{name: "english fast", model: "grok-4.20-fast", state: chatCompletionState{Text: "hello world"}, want: 2},
+		{name: "chinese auto", model: "grok-4.20-auto", state: chatCompletionState{Text: "你好，世界"}, want: 3},
+		{name: "mixed console", model: "grok-4.3-console", state: chatCompletionState{Text: "hello 世界"}, want: 2},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			output := []map[string]any{responseMessageItem("msg", tt.state)}
+			if got := estimateResponseOutputTokens(output, tt.state); got != tt.want {
+				t.Fatalf("%s output tokens=%d want %d", tt.model, got, tt.want)
+			}
+		})
+	}
+
+	toolOutput := []map[string]any{{
+		"type":      "function_call",
+		"name":      "lookup",
+		"arguments": `{"q":"你好"}`,
+	}}
+	wantTool := platform.EstimateTokens("lookup") + platform.EstimateTokens(`{"q":"你好"}`)
+	if got := estimateResponseOutputTokens(toolOutput, chatCompletionState{}); got != wantTool {
+		t.Fatalf("tool output tokens=%d want %d", got, wantTool)
 	}
 }
 
@@ -183,6 +214,59 @@ func TestResponsesStreamEmitsResponsesEvents(t *testing.T) {
 	}
 }
 
+func TestResponsesStreamEventOrderGoldenCoversReasoningTextToolAndDone(t *testing.T) {
+	resetChatDepsForTest(t)
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok-resp", ModeID: model.ModeFast}}}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+	streamPost = func(context.Context, chatStreamRequest) (*chatStreamResponse, error) {
+		return &chatStreamResponse{StatusCode: 200, Lines: []string{
+			`data: {"result":{"response":{"token":"think ","isThinking":true}}}`,
+			`data: {"result":{"response":{"token":"hello ","isThinking":false,"messageTag":"final"}}}`,
+			`data: {"result":{"response":{"token":"<tool_calls><tool_call><tool_name>lookup</tool_name><parameters>{\"q\":\"x\"}</parameters></tool_call></tool_calls>","isThinking":false,"messageTag":"final"}}}`,
+			`data: [DONE]`,
+		}}, nil
+	}
+
+	result, err := Responses(context.Background(), responseOptions{
+		Model:     "grok-4.20-fast",
+		Input:     "look up x",
+		Stream:    true,
+		EmitThink: true,
+		Tools: []map[string]any{{
+			"type":        "function",
+			"name":        "lookup",
+			"description": "Lookup",
+			"parameters":  map[string]any{"type": "object"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Responses stream golden err=%v", err)
+	}
+
+	got := responseStreamEventNames(strings.Join(result.StreamFrames, ""))
+	want := []string{
+		"response.created",
+		"response.output_item.added",
+		"response.reasoning_summary_part.added",
+		"response.reasoning_summary_text.delta",
+		"response.reasoning_summary_text.done",
+		"response.reasoning_summary_part.done",
+		"response.output_item.done",
+		"response.output_item.added",
+		"response.content_part.added",
+		"response.output_text.delta",
+		"response.output_item.added",
+		"response.function_call_arguments.delta",
+		"response.function_call_arguments.done",
+		"response.output_item.done",
+		"response.completed",
+		"[DONE]",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("event order = %#v, want %#v\nframes=%s", got, want, strings.Join(result.StreamFrames, ""))
+	}
+}
+
 func TestResponsesStreamEmitsFunctionCallEventsAndCompletedOutput(t *testing.T) {
 	resetChatDepsForTest(t)
 	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok-resp", ModeID: model.ModeFast}}}
@@ -226,6 +310,20 @@ func TestResponsesStreamEmitsFunctionCallEventsAndCompletedOutput(t *testing.T) 
 	if strings.Contains(joined[completedIndex:], `"output_tokens":0`) {
 		t.Fatalf("completed response should estimate function_call output tokens: %s", joined[completedIndex:])
 	}
+}
+
+func responseStreamEventNames(stream string) []string {
+	names := []string{}
+	for _, line := range strings.Split(stream, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "event: ") {
+			names = append(names, strings.TrimPrefix(line, "event: "))
+		}
+		if line == "data: [DONE]" {
+			names = append(names, "[DONE]")
+		}
+	}
+	return names
 }
 
 func TestResponsesStreamToolSieveHandlesSplitXML(t *testing.T) {

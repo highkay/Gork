@@ -183,6 +183,51 @@ func TestVideoDefaultGenerateUsesProductionHooksAndSavesContent(t *testing.T) {
 	}
 }
 
+func TestVideoFlowUsesSpecificErrorCodes(t *testing.T) {
+	resetVideoDepsForTest(t)
+
+	if _, err := prepareVideoReference(context.Background(), "tok", map[string]any{"image_url": "://bad-url"}); !appErrorCodeIs(err, "invalid_video_reference_url") {
+		t.Fatalf("invalid reference err=%#v", err)
+	}
+
+	videoDownloadBytes = func(context.Context, string, string) ([]byte, string, error) {
+		return nil, "", errors.New("download down")
+	}
+	if _, err := downloadAndSaveVideo(context.Background(), "tok", "https://assets.grok.com/v.mp4", "file1"); !appErrorCodeIs(err, "video_download_failed") {
+		t.Fatalf("download err=%#v", err)
+	}
+
+	videoDownloadBytes = func(context.Context, string, string) ([]byte, string, error) {
+		return []byte{0, 0, 0, 'm', 'p', '4'}, "video/mp4", nil
+	}
+	videoSaveLocal = func([]byte, string) (string, error) {
+		return "", errors.New("disk full")
+	}
+	if _, err := downloadAndSaveVideo(context.Background(), "tok", "https://assets.grok.com/v.mp4", "file1"); !appErrorCodeIs(err, "video_cache_save_failed") {
+		t.Fatalf("cache save err=%#v", err)
+	}
+
+	videoStreamLines = func(context.Context, string, map[string]any, string, float64) ([]string, error) {
+		return []string{`data: {"error":{"message":"task failed","code":13}}`}, nil
+	}
+	if _, err := collectVideoSegment(context.Background(), "tok", map[string]any{}, "https://grok.com/imagine", 1, nil); !appErrorCodeIs(err, "video_upstream_task_failed") {
+		t.Fatalf("upstream task err=%#v", err)
+	}
+}
+
+func appErrorCodeIs(err error, code string) bool {
+	var validation *platform.ValidationError
+	if errors.As(err, &validation) && validation.AppError != nil && validation.Code == code {
+		return true
+	}
+	var upstream *platform.UpstreamError
+	if errors.As(err, &upstream) && upstream.AppError != nil && upstream.Code == code {
+		return true
+	}
+	var appErr *platform.AppError
+	return errors.As(err, &appErr) && appErr.Code == code
+}
+
 func resetVideoDepsForTest(t *testing.T) {
 	t.Helper()
 	oldStartJob := videoStartJob

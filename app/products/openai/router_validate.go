@@ -29,6 +29,7 @@ var (
 		"high":    {},
 		"xhigh":   {},
 	}
+	routerUnsupportedMediaParams = []string{"quality", "background", "moderation"}
 )
 
 func validateChat(req ChatCompletionRequest) error {
@@ -78,6 +79,48 @@ func validateImageEditN(n int, param string) error {
 		return platform.NewValidationError("n must be between 1 and 2 for image edit", param, "")
 	}
 	return nil
+}
+
+func validateRouterImageParams(size string, responseFormat string, hasParam func(string) bool) error {
+	if err := rejectUnsupportedMediaParams(hasParam); err != nil {
+		return err
+	}
+	if _, ok := imageRatios[strings.TrimSpace(size)]; !ok {
+		return unsupportedMediaParam("size", "size must be one of [1280x720, 720x1280, 1792x1024, 1024x1792, 1024x1024]")
+	}
+	if _, err := normalizeImageResponseFormat(responseFormat); err != nil {
+		return unsupportedMediaParam("response_format", "response_format must be one of ['url', 'b64_json']")
+	}
+	return nil
+}
+
+func validateRouterVideoParams(size string, hasParam func(string) bool) error {
+	if err := rejectUnsupportedMediaParams(hasParam); err != nil {
+		return err
+	}
+	if hasParam("response_format") {
+		return unsupportedMediaParam("response_format", "response_format is not supported for video endpoints")
+	}
+	if strings.TrimSpace(size) == "" {
+		return nil
+	}
+	if _, _, err := resolveVideoSize(size); err != nil {
+		return unsupportedMediaParam("size", "size must be one of [720x1280, 1280x720, 1024x1024, 1024x1792, 1792x1024]")
+	}
+	return nil
+}
+
+func rejectUnsupportedMediaParams(hasParam func(string) bool) error {
+	for _, param := range routerUnsupportedMediaParams {
+		if hasParam(param) {
+			return unsupportedMediaParam(param, param+" is not supported by this endpoint")
+		}
+	}
+	return nil
+}
+
+func unsupportedMediaParam(param string, message string) error {
+	return platform.NewValidationError(message, param, "invalid_parameter")
 }
 
 func routerMessagesToMaps(messages []MessageItem) []map[string]any {
