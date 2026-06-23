@@ -167,6 +167,16 @@ list_timeout = 60
 delete_timeout = 60
 
 
+# ==================== 反向协议端点 ====================
+[reverse.endpoints]
+base = "https://grok.com"
+assets_cdn = "https://assets.grok.com"
+console_base = "https://console.x.ai"
+accounts_base = "https://accounts.x.ai"
+ws_livekit = "wss://livekit.grok.com"
+console_cluster = "https://us-east-1.api.x.ai"
+
+
 # ==================== NSFW 操作 ====================
 [nsfw]
 timeout = 60

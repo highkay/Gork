@@ -9,6 +9,7 @@ import (
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	"github.com/dslzl/gork/app/dataplane/proxy/adapters"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platform "github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/config"
 )
@@ -35,6 +36,7 @@ type LiveKitHTTPRequest struct {
 	URL     string
 	Token   string
 	Payload []byte
+	Headers map[string]string
 	Lease   *controlproxy.ProxyLease
 	Timeout time.Duration
 	Origin  string
@@ -49,6 +51,7 @@ type LiveKitOptions struct {
 	Personality       string
 	Speed             float64
 	CustomInstruction string
+	RequestID         string
 }
 
 type LiveKitWebSocketClient interface {
@@ -71,6 +74,7 @@ type LiveKitWSOptions struct {
 	ProxyRuntime LiveKitProxyRuntime
 	Client       LiveKitWebSocketClient
 	Timeout      time.Duration
+	RequestID    string
 }
 
 func FetchLiveKitToken(ctx context.Context, token string, options LiveKitOptions) (map[string]any, error) {
@@ -84,13 +88,16 @@ func FetchLiveKitToken(ctx context.Context, token string, options LiveKitOptions
 	}
 
 	result, err := option.Client.PostJSON(ctx, LiveKitHTTPRequest{
-		URL:     protocol.LiveKitTokenURL,
+		URL:     protocol.LiveKitTokenEndpoint(),
 		Token:   token,
 		Payload: liveKitTokenPayload(option),
+		Headers: map[string]string{
+			"X-Request-ID": option.RequestID,
+		},
 		Lease:   &lease,
 		Timeout: option.Timeout,
-		Origin:  "https://grok.com",
-		Referer: "https://grok.com/",
+		Origin:  reverseruntime.GlobalEndpointTable().Resolve("base"),
+		Referer: reverseruntime.GlobalEndpointTable().Resolve("base_referer"),
 	})
 	if err != nil {
 		return nil, handleLiveKitTokenError(ctx, option.ProxyRuntime, lease, err)
@@ -114,7 +121,7 @@ func ConnectLiveKitWS(ctx context.Context, token, accessToken string, options Li
 	}
 	request := LiveKitWebSocketRequest{
 		URL:     protocol.BuildLiveKitWSURL(accessToken),
-		Headers: adapters.BuildWSHeaders(token, adapters.WSHeaderOptions{Lease: &lease}),
+		Headers: liveKitWSHeaders(token, &lease, option.RequestID),
 		Timeout: option.Timeout,
 		Lease:   lease,
 		OnClose: func(closeCtx context.Context) error {
@@ -144,6 +151,9 @@ func normalizeLiveKitOptions(options LiveKitOptions) LiveKitOptions {
 	if options.Timeout == 0 {
 		options.Timeout = configuredLiveKitTimeout(defaultLiveKitTokenTimeout)
 	}
+	if options.RequestID == "" {
+		options.RequestID = newLiveKitRequestID()
+	}
 	return options
 }
 
@@ -156,6 +166,9 @@ func normalizeLiveKitWSOptions(options LiveKitWSOptions) LiveKitWSOptions {
 	}
 	if options.Timeout == 0 {
 		options.Timeout = configuredLiveKitTimeout(defaultLiveKitWSTimeout)
+	}
+	if options.RequestID == "" {
+		options.RequestID = newLiveKitRequestID()
 	}
 	return options
 }
@@ -177,6 +190,16 @@ func liveKitTokenPayload(options LiveKitOptions) []byte {
 	})
 }
 
+func liveKitWSHeaders(token string, lease *controlproxy.ProxyLease, requestID string) map[string]string {
+	headers := adapters.BuildWSHeaders(token, adapters.WSHeaderOptions{Lease: lease})
+	headers["X-Request-ID"] = requestID
+	return headers
+}
+
+func newLiveKitRequestID() string {
+	return fmt.Sprintf("livekit-%d", time.Now().UnixNano())
+}
+
 func handleLiveKitTokenError(ctx context.Context, runtime LiveKitProxyRuntime, lease controlproxy.ProxyLease, err error) error {
 	var upstream *platform.UpstreamError
 	if errors.As(err, &upstream) {
@@ -191,10 +214,11 @@ type netLiveKitHTTPClient struct{}
 
 func (netLiveKitHTTPClient) PostJSON(ctx context.Context, request LiveKitHTTPRequest) (map[string]any, error) {
 	return PostJSON(ctx, request.URL, request.Token, request.Payload, HTTPOptions{
-		Lease:   request.Lease,
-		Timeout: request.Timeout,
-		Origin:  request.Origin,
-		Referer: request.Referer,
+		Lease:        request.Lease,
+		Timeout:      request.Timeout,
+		Origin:       request.Origin,
+		Referer:      request.Referer,
+		ExtraHeaders: request.Headers,
 	})
 }
 

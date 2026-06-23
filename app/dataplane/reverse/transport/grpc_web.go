@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -259,12 +258,12 @@ func (netHTTPGRPCWebClient) Post(ctx context.Context, request GRPCWebHTTPRequest
 	for key, value := range request.Headers {
 		rawRequest.Header.Set(key, value)
 	}
-	response, err := http.DefaultClient.Do(rawRequest)
+	response, err := defaultNetHTTPDoer.Do(rawRequest)
 	if err != nil {
 		return GRPCWebHTTPResponse{}, err
 	}
 	defer response.Body.Close()
-	body, err := io.ReadAll(response.Body)
+	body, err := readLimitedHTTPBody(response.Body, defaultMaxHTTPBodyBytes)
 	if err != nil {
 		return GRPCWebHTTPResponse{}, err
 	}

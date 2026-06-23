@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
@@ -87,91 +88,6 @@ func statsigID() string {
 	return base64.StdEncoding.EncodeToString([]byte(msg))
 }
 
-func majorVersion(browser, ua string) string {
-	for _, src := range []string{browser, ua} {
-		if match := regexp.MustCompile(`(\d{2,3})`).FindStringSubmatch(src); len(match) > 0 {
-			return match[1]
-		}
-	}
-	return ""
-}
-
-func platformFromUA(ua string) string {
-	lower := strings.ToLower(ua)
-	switch {
-	case strings.Contains(lower, "windows"):
-		return "Windows"
-	case strings.Contains(lower, "mac os x") || strings.Contains(lower, "macintosh"):
-		return "macOS"
-	case strings.Contains(lower, "android"):
-		return "Android"
-	case strings.Contains(lower, "iphone") || strings.Contains(lower, "ipad"):
-		return "iOS"
-	case strings.Contains(lower, "linux"):
-		return "Linux"
-	default:
-		return ""
-	}
-}
-
-func archFromUA(ua string) string {
-	lower := strings.ToLower(ua)
-	if strings.Contains(lower, "aarch64") || strings.Contains(lower, "arm") {
-		return "arm"
-	}
-	if strings.Contains(lower, "x86_64") || strings.Contains(lower, "x64") ||
-		strings.Contains(lower, "win64") || strings.Contains(lower, "intel") {
-		return "x86"
-	}
-	return ""
-}
-
-func clientHints(browser, ua string) map[string]string {
-	lowerBrowser := strings.ToLower(browser)
-	lowerUA := strings.ToLower(ua)
-	isChromium := containsAny(lowerBrowser, "chrome", "chromium", "edge", "brave") ||
-		containsAny(lowerUA, "chrome", "chromium", "edg")
-	if !isChromium || strings.Contains(lowerUA, "firefox") ||
-		(strings.Contains(lowerUA, "safari") && !strings.Contains(lowerUA, "chrome")) {
-		return map[string]string{}
-	}
-	version := majorVersion(browser, ua)
-	if version == "" {
-		return map[string]string{}
-	}
-
-	brand := "Google Chrome"
-	switch {
-	case strings.Contains(lowerBrowser, "edge") || strings.Contains(lowerUA, "edg"):
-		brand = "Microsoft Edge"
-	case strings.Contains(lowerBrowser, "brave"):
-		brand = "Brave"
-	case strings.Contains(lowerBrowser, "chromium"):
-		brand = "Chromium"
-	}
-
-	platform := platformFromUA(ua)
-	arch := archFromUA(ua)
-	mobile := "?0"
-	if strings.Contains(lowerUA, "mobile") || platform == "Android" || platform == "iOS" {
-		mobile = "?1"
-	}
-
-	hints := map[string]string{
-		"Sec-Ch-Ua":        fmt.Sprintf("\"%s\";v=\"%s\", \"Chromium\";v=\"%s\", \"Not(A:Brand\";v=\"24\"", brand, version, version),
-		"Sec-Ch-Ua-Mobile": mobile,
-		"Sec-Ch-Ua-Model":  "",
-	}
-	if platform != "" {
-		hints["Sec-Ch-Ua-Platform"] = fmt.Sprintf("\"%s\"", platform)
-	}
-	if arch != "" {
-		hints["Sec-Ch-Ua-Arch"] = arch
-		hints["Sec-Ch-Ua-Bitness"] = "64"
-	}
-	return hints
-}
-
 func resolveProfile(lease *controlproxy.ProxyLease) ProxyProfile {
 	return ResolveProxyProfile(lease)
 }
@@ -195,6 +111,7 @@ func BuildSSOCookie(ssoToken string, options ...CookieOptions) string {
 	}
 	effectiveCookies := sanitize(&cfCookies, "cf_cookies", false)
 	effectiveClearance := sanitize(&cfClearance, "cf_clearance", true)
+	effectiveClearance = strings.ReplaceAll(effectiveClearance, ";", "")
 
 	if effectiveClearance != "" && effectiveCookies != "" {
 		if regexp.MustCompile(`(?:^|;\s*)cf_clearance=`).MatchString(effectiveCookies) {
@@ -307,13 +224,14 @@ func BuildHTTPHeaders(cookieToken string, options ...HTTPHeaderOptions) map[stri
 	rawUA := profile.UserAgent
 	ua := sanitize(&rawUA, "user_agent", false)
 	browser := profile.Browser
+	table := reverseruntime.GlobalEndpointTable()
 	origin := opts.Origin
 	if origin == "" {
-		origin = "https://grok.com"
+		origin = table.Resolve("base")
 	}
 	referer := opts.Referer
 	if referer == "" {
-		referer = "https://grok.com/"
+		referer = table.Resolve("base_referer")
 	}
 	origin = sanitize(&origin, "origin", false)
 	referer = sanitize(&referer, "referer", false)
@@ -350,7 +268,7 @@ func BuildHTTPHeaders(cookieToken string, options ...HTTPHeaderOptions) map[stri
 		"x-statsig-id":     statsigID(),
 		"x-xai-request-id": uuidString(),
 	}
-	for key, value := range clientHints(browser, rawUA) {
+	for key, value := range ClientHintsForProfile(ProxyProfile{Browser: browser, UserAgent: rawUA}) {
 		headers[key] = value
 	}
 	headers["Cookie"] = BuildSSOCookie(cookieToken, CookieOptions{Lease: opts.Lease})
@@ -366,9 +284,10 @@ func BuildWSHeaders(token string, options ...WSHeaderOptions) map[string]string 
 	rawUA := profile.UserAgent
 	ua := sanitize(&rawUA, "user_agent", false)
 	browser := profile.Browser
+	table := reverseruntime.GlobalEndpointTable()
 	origin := opts.Origin
 	if origin == "" {
-		origin = "https://grok.com"
+		origin = table.Resolve("base")
 	}
 	origin = sanitize(&origin, "origin", false)
 
@@ -379,7 +298,7 @@ func BuildWSHeaders(token string, options ...WSHeaderOptions) map[string]string 
 		"Pragma":          "no-cache",
 		"User-Agent":      ua,
 	}
-	for key, value := range clientHints(browser, rawUA) {
+	for key, value := range ClientHintsForProfile(ProxyProfile{Browser: browser, UserAgent: rawUA}) {
 		headers[key] = value
 	}
 	if token != "" {
@@ -402,8 +321,9 @@ func BuildConsoleHeaders(ssoToken string, options ...ConsoleHeaderOptions) map[s
 	profile := resolveProfile(opts.Lease)
 	ua := sanitize(&profile.UserAgent, "user_agent", false)
 	if ua == "" {
-		ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
+		ua = DefaultConsoleUserAgent
 	}
+	table := reverseruntime.GlobalEndpointTable()
 	headers := map[string]string{
 		"Accept":          "*/*",
 		"Accept-Encoding": "gzip, deflate, br, zstd",
@@ -411,37 +331,44 @@ func BuildConsoleHeaders(ssoToken string, options ...ConsoleHeaderOptions) map[s
 		"Authorization":   "Bearer anonymous",
 		"Content-Type":    opts.ContentType,
 		"Cookie":          BuildSSOCookie(ssoToken, CookieOptions{Lease: opts.Lease}),
-		"Origin":          "https://console.x.ai",
+		"Origin":          table.Resolve("console_base"),
 		"Priority":        "u=1, i",
-		"Referer":         "https://console.x.ai/",
+		"Referer":         table.Resolve("console_referer"),
 		"Sec-Fetch-Dest":  "empty",
 		"Sec-Fetch-Mode":  "cors",
 		"Sec-Fetch-Site":  "same-origin",
 		"User-Agent":      ua,
-		"x-cluster":       "https://us-east-1.api.x.ai",
+		"x-cluster":       table.Resolve("console_cluster"),
 	}
-	for key, value := range clientHints(profile.Browser, profile.UserAgent) {
+	for key, value := range ClientHintsForProfile(profile) {
 		headers[key] = value
 	}
 	return headers
 }
 
 func replaceFirstCFClearance(cookies string, clearance string) string {
-	re := regexp.MustCompile(`(^|;\s*)cf_clearance=[^;]*`)
-	return re.ReplaceAllString(cookies, "${1}cf_clearance="+escapeReplacement(clearance))
+	pairs := splitCookiePairs(cookies)
+	out := make([]string, 0, len(pairs))
+	replaced := false
+	for _, pair := range pairs {
+		name, _, ok := splitCookiePair(pair)
+		if ok && strings.EqualFold(name, "cf_clearance") {
+			if !replaced {
+				out = append(out, "cf_clearance="+clearance)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, strings.TrimSpace(pair))
+	}
+	if !replaced {
+		out = append(out, "cf_clearance="+clearance)
+	}
+	return strings.Join(out, "; ")
 }
 
 func escapeReplacement(value string) string {
 	return strings.ReplaceAll(value, "$", "$$")
-}
-
-func containsAny(value string, needles ...string) bool {
-	for _, needle := range needles {
-		if strings.Contains(value, needle) {
-			return true
-		}
-	}
-	return false
 }
 
 func originHost(rawURL string) string {

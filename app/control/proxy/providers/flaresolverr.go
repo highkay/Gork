@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dslzl/gork/app/control/proxy"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
@@ -74,7 +75,7 @@ func (p FlareSolverrClearanceProvider) RefreshBundle(ctx context.Context, affini
 		return proxy.ClearanceBundle{}, false, nil
 	}
 
-	target := "https://grok.com"
+	target := reverseruntime.GlobalEndpointTable().Resolve("base")
 	if len(targetURL) > 0 {
 		target = targetURL[0]
 	}
@@ -85,7 +86,7 @@ func (p FlareSolverrClearanceProvider) RefreshBundle(ctx context.Context, affini
 
 	host := result.ClearanceHost
 	if host == "" {
-		host = "grok.com"
+		host = clearanceHost(reverseruntime.GlobalEndpointTable().Resolve("base"))
 	}
 	bundle := proxy.NewClearanceBundle(fmt.Sprintf("flaresolverr:%s@%s", affinityKey, host))
 	bundle.CFCookies = result.Cookies
@@ -98,7 +99,7 @@ func (p FlareSolverrClearanceProvider) RefreshBundle(ctx context.Context, affini
 func (p FlareSolverrClearanceProvider) solve(ctx context.Context, fsURL, proxyURL string, timeoutSec int, targetURL string) (flareSolverrSolveResult, bool, error) {
 	target := strings.TrimSpace(targetURL)
 	if target == "" {
-		target = "https://grok.com"
+		target = reverseruntime.GlobalEndpointTable().Resolve("base")
 	}
 	payload := map[string]any{
 		"cmd":        "request.get",
@@ -169,7 +170,7 @@ func (p FlareSolverrClearanceProvider) solve(ctx context.Context, fsURL, proxyUR
 		chosen = result.Solution.Cookies
 	}
 	if host == "" {
-		host = "grok.com"
+		host = clearanceHost(reverseruntime.GlobalEndpointTable().Resolve("base"))
 	}
 	return flareSolverrSolveResult{
 		Cookies:       extractAllCookies(chosen),

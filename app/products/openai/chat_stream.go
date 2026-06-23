@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 	"github.com/dslzl/gork/app/platform"
 )
@@ -31,13 +32,14 @@ func streamChat(ctx context.Context, options chatStreamOptions) ([]string, error
 		return nil, err
 	}
 
+	table := reverseruntime.GlobalEndpointTable()
 	response, err := streamPost(ctx, chatStreamRequest{
 		Token: options.Token,
 		Headers: map[string]string{
 			"authorization": "Bearer " + options.Token,
 			"content-type":  "application/json",
-			"origin":        "https://grok.com",
-			"referer":       "https://grok.com/",
+			"origin":        table.Resolve("base"),
+			"referer":       table.Resolve("base_referer"),
 		},
 		PayloadBytes:   payloadBytes,
 		TimeoutSeconds: options.TimeoutSeconds,

@@ -57,11 +57,15 @@ func (f fakeSessionConfig) GetList(key string, defaultValue []int) []int {
 
 func TestNormalizeProxyURLMatchesPython(t *testing.T) {
 	cases := map[string]string{
-		"":                         "",
-		"http://proxy.local:8080":  "http://proxy.local:8080",
-		"socks://proxy.local:1080": "socks5h://proxy.local:1080",
-		"socks5://proxy.local":     "socks5h://proxy.local",
-		"socks4://proxy.local":     "socks4a://proxy.local",
+		"":                                      "",
+		"http://proxy.local:8080":               "http://proxy.local:8080",
+		"https://proxy.local:8443":              "https://proxy.local:8443",
+		"http://user:pass@proxy.local:8080":     "http://user:pass@proxy.local:8080",
+		"http://[2001:db8::1]:8080":             "http://[2001:db8::1]:8080",
+		"socks://proxy.local:1080":              "socks5h://proxy.local:1080",
+		"socks5://proxy.local":                  "socks5h://proxy.local",
+		"socks5://user:pass@[2001:db8::2]:1080": "socks5h://user:pass@[2001:db8::2]:1080",
+		"socks4://proxy.local":                  "socks4a://proxy.local",
 	}
 	for input, want := range cases {
 		if got := NormalizeProxyURL(input); got != want {

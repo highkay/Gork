@@ -87,6 +87,36 @@ func TestStreamImagesConnectFailureYieldsErrorAndFeedback(t *testing.T) {
 	assertImagineFeedback(t, runtime.feedbacks, 0, controlproxy.ProxyFeedbackRateLimited, imagineIntPtr(429))
 }
 
+func TestStreamImagesRetriesTransportConnectFailures(t *testing.T) {
+	runtime := newFakeImagineProxyRuntime("first-lease", "second-lease", "third-lease")
+	imageID := "99999999-9999-4999-8999-999999999999"
+	client := &fakeImagineWebSocketClient{
+		connectErrs: []error{errors.New("handshake failed"), errors.New("temporary close")},
+		connections: []*fakeImagineWebSocketConn{
+			imagineCompletedConn(imageID, false),
+		},
+	}
+
+	events, err := StreamImages(context.Background(), "token", "prompt", ImagineOptions{
+		ProxyRuntime:  runtime,
+		Client:        client,
+		Timeout:       2 * time.Second,
+		StreamTimeout: 10 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("StreamImages returned error: %v", err)
+	}
+	if len(client.requests) != 3 || len(runtime.acquires) != 3 {
+		t.Fatalf("retry attempts requests=%d acquires=%d", len(client.requests), len(runtime.acquires))
+	}
+	if len(events) == 0 || events[len(events)-1]["is_final"] != true {
+		t.Fatalf("retry did not produce final image: %#v", events)
+	}
+	assertImagineFeedback(t, runtime.feedbacks, 0, controlproxy.ProxyFeedbackTransportError, nil)
+	assertImagineFeedback(t, runtime.feedbacks, 1, controlproxy.ProxyFeedbackTransportError, nil)
+	assertImagineFeedback(t, runtime.feedbacks, 2, controlproxy.ProxyFeedbackSuccess, imagineIntPtr(200))
+}
+
 func TestStreamImagesReconnectsWhenServerClosesBeforeEnoughImages(t *testing.T) {
 	runtime := newFakeImagineProxyRuntime("first-lease", "second-lease")
 	firstID := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -334,10 +364,16 @@ type fakeImagineWebSocketClient struct {
 	requests    []ImagineWebSocketConnectRequest
 	connections []*fakeImagineWebSocketConn
 	connectErr  error
+	connectErrs []error
 }
 
 func (c *fakeImagineWebSocketClient) Connect(_ context.Context, request ImagineWebSocketConnectRequest) (ImagineWebSocketConnection, error) {
 	c.requests = append(c.requests, request)
+	if len(c.connectErrs) > 0 {
+		err := c.connectErrs[0]
+		c.connectErrs = c.connectErrs[1:]
+		return nil, err
+	}
 	if c.connectErr != nil {
 		return nil, c.connectErr
 	}

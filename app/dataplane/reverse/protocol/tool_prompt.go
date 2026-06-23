@@ -59,7 +59,22 @@ func ExtractToolNames(tools []map[string]any) []string {
 }
 
 func InjectIntoMessage(message, systemPrompt string) string {
-	return "[system]: " + systemPrompt + "\n\n" + message
+	return "[system]: " + systemPrompt + "\n\n" + escapeInjectedUserMessage(message)
+}
+
+func escapeInjectedUserMessage(message string) string {
+	replacements := []struct {
+		old string
+		new string
+	}{
+		{"[system]:", "[user-system]:"},
+		{"<tool_calls", "&lt;tool_calls"},
+		{"</tool_calls>", "&lt;/tool_calls&gt;"},
+	}
+	for _, replacement := range replacements {
+		message = strings.ReplaceAll(message, replacement.old, replacement.new)
+	}
+	return message
 }
 
 func ToolCallsToXML(toolCalls []map[string]any) string {

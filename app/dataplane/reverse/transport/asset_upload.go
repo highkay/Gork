@@ -13,11 +13,12 @@ import (
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platform "github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/config"
 )
 
-const AssetUploadURL = "https://grok.com/rest/app-chat/upload-file"
+var AssetUploadURL = reverseruntime.DefaultEndpointTable().Resolve("assets_upload")
 
 const (
 	defaultAssetUploadTimeout = 60 * time.Second
@@ -132,7 +133,7 @@ func uploadFileInner(ctx context.Context, token string, filename string, mime st
 		return AssetUploadResult{}, assetTransportError("Asset upload transport error", err)
 	}
 	headers := proxyadapters.BuildHTTPHeaders(token, proxyadapters.HTTPHeaderOptions{Lease: lease})
-	response, err := option.Client.Post(ctx, AssetUploadURL, headers, payload, option.UploadTimeout)
+	response, err := option.Client.Post(ctx, reverseruntime.GlobalEndpointTable().Resolve("assets_upload"), headers, payload, option.UploadTimeout)
 	if err != nil {
 		feedbackAssetTransport(ctx, option.ProxyRuntime, lease)
 		return AssetUploadResult{}, assetTransportError("Asset upload transport error", err)

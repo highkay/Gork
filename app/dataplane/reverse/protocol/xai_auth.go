@@ -9,12 +9,12 @@ import (
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
-const (
-	AccountsOrigin = "https://accounts.x.ai"
-	GrokOrigin     = reverseruntime.Base
-	AcceptTOSURL   = reverseruntime.AcceptTOS
-	NSFWMgmtURL    = reverseruntime.NSFWMgmt
-	SetBirthURL    = reverseruntime.SetBirth
+var (
+	AccountsOrigin = reverseruntime.DefaultEndpointTable().Resolve("accounts_base")
+	GrokOrigin     = reverseruntime.DefaultEndpointTable().Resolve("base")
+	AcceptTOSURL   = reverseruntime.DefaultEndpointTable().Resolve("accept_tos")
+	NSFWMgmtURL    = reverseruntime.DefaultEndpointTable().Resolve("nsfw_mgmt")
+	SetBirthURL    = reverseruntime.DefaultEndpointTable().Resolve("set_birth")
 )
 
 type GrpcStatus struct {
@@ -168,7 +168,9 @@ func BuildSetBirthPayload(options ...BirthPayloadOptions) map[string]string {
 }
 
 func (c *XAIAuthClient) AcceptTOS(ctx context.Context, token string) (GrpcStatus, error) {
-	return c.grpcCall(ctx, AcceptTOSURL, token, BuildAcceptTOSPayload(), "accept_tos", AccountsOrigin, AccountsOrigin+"/accept-tos", authCallOptions{})
+	table := reverseruntime.GlobalEndpointTable()
+	accountsOrigin := table.Resolve("accounts_base")
+	return c.grpcCall(ctx, table.Resolve("accept_tos"), token, BuildAcceptTOSPayload(), "accept_tos", accountsOrigin, accountsOrigin+"/accept-tos", authCallOptions{})
 }
 
 func (c *XAIAuthClient) SetNSFW(ctx context.Context, token string, enabled bool) (GrpcStatus, error) {
@@ -176,7 +178,9 @@ func (c *XAIAuthClient) SetNSFW(ctx context.Context, token string, enabled bool)
 	if enabled {
 		label = "enable_nsfw"
 	}
-	return c.grpcCall(ctx, NSFWMgmtURL, token, BuildNSFWMgmtPayload(enabled), label, GrokOrigin, GrokOrigin+"/?_s=data", authCallOptions{})
+	table := reverseruntime.GlobalEndpointTable()
+	base := table.Resolve("base")
+	return c.grpcCall(ctx, table.Resolve("nsfw_mgmt"), token, BuildNSFWMgmtPayload(enabled), label, base, base+"/?_s=data", authCallOptions{})
 }
 
 func (c *XAIAuthClient) EnableNSFW(ctx context.Context, token string) (GrpcStatus, error) {
@@ -198,7 +202,7 @@ func (c *XAIAuthClient) NSFWSequence(ctx context.Context, token string) error {
 	lease, err := c.proxy.Acquire(ctx, controlproxy.AcquireOptions{
 		Scope:           controlproxy.ProxyScopeApp,
 		Kind:            controlproxy.RequestKindHTTP,
-		ClearanceOrigin: GrokOrigin,
+		ClearanceOrigin: reverseruntime.GlobalEndpointTable().Resolve("base"),
 	})
 	if err != nil {
 		return err
@@ -209,7 +213,9 @@ func (c *XAIAuthClient) NSFWSequence(ctx context.Context, token string) error {
 			return c.sequenceFeedbackError(ctx, lease, err)
 		}
 	}
-	if _, err := c.grpcCall(ctx, NSFWMgmtURL, token, BuildNSFWMgmtPayload(true), "enable_nsfw", GrokOrigin, GrokOrigin+"/?_s=data", shared); err != nil {
+	table := reverseruntime.GlobalEndpointTable()
+	base := table.Resolve("base")
+	if _, err := c.grpcCall(ctx, table.Resolve("nsfw_mgmt"), token, BuildNSFWMgmtPayload(true), "enable_nsfw", base, base+"/?_s=data", shared); err != nil {
 		return c.sequenceFeedbackError(ctx, lease, err)
 	}
 	return c.proxy.Feedback(ctx, lease, proxyFeedback(controlproxy.ProxyFeedbackSuccess, 200))

@@ -50,20 +50,21 @@ func BuildPlan(spec controlmodel.ModelSpec, options ...BuildPlanOptions) Reverse
 }
 
 func resolveEndpoint(spec controlmodel.ModelSpec, _ map[string]any) (string, TransportKind) {
+	endpoints := reverseruntime.GlobalEndpointTable()
 	if spec.IsChat() {
-		return reverseruntime.Chat, TransportKindHTTPSSE
+		return endpoints.Resolve("chat"), TransportKindHTTPSSE
 	}
 	if spec.IsImage() {
-		return reverseruntime.WSImagine, TransportKindWebSocket
+		return endpoints.Resolve("ws_imagine"), TransportKindWebSocket
 	}
 	if spec.IsImageEdit() {
-		return reverseruntime.Chat, TransportKindHTTPSSE
+		return endpoints.Resolve("chat"), TransportKindHTTPSSE
 	}
 	if spec.IsVideo() {
-		return reverseruntime.MediaPost, TransportKindHTTPJSON
+		return endpoints.Resolve("media_post"), TransportKindHTTPJSON
 	}
 	if spec.IsVoice() {
-		return reverseruntime.Chat, TransportKindHTTPSSE
+		return endpoints.Resolve("chat"), TransportKindHTTPSSE
 	}
-	return reverseruntime.Chat, TransportKindHTTPSSE
+	return endpoints.Resolve("chat"), TransportKindHTTPSSE
 }

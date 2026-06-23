@@ -61,6 +61,27 @@ func TestBuildConsolePayloadMatchesPythonFixtures(t *testing.T) {
 	}
 }
 
+func TestBuildConsoleRequestPayloadReturnsTypedDTO(t *testing.T) {
+	payload := BuildConsoleRequestPayload(ConsolePayloadOptions{
+		Messages:        []map[string]any{{"role": "user", "content": "hello"}},
+		Model:           "grok-4.3-console",
+		ReasoningEffort: "high",
+	})
+
+	if payload.Model != "grok-4.3" || payload.MaxOutputTokens != 1000000 || !payload.Stream {
+		t.Fatalf("typed payload basics = %#v", payload)
+	}
+	if payload.Reasoning == nil || payload.Reasoning.Effort != "high" {
+		t.Fatalf("typed reasoning = %#v", payload.Reasoning)
+	}
+	if len(payload.Input) != 1 || payload.Input[0]["role"] != "user" {
+		t.Fatalf("typed input = %#v", payload.Input)
+	}
+	if len(payload.Include) != 1 || payload.Include[0] != "reasoning.encrypted_content" {
+		t.Fatalf("typed include = %#v", payload.Include)
+	}
+}
+
 func TestBuildConsolePayloadMatchesPythonContentFallbacks(t *testing.T) {
 	messages := []map[string]any{
 		{"role": "developer", "content": "dev"},
@@ -219,9 +240,11 @@ func TestConsoleLineAdapterAndFeedbackMatchPythonFixtures(t *testing.T) {
 		wantData string
 	}{
 		{"", "skip", ""},
+		{": keepalive", "skip", ""},
+		{"event:", "event", ""},
 		{"event: response.output_text.delta", "event", "response.output_text.delta"},
 		{`data: {"delta":"hi"}`, "data", `{"delta":"hi"}`},
-		{"data: [DONE]", "done", ""},
+		{"data: [DONE]   ", "done", ""},
 		{`  data: {\"delta\":\"trim\"}  `, "data", `{\"delta\":\"trim\"}`},
 		{"junk", "skip", ""},
 	}

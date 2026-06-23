@@ -1,9 +1,11 @@
 package protocol
 
-const (
-	MediaPostURL    = "https://grok.com/rest/media/post/create"
-	MediaLinkURL    = "https://grok.com/rest/media/post/create-link"
-	VideoUpscaleURL = "https://grok.com/rest/media/video/upscale"
+import reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
+
+var (
+	MediaPostURL    = reverseruntime.DefaultEndpointTable().Resolve("media_post")
+	MediaLinkURL    = reverseruntime.DefaultEndpointTable().Resolve("media_post_link")
+	VideoUpscaleURL = reverseruntime.DefaultEndpointTable().Resolve("video_upscale")
 )
 
 type MediaPostPayloadOptions struct {

@@ -8,7 +8,7 @@ import (
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	"github.com/dslzl/gork/app/dataplane/proxy/adapters"
-	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platform "github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/config"
 )
@@ -17,6 +17,7 @@ const (
 	defaultImagineTimeout        = 120 * time.Second
 	defaultImagineStreamTimeout  = 10 * time.Second
 	defaultImagineInterRoundWait = 2 * time.Second
+	defaultImagineConnectRetries = 3
 )
 
 var (
@@ -83,14 +84,7 @@ func StreamImages(ctx context.Context, token, prompt string, options ImagineOpti
 	events := []map[string]any{}
 	collected := 0
 	for collected < option.N {
-		lease, err := option.ProxyRuntime.Acquire(ctx, controlproxy.AcquireOptions{
-			Scope: controlproxy.ProxyScopeApp,
-			Kind:  controlproxy.RequestKindWebSocket,
-		})
-		if err != nil {
-			return nil, err
-		}
-		conn, err := option.Client.Connect(ctx, imagineConnectRequest(token, lease, option))
+		conn, lease, err := connectImagineWebSocket(ctx, token, option)
 		if err != nil {
 			_ = option.ProxyRuntime.Feedback(ctx, lease, imagineConnectFeedback(err))
 			return append(events, imagineConnectErrorEvent(err)), nil
@@ -120,6 +114,31 @@ func StreamImages(ctx context.Context, token, prompt string, options ImagineOpti
 		}
 	}
 	return events, nil
+}
+
+func connectImagineWebSocket(ctx context.Context, token string, option ImagineOptions) (ImagineWebSocketConnection, controlproxy.ProxyLease, error) {
+	var lastLease controlproxy.ProxyLease
+	var lastErr error
+	for attempt := 0; attempt < defaultImagineConnectRetries; attempt++ {
+		lease, err := option.ProxyRuntime.Acquire(ctx, controlproxy.AcquireOptions{
+			Scope: controlproxy.ProxyScopeApp,
+			Kind:  controlproxy.RequestKindWebSocket,
+		})
+		if err != nil {
+			return nil, lease, err
+		}
+		conn, err := option.Client.Connect(ctx, imagineConnectRequest(token, lease, option))
+		if err == nil {
+			return conn, lease, nil
+		}
+		lastLease = lease
+		lastErr = err
+		if imagineStatusFromError(err) != 0 || attempt == defaultImagineConnectRetries-1 {
+			break
+		}
+		_ = option.ProxyRuntime.Feedback(ctx, lease, imagineConnectFeedback(err))
+	}
+	return nil, lastLease, lastErr
 }
 
 func runImagineConnection(ctx context.Context, conn ImagineWebSocketConnection, prompt string, option ImagineOptions, events *[]map[string]any, collected *int) (bool, error) {
@@ -208,7 +227,7 @@ func (options ImagineOptions) enableNSFW() bool {
 
 func imagineConnectRequest(token string, lease controlproxy.ProxyLease, option ImagineOptions) ImagineWebSocketConnectRequest {
 	return ImagineWebSocketConnectRequest{
-		URL:     protocol.WSImagineURL,
+		URL:     reverseruntime.GlobalEndpointTable().Resolve("ws_imagine"),
 		Headers: adapters.BuildWSHeaders(token, adapters.WSHeaderOptions{Lease: &lease}),
 		Timeout: option.Timeout,
 		WSOptions: ImagineWebSocketOptions{

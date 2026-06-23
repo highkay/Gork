@@ -4,13 +4,15 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
-const (
-	AssetsListURL      = "https://grok.com/rest/assets"
-	AssetsDeleteURL    = "https://grok.com/rest/assets-metadata"
-	AssetsDownloadBase = "https://assets.grok.com"
-	AppChatUploadURL   = "https://grok.com/rest/app-chat/upload-file"
+var (
+	AssetsListURL      = reverseruntime.DefaultEndpointTable().Resolve("assets_list")
+	AssetsDeleteURL    = reverseruntime.DefaultEndpointTable().Resolve("assets_delete")
+	AssetsDownloadBase = reverseruntime.DefaultEndpointTable().Resolve("assets_download")
+	AppChatUploadURL   = reverseruntime.DefaultEndpointTable().Resolve("assets_upload")
 )
 
 var extensionMIME = map[string]string{
@@ -23,7 +25,7 @@ var extensionMIME = map[string]string{
 }
 
 func AssetDeleteURL(assetID string) string {
-	return AssetsDeleteURL + "/" + assetID
+	return reverseruntime.GlobalEndpointTable().Resolve("assets_delete") + "/" + assetID
 }
 
 func ResolveDownloadURL(filePath string) (string, string, string) {
@@ -36,8 +38,9 @@ func ResolveDownloadURL(filePath string) (string, string, string) {
 	if !strings.HasPrefix(resolvedPath, "/") {
 		resolvedPath = "/" + resolvedPath
 	}
-	assetURL := AssetsDownloadBase + resolvedPath
-	return assetURL, AssetsDownloadBase, AssetsDownloadBase + "/"
+	base := reverseruntime.GlobalEndpointTable().Resolve("assets_download")
+	assetURL := base + resolvedPath
+	return assetURL, base, base + "/"
 }
 
 func InferContentType(rawURL string) *string {
@@ -57,7 +60,7 @@ func ResolveAssetReference(fileID, fileURI, userID string) *string {
 		return &assetURL
 	}
 	if fileID != "" && userID != "" {
-		assetURL := AssetsDownloadBase + "/users/" + userID + "/" + fileID + "/content"
+		assetURL := reverseruntime.GlobalEndpointTable().Resolve("assets_download") + "/users/" + userID + "/" + fileID + "/content"
 		return &assetURL
 	}
 	return nil

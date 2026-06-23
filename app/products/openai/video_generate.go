@@ -162,7 +162,7 @@ func generateVideoWithToken(ctx context.Context, token string, options videoToke
 	} else {
 		post, err := videoCreateMediaPost(ctx, token, videoMediaType, transport.MediaOptions{
 			Prompt:  options.Prompt,
-			Referer: "https://grok.com/imagine",
+			Referer: reverseruntime.GlobalEndpointTable().Resolve("imagine_referer"),
 		})
 		if err != nil {
 			return VideoArtifact{}, err
@@ -178,12 +178,12 @@ func generateVideoWithToken(ctx context.Context, token string, options videoToke
 	elapsedSeconds := 0
 	for index, segmentLength := range segments {
 		var payload map[string]any
-		referer := "https://grok.com/imagine"
+		referer := reverseruntime.GlobalEndpointTable().Resolve("imagine_referer")
 		if index == 0 {
 			payload = videoCreatePayload(options.Prompt, parentPostID, options.AspectRatio, options.ResolutionName, segmentLength, options.Preset, referenceContentURLs(references))
 		} else {
 			payload = videoExtendPayload(options.Prompt, parentPostID, extendPostID, options.AspectRatio, options.ResolutionName, segmentLength, options.Preset, videoExtendStartTime(elapsedSeconds))
-			referer = "https://grok.com/imagine/post/" + parentPostID
+			referer = reverseruntime.GlobalEndpointTable().Resolve("imagine_referer") + "/post/" + parentPostID
 		}
 		progressCB := func(progress int) {
 			if options.ProgressCB == nil {
@@ -254,7 +254,7 @@ func prepareVideoReference(ctx context.Context, token string, inputReference map
 	post, err := videoCreateMediaPost(ctx, token, imageMediaType, transport.MediaOptions{
 		MediaURL: contentURL,
 		Prompt:   "",
-		Referer:  "https://grok.com/imagine",
+		Referer:  reverseruntime.GlobalEndpointTable().Resolve("imagine_referer"),
 	})
 	if err != nil {
 		return videoReference{}, err
@@ -339,10 +339,11 @@ func defaultVideoStreamLines(ctx context.Context, token string, payload map[stri
 	if err != nil {
 		return nil, err
 	}
-	stream, err := transport.PostStream(ctx, reverseruntime.Chat, token, raw, transport.HTTPOptions{
+	table := reverseruntime.GlobalEndpointTable()
+	stream, err := transport.PostStream(ctx, table.Resolve("chat"), token, raw, transport.HTTPOptions{
 		Timeout:     secondsDuration(timeoutS, 120*time.Second),
 		ContentType: "application/json",
-		Origin:      "https://grok.com",
+		Origin:      table.Resolve("base"),
 		Referer:     referer,
 	})
 	if err != nil {
@@ -462,7 +463,11 @@ func isUpstreamAssetContentURL(value string) bool {
 	if err != nil {
 		return false
 	}
-	return parsed.Scheme == "https" && parsed.Host == "assets.grok.com" && strings.HasSuffix(parsed.Path, "/content")
+	assets, err := url.Parse(reverseruntime.GlobalEndpointTable().Resolve("assets_download"))
+	if err != nil {
+		return false
+	}
+	return parsed.Scheme == assets.Scheme && parsed.Host == assets.Host && strings.HasSuffix(parsed.Path, "/content")
 }
 
 func extractVideoFileAttachments(obj map[string]any) []string {

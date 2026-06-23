@@ -175,6 +175,20 @@ func TestPostGRPCWebTransportErrorMatchesResettableSessionWrapper(t *testing.T) 
 	}
 }
 
+func FuzzParseGRPCWebResponseTrailers(f *testing.F) {
+	f.Add(grpcFrame(0x80, []byte("grpc-status: 0\r\ngrpc-message: ok\r\n")), "application/grpc-web+proto")
+	f.Add([]byte(base64.StdEncoding.EncodeToString(grpcFrame(0x80, []byte("grpc-status: 0\r\nbin-bin: \x00\x01\r\n")))), "application/grpc-web-text+proto")
+	f.Add(grpcFrame(0x80, []byte("grpc-status: 13\r\ngrpc-status: 0\r\ngrpc-message: duplicate\r\n")), "application/grpc-web+proto")
+	f.Add([]byte{0x80, 0x00, 0x00, 0x00, 0xff, 'x'}, "application/grpc-web+proto")
+
+	f.Fuzz(func(t *testing.T, body []byte, contentType string) {
+		_, _ = ParseGRPCWebResponse(body, contentType, map[string]string{
+			"Grpc-Status":  "0",
+			"Grpc-Message": "header%20ok",
+		})
+	})
+}
+
 func grpcFrame(flag byte, payload []byte) []byte {
 	frame := []byte{flag, byte(len(payload) >> 24), byte(len(payload) >> 16), byte(len(payload) >> 8), byte(len(payload))}
 	return append(frame, payload...)

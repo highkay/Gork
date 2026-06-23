@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
-const imageBaseURL = "https://assets.grok.com/"
+var imageBaseURL = reverseruntime.DefaultEndpointTable().Resolve("assets_download") + "/"
 
 var camelBoundaryRe = regexp.MustCompile(`([a-z0-9])([A-Z])`)
 

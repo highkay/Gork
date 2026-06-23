@@ -103,6 +103,18 @@ func TestClassifyLineMatchesPythonFixture(t *testing.T) {
 	}
 }
 
+func TestParseSSEEventLinesHandlesCommentsMultiDataEmptyEventAndDoneNoise(t *testing.T) {
+	event, data, done := ParseSSEEventLines([]string{": keepalive", "event:", "data: one", "data: two"})
+	if event != "message" || data != "one\ntwo" || done {
+		t.Fatalf("multi-data event = (%q,%q,%v)", event, data, done)
+	}
+
+	event, data, done = ParseSSEEventLines([]string{": before", "data: ignored before", "data: [DONE]", "data: ignored after"})
+	if event != "message" || data != "" || !done {
+		t.Fatalf("done event = (%q,%q,%v)", event, data, done)
+	}
+}
+
 func TestStreamErrorFromPayloadMatchesPythonFixture(t *testing.T) {
 	err := StreamErrorFromPayload(map[string]any{"error": map[string]any{"message": "too many requests", "code": float64(8)}})
 	if err == nil || err.Status != 429 || err.Error() != "Upstream stream error: too many requests" || err.Body != `{"error":{"message":"too many requests","code":8}}` {

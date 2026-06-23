@@ -1,6 +1,9 @@
 package reverse
 
-import controlproxy "github.com/dslzl/gork/app/control/proxy"
+import (
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
+)
 
 type ResultCategory int
 
@@ -64,6 +67,7 @@ type ReversePlan struct {
 }
 
 func NewReversePlan(endpoint string, transportKind TransportKind, poolCandidates []int, modeID int) ReversePlan {
+	table := reverseruntime.GlobalEndpointTable()
 	return ReversePlan{
 		Endpoint:       endpoint,
 		TransportKind:  transportKind,
@@ -71,8 +75,8 @@ func NewReversePlan(endpoint string, transportKind TransportKind, poolCandidates
 		ModeID:         modeID,
 		TimeoutS:       120.0,
 		ContentType:    "application/json",
-		Origin:         "https://grok.com",
-		Referer:        "https://grok.com/",
+		Origin:         table.Resolve("base"),
+		Referer:        table.Resolve("base_referer"),
 		Extra:          map[string]any{},
 	}
 }

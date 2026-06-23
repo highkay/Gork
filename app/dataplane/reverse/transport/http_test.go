@@ -93,6 +93,39 @@ func TestPostStreamFailureDecodesGzipBody(t *testing.T) {
 	}
 }
 
+func TestNetHTTPClientRejectsOversizedNonStreamBody(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(strings.Repeat("x", int(defaultMaxHTTPBodyBytes)+1)))
+	}))
+	defer server.Close()
+
+	_, err := netHTTPClient{}.Get(context.Background(), HTTPRequest{
+		URL:     server.URL,
+		Timeout: time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "response body exceeds") {
+		t.Fatalf("oversized response error = %v, want response body exceeds", err)
+	}
+}
+
+func TestNetHTTPClientReturnsGzipDecodeError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("not gzip"))
+	}))
+	defer server.Close()
+
+	_, err := netHTTPClient{}.Get(context.Background(), HTTPRequest{
+		URL:     server.URL,
+		Timeout: time.Second,
+	})
+	if err == nil || !strings.Contains(err.Error(), "decode gzip response") {
+		t.Fatalf("gzip decode error = %v, want decode gzip response", err)
+	}
+}
+
 func TestHTTPTransportErrorMatchesResettableSessionWrapper(t *testing.T) {
 	client := &fakeHTTPClient{err: errors.New("dial\nfailed")}
 	_, err := PostJSON(context.Background(), "https://grok.test/json", "token", nil, HTTPOptions{Client: client})
@@ -272,6 +305,14 @@ func TestPostStreamYieldsLinesAndCloses(t *testing.T) {
 	}
 	if !client.posts[0].Stream {
 		t.Fatalf("post stream request should be marked streaming: %#v", client.posts[0])
+	}
+}
+
+func TestHTTPLineStreamReadsHalfPacketWithoutTrailingNewline(t *testing.T) {
+	stream := &trackingReadCloser{Reader: strings.NewReader("data: half-packet")}
+	got := drainHTTPLineStream(t, newHTTPLineStream(HTTPResponse{StatusCode: 200, Stream: stream}))
+	if !reflect.DeepEqual(got, []string{"data: half-packet"}) {
+		t.Fatalf("half-packet stream lines = %#v", got)
 	}
 }
 

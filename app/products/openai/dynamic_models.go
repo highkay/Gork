@@ -16,10 +16,11 @@ import (
 
 	"github.com/dslzl/gork/app/control/model"
 	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
 
-const dynamicConsoleListModelsEndpoint = "https://console.x.ai/auth_mgmt.AuthManagement/ListModels"
+var dynamicConsoleListModelsEndpoint = reverseruntime.DefaultEndpointTable().Resolve("console_list_models")
 
 var defaultDynamicConsoleModels = newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
 	Endpoint:   dynamicConsoleListModelsEndpoint,
@@ -59,7 +60,7 @@ type dynamicConsoleModelSource struct {
 func newDynamicConsoleModelSource(options dynamicConsoleModelSourceOptions) *dynamicConsoleModelSource {
 	endpoint := options.Endpoint
 	if endpoint == "" {
-		endpoint = dynamicConsoleListModelsEndpoint
+		endpoint = reverseruntime.GlobalEndpointTable().Resolve("console_list_models")
 	}
 	ttl := options.TTL
 	if ttl <= 0 {

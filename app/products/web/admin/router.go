@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
+	reverse "github.com/dslzl/gork/app/dataplane/reverse"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/config"
@@ -55,6 +57,11 @@ var (
 	adminStorageBackend          = func() string {
 		return fmt.Sprint(config.GetConfig("account.storage", "local"))
 	}
+	adminProtocolCheckRunner = func(ctx context.Context, targets []string) []reverse.ProtocolCheckResult {
+		return reverse.RunProtocolCheck(ctx, targets, nil)
+	}
+	adminProtocolCheckMu     sync.Mutex
+	adminProtocolCheckLatest []reverse.ProtocolCheckResult
 )
 
 // NewRouter returns the /admin/api HTTP surface.
@@ -82,6 +89,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("/admin/api/cache/clear", adminProtected(http.MethodPost, handleAdminCacheClear))
 	mux.HandleFunc("/admin/api/cache/item/delete", adminProtected(http.MethodPost, handleAdminCacheDeleteItem))
 	mux.HandleFunc("/admin/api/cache/items/delete", adminProtected(http.MethodPost, handleAdminCacheDeleteItems))
+	mux.HandleFunc("/admin/api/protocol-check", adminProtected(http.MethodPost, handleAdminProtocolCheck))
+	mux.HandleFunc("/admin/api/protocol-check/latest", adminProtected(http.MethodGet, handleAdminProtocolCheckLatest))
 	mux.HandleFunc("/admin/api/tokens", adminProtectedAny(map[string]http.HandlerFunc{
 		http.MethodGet: handleAdminTokensList, http.MethodPost: handleAdminTokensSave, http.MethodDelete: handleAdminTokensDelete,
 	}))
@@ -115,6 +124,28 @@ func adminProtectedAny(handlers map[string]http.HandlerFunc) http.HandlerFunc {
 
 func handleAdminVerify(w http.ResponseWriter, _ *http.Request) {
 	writeAdminJSON(w, http.StatusOK, map[string]any{"status": "success"})
+}
+
+func handleAdminProtocolCheck(w http.ResponseWriter, r *http.Request) {
+	var payload struct {
+		Targets []string `json:"targets"`
+	}
+	if r.Body != nil {
+		decoder := json.NewDecoder(r.Body)
+		_ = decoder.Decode(&payload)
+	}
+	results := adminProtocolCheckRunner(r.Context(), payload.Targets)
+	adminProtocolCheckMu.Lock()
+	adminProtocolCheckLatest = append([]reverse.ProtocolCheckResult(nil), results...)
+	adminProtocolCheckMu.Unlock()
+	writeAdminJSON(w, http.StatusOK, results)
+}
+
+func handleAdminProtocolCheckLatest(w http.ResponseWriter, _ *http.Request) {
+	adminProtocolCheckMu.Lock()
+	results := append([]reverse.ProtocolCheckResult(nil), adminProtocolCheckLatest...)
+	adminProtocolCheckMu.Unlock()
+	writeAdminJSON(w, http.StatusOK, results)
 }
 
 func handleAdminGetConfig(w http.ResponseWriter, _ *http.Request) {

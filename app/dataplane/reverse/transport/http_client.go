@@ -11,21 +11,37 @@ import (
 	"net/url"
 )
 
-type netHTTPClient struct{}
+const defaultMaxHTTPBodyBytes int64 = 8 << 20
 
-func (netHTTPClient) Post(ctx context.Context, request HTTPRequest) (HTTPResponse, error) {
-	return doHTTPRequest(ctx, http.MethodPost, request)
+var defaultNetHTTPDoer HTTPDoer = http.DefaultClient
+
+type HTTPDoer interface {
+	Do(*http.Request) (*http.Response, error)
 }
 
-func (netHTTPClient) Get(ctx context.Context, request HTTPRequest) (HTTPResponse, error) {
-	return doHTTPRequest(ctx, http.MethodGet, request)
+type netHTTPClient struct {
+	Doer         HTTPDoer
+	MaxBodyBytes int64
 }
 
-func (netHTTPClient) Delete(ctx context.Context, request HTTPRequest) (HTTPResponse, error) {
-	return doHTTPRequest(ctx, http.MethodDelete, request)
+func (c netHTTPClient) Post(ctx context.Context, request HTTPRequest) (HTTPResponse, error) {
+	return c.do(ctx, http.MethodPost, request)
+}
+
+func (c netHTTPClient) Get(ctx context.Context, request HTTPRequest) (HTTPResponse, error) {
+	return c.do(ctx, http.MethodGet, request)
+}
+
+func (c netHTTPClient) Delete(ctx context.Context, request HTTPRequest) (HTTPResponse, error) {
+	return c.do(ctx, http.MethodDelete, request)
 }
 
 func doHTTPRequest(ctx context.Context, method string, request HTTPRequest) (HTTPResponse, error) {
+	client := netHTTPClient{}
+	return client.do(ctx, method, request)
+}
+
+func (c netHTTPClient) do(ctx context.Context, method string, request HTTPRequest) (HTTPResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, request.Timeout)
 	rawRequest, err := http.NewRequestWithContext(ctx, method, httpRequestURL(request), bytes.NewReader(request.Payload))
 	if err != nil {
@@ -35,7 +51,10 @@ func doHTTPRequest(ctx context.Context, method string, request HTTPRequest) (HTT
 	for key, value := range request.Headers {
 		rawRequest.Header.Set(key, value)
 	}
-	response, err := http.DefaultClient.Do(rawRequest)
+	if rawRequest.Header.Get("Accept-Encoding") == "" {
+		rawRequest.Header.Set("Accept-Encoding", "gzip, deflate")
+	}
+	response, err := c.httpDoer().Do(rawRequest)
 	if err != nil {
 		cancel()
 		return HTTPResponse{}, err
@@ -49,50 +68,75 @@ func doHTTPRequest(ctx context.Context, method string, request HTTPRequest) (HTT
 	}
 	defer cancel()
 	defer response.Body.Close()
-	body, err := readHTTPResponseBody(response)
+	body, err := readHTTPResponseBody(response, c.maxBodyBytes())
 	if err != nil {
 		return HTTPResponse{}, err
 	}
 	return HTTPResponse{StatusCode: response.StatusCode, Body: body, Headers: firstHeaderValues(response.Header)}, nil
 }
 
-func readHTTPResponseBody(response *http.Response) ([]byte, error) {
-	body, err := io.ReadAll(response.Body)
+func (c netHTTPClient) httpDoer() HTTPDoer {
+	if c.Doer != nil {
+		return c.Doer
+	}
+	return defaultNetHTTPDoer
+}
+
+func (c netHTTPClient) maxBodyBytes() int64 {
+	if c.MaxBodyBytes > 0 {
+		return c.MaxBodyBytes
+	}
+	return defaultMaxHTTPBodyBytes
+}
+
+func readHTTPResponseBody(response *http.Response, maxBytes int64) ([]byte, error) {
+	body, err := readLimitedHTTPBody(response.Body, maxBytes)
 	if err != nil {
 		return nil, err
 	}
 	encoding := response.Header.Get("Content-Encoding")
 	switch encoding {
 	case "gzip":
-		return decodeGzipBody(body)
+		return decodeGzipBody(body, maxBytes)
 	case "deflate":
-		return decodeDeflateBody(body)
+		return decodeDeflateBody(body, maxBytes)
 	}
 	if len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b {
-		return decodeGzipBody(body)
+		return decodeGzipBody(body, maxBytes)
 	}
 	return body, nil
 }
 
-func decodeGzipBody(body []byte) ([]byte, error) {
+func readLimitedHTTPBody(reader io.Reader, maxBytes int64) ([]byte, error) {
+	body, err := io.ReadAll(io.LimitReader(reader, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(body)) > maxBytes {
+		return nil, fmt.Errorf("response body exceeds %d bytes", maxBytes)
+	}
+	return body, nil
+}
+
+func decodeGzipBody(body []byte, maxBytes int64) ([]byte, error) {
 	reader, err := gzip.NewReader(bytes.NewReader(body))
 	if err != nil {
-		return body, nil
+		return nil, fmt.Errorf("decode gzip response: %w", err)
 	}
 	defer reader.Close()
-	decoded, err := io.ReadAll(reader)
+	decoded, err := readLimitedHTTPBody(reader, maxBytes)
 	if err != nil {
-		return body, nil
+		return nil, fmt.Errorf("decode gzip response: %w", err)
 	}
 	return decoded, nil
 }
 
-func decodeDeflateBody(body []byte) ([]byte, error) {
+func decodeDeflateBody(body []byte, maxBytes int64) ([]byte, error) {
 	reader := flate.NewReader(bytes.NewReader(body))
 	defer reader.Close()
-	decoded, err := io.ReadAll(reader)
+	decoded, err := readLimitedHTTPBody(reader, maxBytes)
 	if err != nil {
-		return body, nil
+		return nil, fmt.Errorf("decode deflate response: %w", err)
 	}
 	return decoded, nil
 }

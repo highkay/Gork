@@ -89,6 +89,22 @@ func TestMediaPostWithProxyAppliesUpstreamAndTransportFeedback(t *testing.T) {
 	assertMediaFeedback(t, transportRuntime.feedbacks, 0, controlproxy.ProxyFeedbackTransportError, nil)
 }
 
+func TestMediaPostWithProxyReportsPayloadMarshalFailure(t *testing.T) {
+	runtime := newFakeMediaProxyRuntime("marshal-lease")
+
+	_, err := postMediaWithProxy(context.Background(), "https://media.test", "token", map[string]any{
+		"bad": func() {},
+	}, "create_media_post", "https://referer.test", MediaOptions{
+		ProxyRuntime: runtime,
+		Client:       &fakeMediaHTTPClient{},
+	})
+	var upstream *platform.UpstreamError
+	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "create_media_post: transport error") {
+		t.Fatalf("marshal error = %#v", err)
+	}
+	assertMediaFeedback(t, runtime.feedbacks, 0, controlproxy.ProxyFeedbackTransportError, nil)
+}
+
 func TestMediaDefaultTimeoutUsesVideoConfigAndOmitsEmptyOptionalPayloadFields(t *testing.T) {
 	resetMediaTimeoutProviderForTest(t, 12.5)
 	runtime := newFakeMediaProxyRuntime("default-lease")

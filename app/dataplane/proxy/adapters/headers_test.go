@@ -82,6 +82,21 @@ func TestBuildSSOCookieNormalizesStoredCookieShapes(t *testing.T) {
 	}
 }
 
+func TestBuildSSOCookieHardensCFClearanceInputs(t *testing.T) {
+	cookies := "foo=1; CF_Clearance=old; cf_clearance=older; bar=2"
+	clearance := " new; token "
+
+	got := BuildSSOCookie("token", CookieOptions{
+		CFCookies:   &cookies,
+		CFClearance: &clearance,
+	})
+
+	want := "sso=token; sso-rw=token; foo=1; cf_clearance=newtoken; bar=2"
+	if got != want {
+		t.Fatalf("hardened cookie = %q, want %q", got, want)
+	}
+}
+
 func TestSanitizeMatchesPythonNormalization(t *testing.T) {
 	value := "\t\u201chello\u201d\u2014x😀\n"
 	if got := sanitize(&value, "field", false); got != "\"hello\"-x" {
@@ -207,6 +222,21 @@ func TestClientHintsMatchPythonChromiumFiltering(t *testing.T) {
 		hints["Sec-Ch-Ua-Platform"] != "\"Android\"" ||
 		!strings.Contains(hints["Sec-Ch-Ua"], "\"Microsoft Edge\";v=\"120\"") {
 		t.Fatalf("mobile Edge client hints = %#v", hints)
+	}
+}
+
+func TestClientHintsComeFromVersionedBrowserProfileData(t *testing.T) {
+	profile := ProxyProfile{
+		Browser:   "chrome120",
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+	}
+
+	hints := ClientHintsForProfile(profile)
+	if hints["Sec-Ch-Ua"] != `"Google Chrome";v="120", "Chromium";v="120", "Not(A:Brand";v="24"` {
+		t.Fatalf("profile sec-ch-ua mismatch: %#v", hints)
+	}
+	if hints["Sec-Ch-Ua-Platform"] != `"Windows"` || hints["Sec-Ch-Ua-Arch"] != "x86" || hints["Sec-Ch-Ua-Bitness"] != "64" {
+		t.Fatalf("profile platform hints mismatch: %#v", hints)
 	}
 }
 

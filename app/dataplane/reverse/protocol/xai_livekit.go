@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"net/url"
 	"strings"
+
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
-const (
-	LiveKitTokenURL = "https://grok.com/rest/livekit/tokens"
-	LiveKitWSBase   = "wss://livekit.grok.com"
+var (
+	LiveKitTokenURL = reverseruntime.DefaultEndpointTable().Resolve("livekit_tokens")
+	LiveKitWSBase   = reverseruntime.DefaultEndpointTable().Resolve("ws_livekit")
 )
 
 type LiveKitTokenOptions struct {
@@ -19,6 +21,14 @@ type LiveKitTokenOptions struct {
 	VoiceSet          bool
 	PersonalitySet    bool
 	SpeedSet          bool
+}
+
+func LiveKitTokenEndpoint() string {
+	return reverseruntime.GlobalEndpointTable().Resolve("livekit_tokens")
+}
+
+func LiveKitWebSocketBase() string {
+	return reverseruntime.GlobalEndpointTable().Resolve("ws_livekit")
 }
 
 func BuildLiveKitTokenRequestPayload(options LiveKitTokenOptions) []byte {
@@ -51,7 +61,7 @@ func BuildLiveKitTokenRequestPayload(options LiveKitTokenOptions) []byte {
 	outer := map[string]any{
 		"sessionPayload":       string(sessionBody),
 		"requestAgentDispatch": false,
-		"livekitUrl":           LiveKitWSBase,
+		"livekitUrl":           LiveKitWebSocketBase(),
 		"params":               map[string]any{"enable_markdown_transcript": "true"},
 	}
 	body, _ := json.Marshal(outer)
@@ -59,7 +69,7 @@ func BuildLiveKitTokenRequestPayload(options LiveKitTokenOptions) []byte {
 }
 
 func BuildLiveKitWSURL(accessToken string) string {
-	base := strings.TrimRight(LiveKitWSBase, "/")
+	base := strings.TrimRight(LiveKitWebSocketBase(), "/")
 	rtc := base + "/rtc"
 	if strings.HasSuffix(base, "/rtc") {
 		rtc = base

@@ -7,9 +7,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
-const WSImagineURL = "wss://grok.com/ws/imagine/listen"
+var WSImagineURL = reverseruntime.DefaultEndpointTable().Resolve("ws_imagine")
 
 var imagineURLPattern = regexp.MustCompile(`(?i)/images/([a-f0-9\-]+)\.(png|jpg|jpeg)`)
 

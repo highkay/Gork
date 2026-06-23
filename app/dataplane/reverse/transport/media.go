@@ -9,6 +9,7 @@ import (
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platform "github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/config"
 )
@@ -50,9 +51,9 @@ type MediaOptions struct {
 func CreateMediaPost(ctx context.Context, token, mediaType string, options MediaOptions) (map[string]any, error) {
 	referer := options.Referer
 	if referer == "" {
-		referer = "https://grok.com/imagine"
+		referer = reverseruntime.GlobalEndpointTable().Resolve("imagine_referer")
 	}
-	return postMediaWithProxy(ctx, protocol.MediaPostURL, token, protocol.BuildMediaPostPayload(protocol.MediaPostPayloadOptions{
+	return postMediaWithProxy(ctx, reverseruntime.GlobalEndpointTable().Resolve("media_post"), token, protocol.BuildMediaPostPayload(protocol.MediaPostPayloadOptions{
 		MediaType: mediaType,
 		MediaURL:  options.MediaURL,
 		Prompt:    options.Prompt,
@@ -60,11 +61,11 @@ func CreateMediaPost(ctx context.Context, token, mediaType string, options Media
 }
 
 func CreateMediaLink(ctx context.Context, token, postID string, options MediaOptions) (map[string]any, error) {
-	return postMediaWithProxy(ctx, protocol.MediaLinkURL, token, protocol.BuildMediaLinkPayload(postID), "create_media_link", mediaReferer(options), options)
+	return postMediaWithProxy(ctx, reverseruntime.GlobalEndpointTable().Resolve("media_post_link"), token, protocol.BuildMediaLinkPayload(postID), "create_media_link", mediaReferer(options), options)
 }
 
 func UpscaleVideo(ctx context.Context, token, videoID string, options MediaOptions) (map[string]any, error) {
-	return postMediaWithProxy(ctx, protocol.VideoUpscaleURL, token, protocol.BuildVideoUpscalePayload(videoID), "upscale_video", mediaReferer(options), options)
+	return postMediaWithProxy(ctx, reverseruntime.GlobalEndpointTable().Resolve("video_upscale"), token, protocol.BuildVideoUpscalePayload(videoID), "upscale_video", mediaReferer(options), options)
 }
 
 func postMediaWithProxy(ctx context.Context, rawURL, token string, payload map[string]any, label, referer string, options MediaOptions) (map[string]any, error) {
@@ -78,7 +79,8 @@ func postMediaWithProxy(ctx context.Context, rawURL, token string, payload map[s
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, err
+		_ = option.ProxyRuntime.Feedback(ctx, lease, controlproxy.ProxyFeedback{Kind: controlproxy.ProxyFeedbackTransportError})
+		return nil, platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %v", label, err), 502, err.Error())
 	}
 	result, err := option.Client.PostJSON(ctx, MediaHTTPRequest{
 		URL:     rawURL,
@@ -86,7 +88,7 @@ func postMediaWithProxy(ctx context.Context, rawURL, token string, payload map[s
 		Payload: body,
 		Lease:   &lease,
 		Timeout: option.Timeout,
-		Origin:  "https://grok.com",
+		Origin:  reverseruntime.GlobalEndpointTable().Resolve("base"),
 		Referer: referer,
 	})
 	if err != nil {
@@ -125,7 +127,7 @@ func mediaReferer(options MediaOptions) string {
 	if options.Referer != "" {
 		return options.Referer
 	}
-	return "https://grok.com"
+	return reverseruntime.GlobalEndpointTable().Resolve("base")
 }
 
 func handleMediaError(ctx context.Context, runtime MediaProxyRuntime, lease controlproxy.ProxyLease, label string, err error) error {

@@ -10,6 +10,7 @@ import (
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platform "github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/config"
 )
@@ -115,14 +116,15 @@ func listAssetsInner(ctx context.Context, token string, params map[string]any, o
 	if err != nil {
 		return nil, err
 	}
+	table := reverseruntime.GlobalEndpointTable()
 	result, err := option.Client.GetJSON(ctx, AssetsHTTPRequest{
-		URL:     protocol.AssetsListURL,
+		URL:     table.Resolve("assets_list"),
 		Token:   token,
 		Params:  params,
 		Lease:   &lease,
 		Timeout: option.ListTimeout,
-		Origin:  "https://grok.com",
-		Referer: "https://grok.com/files",
+		Origin:  table.Resolve("base"),
+		Referer: table.Resolve("files_referer"),
 	})
 	if err != nil {
 		return nil, handleAssetsError(ctx, option.ProxyRuntime, lease, "list_assets", err)
@@ -136,13 +138,14 @@ func deleteAssetInner(ctx context.Context, token string, assetID string, option 
 	if err != nil {
 		return nil, err
 	}
+	table := reverseruntime.GlobalEndpointTable()
 	result, err := option.Client.DeleteJSON(ctx, AssetsHTTPRequest{
-		URL:     protocol.AssetDeleteURL(assetID),
+		URL:     table.Resolve("assets_delete") + "/" + assetID,
 		Token:   token,
 		Lease:   &lease,
 		Timeout: option.DeleteTimeout,
-		Origin:  "https://grok.com",
-		Referer: "https://grok.com/files",
+		Origin:  table.Resolve("base"),
+		Referer: table.Resolve("files_referer"),
 	})
 	if err != nil {
 		return nil, handleAssetsError(ctx, option.ProxyRuntime, lease, "delete_asset", err)

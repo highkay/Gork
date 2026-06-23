@@ -5,10 +5,11 @@ import (
 	"reflect"
 	"sync"
 
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
-const defaultClearanceOrigin = "https://grok.com"
+var defaultClearanceOrigin = reverseruntime.DefaultEndpointTable().Resolve("base")
 
 type BundleKey struct {
 	Affinity      string
@@ -188,7 +189,7 @@ func (d *ProxyDirectory) Acquire(ctx context.Context, options ...AcquireOptions)
 	}
 	origin := option.ClearanceOrigin
 	if origin == "" {
-		origin = defaultClearanceOrigin
+		origin = reverseruntime.GlobalEndpointTable().Resolve("base")
 	}
 	bundle, err := d.getOrBuildBundle(ctx, affinity, proxyValue, origin)
 	if err != nil {

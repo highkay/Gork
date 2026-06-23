@@ -39,7 +39,7 @@ func (netHTTPAssetsClient) GetBytesStream(ctx context.Context, request AssetsHTT
 		return nil, err
 	}
 	applyAssetsHeaders(rawRequest, request)
-	response, err := http.DefaultClient.Do(rawRequest)
+	response, err := defaultNetHTTPDoer.Do(rawRequest)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -47,7 +47,7 @@ func (netHTTPAssetsClient) GetBytesStream(ctx context.Context, request AssetsHTT
 	if response.StatusCode != 200 {
 		defer cancel()
 		defer response.Body.Close()
-		body, _ := io.ReadAll(response.Body)
+		body, _ := readLimitedHTTPBody(response.Body, defaultMaxHTTPBodyBytes)
 		return nil, platform.NewUpstreamError(fmt.Sprintf("HTTP %d", response.StatusCode), response.StatusCode, truncateString(string(body), 300))
 	}
 	return &cancelOnCloseReader{ReadCloser: response.Body, cancel: cancel}, nil
@@ -61,12 +61,12 @@ func doAssetsHTTPRequest(ctx context.Context, method string, request AssetsHTTPR
 		return AssetHTTPResponse{}, err
 	}
 	applyAssetsHeaders(rawRequest, request)
-	response, err := http.DefaultClient.Do(rawRequest)
+	response, err := defaultNetHTTPDoer.Do(rawRequest)
 	if err != nil {
 		return AssetHTTPResponse{}, err
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(response.Body)
+	responseBody, err := readLimitedHTTPBody(response.Body, defaultMaxHTTPBodyBytes)
 	if err != nil {
 		return AssetHTTPResponse{}, err
 	}

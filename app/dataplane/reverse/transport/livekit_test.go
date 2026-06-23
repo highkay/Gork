@@ -107,6 +107,38 @@ func TestConnectLiveKitWSBuildsURLHeadersAndFeedbackOnClose(t *testing.T) {
 	assertLiveKitFeedback(t, runtime.feedbacks, 0, controlproxy.ProxyFeedbackSuccess, liveKitIntPtr(200))
 }
 
+func TestLiveKitTokenAndWebSocketShareRequestID(t *testing.T) {
+	requestID := "voice-request-123"
+	tokenRuntime := newFakeLiveKitProxyRuntime("token-lease")
+	tokenClient := &fakeLiveKitHTTPClient{result: map[string]any{"access_token": "lk-token"}}
+
+	_, err := FetchLiveKitToken(context.Background(), "sso-token", LiveKitOptions{
+		ProxyRuntime: tokenRuntime,
+		Client:       tokenClient,
+		RequestID:    requestID,
+	})
+	if err != nil {
+		t.Fatalf("FetchLiveKitToken returned error: %v", err)
+	}
+	if got := tokenClient.posts[0].Headers["X-Request-ID"]; got != requestID {
+		t.Fatalf("token request id = %q, want %q", got, requestID)
+	}
+
+	wsRuntime := newFakeLiveKitProxyRuntime("ws-lease")
+	wsClient := &fakeLiveKitWebSocketClient{connection: &fakeLiveKitWebSocketConnection{}}
+	_, err = ConnectLiveKitWS(context.Background(), "sso-token", "access token", LiveKitWSOptions{
+		ProxyRuntime: wsRuntime,
+		Client:       wsClient,
+		RequestID:    requestID,
+	})
+	if err != nil {
+		t.Fatalf("ConnectLiveKitWS returned error: %v", err)
+	}
+	if got := wsClient.requests[0].Headers["X-Request-ID"]; got != requestID {
+		t.Fatalf("ws request id = %q, want %q", got, requestID)
+	}
+}
+
 func TestConnectLiveKitWSCloseIgnoresFeedbackErrorLikePython(t *testing.T) {
 	runtime := newFakeLiveKitProxyRuntime("ws-close-lease")
 	runtime.feedbackErr = errors.New("feedback failed")

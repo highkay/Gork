@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
+	reverse "github.com/dslzl/gork/app/dataplane/reverse"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/storage"
 )
@@ -189,6 +190,29 @@ func TestAdminStatusAndSyncUseDirectory(t *testing.T) {
 	}
 }
 
+func TestAdminProtocolCheckRunsAndReturnsLatest(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	adminProtocolCheckRunner = func(ctx context.Context, targets []string) []reverse.ProtocolCheckResult {
+		return []reverse.ProtocolCheckResult{{
+			Target:    targets[0],
+			Status:    "ok",
+			LatencyMS: 3,
+			RequestID: "protocol-test",
+			CheckedAt: "2026-06-23T00:00:00Z",
+		}}
+	}
+
+	rec := adminRequest(http.MethodPost, "/admin/api/protocol-check", `{"targets":["chat"]}`, "Bearer gork")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"target":"chat"`) || !strings.Contains(rec.Body.String(), `"request_id":"protocol-test"`) {
+		t.Fatalf("protocol check status/body=%d/%s", rec.Code, rec.Body.String())
+	}
+
+	rec = adminRequest(http.MethodGet, "/admin/api/protocol-check/latest", "", "Bearer gork")
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"target":"chat"`) {
+		t.Fatalf("latest protocol check status/body=%d/%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestDefaultAdminSelectionStatusUsesDirectorySnapshot(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	dir := &fakeAdminDirectory{selectionStatus: &accountdataplane.SelectionStatus{
@@ -364,6 +388,8 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	oldTokensRefresh := adminTokensRefreshServiceProvider
 	oldTokensRunner := adminTokensAsyncRunner
 	oldTokensNow := adminTokensNowMS
+	oldProtocolCheckRunner := adminProtocolCheckRunner
+	oldProtocolCheckLatest := append([]reverse.ProtocolCheckResult(nil), adminProtocolCheckLatest...)
 	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{} }
 	adminRouterConfig = &fakeAdminConfig{}
 	adminReconcileRefreshRuntime = func() string { return "" }
@@ -392,6 +418,10 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	adminTokensRefreshServiceProvider = func() adminTokensRefreshService { return nil }
 	adminTokensAsyncRunner = func(run func()) { go run() }
 	adminTokensNowMS = defaultAdminTokensNowMS
+	adminProtocolCheckRunner = func(ctx context.Context, targets []string) []reverse.ProtocolCheckResult {
+		return reverse.RunProtocolCheck(ctx, targets, nil)
+	}
+	adminProtocolCheckLatest = nil
 	t.Cleanup(func() {
 		adminRouterAuthSettings = oldAuth
 		adminRouterConfig = oldConfig
@@ -419,6 +449,8 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 		adminTokensRefreshServiceProvider = oldTokensRefresh
 		adminTokensAsyncRunner = oldTokensRunner
 		adminTokensNowMS = oldTokensNow
+		adminProtocolCheckRunner = oldProtocolCheckRunner
+		adminProtocolCheckLatest = oldProtocolCheckLatest
 	})
 }
 

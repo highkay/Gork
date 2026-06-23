@@ -13,6 +13,7 @@ import (
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platform "github.com/dslzl/gork/app/platform"
 )
 
@@ -125,11 +126,12 @@ func DeleteJSON(ctx context.Context, rawURL string, token string, options ...HTT
 
 func GetBytesStream(ctx context.Context, rawURL string, token string, options ...HTTPOptions) (io.ReadCloser, error) {
 	option := httpOptions(defaultBytesTimeout, options...)
+	table := reverseruntime.GlobalEndpointTable()
 	if option.Origin == "" {
-		option.Origin = "https://assets.grok.com"
+		option.Origin = table.Resolve("assets_download")
 	}
 	if option.Referer == "" {
-		option.Referer = "https://grok.com/"
+		option.Referer = table.Resolve("base_referer")
 	}
 	request := newHTTPRequest(rawURL, token, option)
 	for key, value := range option.ExtraHeaders {

@@ -3,7 +3,6 @@ package transport
 import (
 	"bytes"
 	"context"
-	"io"
 	"net/http"
 	"time"
 )
@@ -28,12 +27,12 @@ func doAssetHTTPRequest(ctx context.Context, method string, rawURL string, heade
 	for key, value := range headers {
 		request.Header.Set(key, value)
 	}
-	response, err := http.DefaultClient.Do(request)
+	response, err := defaultNetHTTPDoer.Do(request)
 	if err != nil {
 		return AssetHTTPResponse{}, err
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(response.Body)
+	responseBody, err := readLimitedHTTPBody(response.Body, defaultMaxHTTPBodyBytes)
 	if err != nil {
 		return AssetHTTPResponse{}, err
 	}

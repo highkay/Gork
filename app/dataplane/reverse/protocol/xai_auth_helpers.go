@@ -12,6 +12,7 @@ import (
 	"time"
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	platform "github.com/dslzl/gork/app/platform"
 )
 
@@ -41,7 +42,9 @@ func (c *XAIAuthClient) grpcCall(ctx context.Context, url, token string, payload
 }
 
 func (c *XAIAuthClient) setBirthDate(ctx context.Context, token string, options authCallOptions) (map[string]any, error) {
-	lease, shared, err := c.leaseForCall(ctx, GrokOrigin, options)
+	table := reverseruntime.GlobalEndpointTable()
+	base := table.Resolve("base")
+	lease, shared, err := c.leaseForCall(ctx, base, options)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +52,7 @@ func (c *XAIAuthClient) setBirthDate(ctx context.Context, token string, options 
 	if err != nil {
 		return nil, err
 	}
-	req := JSONAuthRequest{URL: SetBirthURL, Token: token, Payload: payload, Lease: lease, TimeoutS: c.timeoutS, Origin: GrokOrigin, Referer: GrokOrigin + "/?_s=data", Session: options.session}
+	req := JSONAuthRequest{URL: table.Resolve("set_birth"), Token: token, Payload: payload, Lease: lease, TimeoutS: c.timeoutS, Origin: base, Referer: base + "/?_s=data", Session: options.session}
 	result, err := c.json.PostJSON(ctx, req)
 	if err != nil {
 		return nil, c.feedbackCallError(ctx, shared, lease, "set_birth_date", err)

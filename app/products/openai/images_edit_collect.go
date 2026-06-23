@@ -6,6 +6,7 @@ import (
 	"fmt"
 	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/platform"
 	"regexp"
 	"sort"
@@ -67,13 +68,14 @@ func streamImageEditLines(ctx context.Context, options imageCollectEditOptions) 
 	if err != nil {
 		return nil, err
 	}
+	table := reverseruntime.GlobalEndpointTable()
 	response, err := streamPost(ctx, chatStreamRequest{
 		Token: options.Token,
 		Headers: map[string]string{
 			"authorization": "Bearer " + options.Token,
 			"content-type":  "application/json",
-			"origin":        "https://grok.com",
-			"referer":       "https://grok.com/imagine/post/" + options.ParentPostID,
+			"origin":        table.Resolve("base"),
+			"referer":       table.Resolve("imagine_referer") + "/post/" + options.ParentPostID,
 		},
 		PayloadBytes:   payloadBytes,
 		TimeoutSeconds: chatTimeoutSeconds(),

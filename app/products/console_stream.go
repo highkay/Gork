@@ -62,19 +62,20 @@ func consoleHTTPOptions(request protocol.ConsoleStreamRequest) transport.HTTPOpt
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
+	endpoints := reverseruntime.GlobalEndpointTable()
 	return transport.HTTPOptions{
 		Lease:          proxyLeasePtr(request.Lease),
 		Timeout:        timeout,
 		ContentType:    "application/json",
 		ConsoleHeaders: true,
 		ExtraHeaders: map[string]string{
-			"x-cluster": "https://us-east-1.api.x.ai",
+			"x-cluster": endpoints.Resolve("console_cluster"),
 		},
 	}
 }
 
 func consoleHTTPEndpoint() string {
-	return reverseruntime.ConsoleResponses
+	return reverseruntime.GlobalEndpointTable().Resolve("console_responses")
 }
 
 func proxyLeasePtr(lease controlproxy.ProxyLease) *controlproxy.ProxyLease {
