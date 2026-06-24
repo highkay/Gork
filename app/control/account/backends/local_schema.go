@@ -6,8 +6,10 @@ import (
 )
 
 const (
-	localAccountTable = "accounts"
-	localMetaTable    = "account_meta"
+	localAccountTable         = "accounts"
+	localMetaTable            = "account_meta"
+	localSchemaVersionTable   = "account_schema_versions"
+	localAccountSchemaVersion = 1
 )
 
 type localSQLRunner interface {
@@ -23,10 +25,17 @@ func ensureLocalSchema(ctx context.Context, db localSQLRunner) error {
 	if err := ensureLocalColumn(ctx, db, "quota_grok_4_3", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
 		return err
 	}
-	return ensureLocalColumn(ctx, db, "quota_console", "TEXT NOT NULL DEFAULT '{}'")
+	if err := ensureLocalColumn(ctx, db, "quota_console", "TEXT NOT NULL DEFAULT '{}'"); err != nil {
+		return err
+	}
+	return setLocalSchemaVersion(ctx, db, "accounts", localAccountSchemaVersion)
 }
 
 func ensureLocalColumn(ctx context.Context, db localSQLRunner, name string, ddl string) error {
+	column, err := safeAccountSQLColumn(name)
+	if err != nil {
+		return err
+	}
 	rows, err := db.QueryContext(ctx, "PRAGMA table_info("+localAccountTable+")")
 	if err != nil {
 		return err
@@ -40,15 +49,33 @@ func ensureLocalColumn(ctx context.Context, db localSQLRunner, name string, ddl 
 		if err := rows.Scan(&cid, &columnName, &columnType, &notNull, &defaultValue, &pk); err != nil {
 			return err
 		}
-		if columnName == name {
+		if columnName == column {
 			return rows.Err()
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	_, err = db.ExecContext(ctx, "ALTER TABLE "+localAccountTable+" ADD COLUMN "+name+" "+ddl)
+	_, err = db.ExecContext(ctx, "ALTER TABLE "+localAccountTable+" ADD COLUMN "+column+" "+ddl)
 	return err
+}
+
+func setLocalSchemaVersion(ctx context.Context, db localSQLRunner, name string, version int) error {
+	_, err := db.ExecContext(ctx, `
+		INSERT INTO account_schema_versions (name, version, applied_at)
+		VALUES (?, ?, strftime('%s','now'))
+		ON CONFLICT(name) DO UPDATE SET version = excluded.version, applied_at = excluded.applied_at
+	`, name, version)
+	return err
+}
+
+func getLocalSchemaVersion(ctx context.Context, db localSQLRunner, name string) (int, error) {
+	var version int
+	err := db.QueryRowContext(ctx, "SELECT version FROM "+localSchemaVersionTable+" WHERE name = ?", name).Scan(&version)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return version, err
 }
 
 func bumpLocalRevision(ctx context.Context, db localSQLRunner) (int, error) {
@@ -80,6 +107,12 @@ CREATE TABLE IF NOT EXISTS account_meta (
 	value TEXT NOT NULL
 );
 INSERT OR IGNORE INTO account_meta VALUES ('revision', '0');
+
+CREATE TABLE IF NOT EXISTS account_schema_versions (
+	name       TEXT PRIMARY KEY,
+	version    INTEGER NOT NULL,
+	applied_at INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS accounts (
 	token              TEXT    NOT NULL PRIMARY KEY,

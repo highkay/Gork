@@ -1,6 +1,7 @@
 package backends
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -32,12 +33,29 @@ func safeSQLSort(sortBy string) string {
 	}
 }
 
+func safeAccountSQLColumn(column string) (string, error) {
+	switch column {
+	case "token", "pool", "status", "created_at", "updated_at", "tags",
+		"quota_auto", "quota_fast", "quota_expert", "quota_heavy", "quota_grok_4_3", "quota_console",
+		"usage_use_count", "usage_fail_count", "usage_sync_count",
+		"last_use_at", "last_fail_at", "last_fail_reason", "last_sync_at", "last_clear_at",
+		"state_reason", "deleted_at", "ext", "revision":
+		return column, nil
+	default:
+		return "", fmt.Errorf("invalid account SQL column: %s", column)
+	}
+}
+
 func sqlAssignments(dialect SQLDialect, sets []localPatchSet) (string, []any) {
 	assignments := make([]string, 0, len(sets))
 	values := make([]any, 0, len(sets))
 	for _, set := range dedupeSQLPatchSets(sets) {
+		column, err := safeAccountSQLColumn(set.column)
+		if err != nil {
+			continue
+		}
 		values = append(values, set.value)
-		assignments = append(assignments, set.column+" = "+sqlBind(dialect, len(values)))
+		assignments = append(assignments, column+" = "+sqlBind(dialect, len(values)))
 	}
 	return strings.Join(assignments, ", "), values
 }

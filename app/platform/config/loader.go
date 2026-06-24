@@ -1,10 +1,10 @@
 package config
 
 import (
-	"bufio"
 	"os"
-	"strconv"
 	"strings"
+
+	"github.com/dslzl/gork/app/platform/config/tomlutil"
 )
 
 type LoadConfigOptions struct {
@@ -60,7 +60,7 @@ func LoadTOML(path string) (map[string]any, error) {
 		return nil, err
 	}
 	defer file.Close()
-	return parseSimpleTOML(file)
+	return tomlutil.Parse(file)
 }
 
 func LoadConfig(defaultsPath string, options LoadConfigOptions) (map[string]any, error) {
@@ -79,23 +79,7 @@ func LoadConfig(defaultsPath string, options LoadConfigOptions) (map[string]any,
 	if prefix == "" {
 		prefix = "GROK_"
 	}
-	for key, value := range loadConfigEnv(options.Env) {
-		if !strings.HasPrefix(key, prefix) {
-			continue
-		}
-		parts := strings.SplitN(strings.ToLower(key[len(prefix):]), "_", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		section, item := parts[0], parts[1]
-		nested, ok := data[section].(map[string]any)
-		if !ok {
-			nested = map[string]any{}
-			data[section] = nested
-		}
-		nested[item] = value
-	}
-	return data, nil
+	return ApplyEnvConfig(data, prefix, options.Env), nil
 }
 
 func GetNested(data map[string]any, dottedKey string, defaultValue any) any {
@@ -114,138 +98,18 @@ func GetNested(data map[string]any, dottedKey string, defaultValue any) any {
 	return node
 }
 
-func parseSimpleTOML(file *os.File) (map[string]any, error) {
-	data := map[string]any{}
+func SetNested(data map[string]any, dottedKey string, value any) {
+	parts := strings.Split(dottedKey, ".")
 	current := data
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := stripTOMLComment(strings.TrimSpace(scanner.Text()))
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			current = ensureTOMLSection(data, strings.TrimSpace(line[1:len(line)-1]))
-			continue
-		}
-		key, rawValue, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		current[strings.TrimSpace(key)] = parseTOMLValue(strings.TrimSpace(rawValue))
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
-func ensureTOMLSection(root map[string]any, dotted string) map[string]any {
-	current := root
-	for _, part := range strings.Split(dotted, ".") {
-		part = strings.TrimSpace(part)
-		next, ok := current[part].(map[string]any)
+	for _, key := range parts[:len(parts)-1] {
+		next, ok := current[key].(map[string]any)
 		if !ok {
 			next = map[string]any{}
-			current[part] = next
+			current[key] = next
 		}
 		current = next
 	}
-	return current
-}
-
-func stripTOMLComment(line string) string {
-	quote := rune(0)
-	for index, char := range line {
-		if quote != 0 {
-			if char == quote && (quote != '"' || index == 0 || line[index-1] != '\\') {
-				quote = 0
-			}
-			continue
-		}
-		if char == '"' || char == '\'' {
-			quote = char
-			continue
-		}
-		if char == '#' {
-			return strings.TrimSpace(line[:index])
-		}
-	}
-	return line
-}
-
-func parseTOMLValue(raw string) any {
-	if len(raw) >= 2 && raw[0] == '[' && raw[len(raw)-1] == ']' {
-		return parseTOMLArray(raw[1 : len(raw)-1])
-	}
-	if len(raw) >= 2 && raw[0] == '"' && raw[len(raw)-1] == '"' {
-		if unquoted, err := strconv.Unquote(raw); err == nil {
-			return unquoted
-		}
-		return raw[1 : len(raw)-1]
-	}
-	if len(raw) >= 2 && raw[0] == '\'' && raw[len(raw)-1] == '\'' {
-		return raw[1 : len(raw)-1]
-	}
-	switch strings.ToLower(raw) {
-	case "true":
-		return true
-	case "false":
-		return false
-	}
-	if strings.ContainsAny(raw, ".eE") {
-		if value, err := strconv.ParseFloat(raw, 64); err == nil {
-			return value
-		}
-	}
-	if value, err := strconv.ParseInt(raw, 10, 64); err == nil {
-		return value
-	}
-	return raw
-}
-
-func parseTOMLArray(raw string) []any {
-	values := []any{}
-	for _, item := range splitTOMLArrayItems(raw) {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
-		}
-		values = append(values, parseTOMLValue(item))
-	}
-	return values
-}
-
-func splitTOMLArrayItems(raw string) []string {
-	items := []string{}
-	start := 0
-	depth := 0
-	quote := byte(0)
-	for index := 0; index < len(raw); index++ {
-		char := raw[index]
-		if quote != 0 {
-			if char == quote && (quote != '"' || index == 0 || raw[index-1] != '\\') {
-				quote = 0
-			}
-			continue
-		}
-		switch char {
-		case '"', '\'':
-			quote = char
-		case '[':
-			depth++
-		case ']':
-			if depth > 0 {
-				depth--
-			}
-		case ',':
-			if depth == 0 {
-				items = append(items, raw[start:index])
-				start = index + 1
-			}
-		}
-	}
-	items = append(items, raw[start:])
-	return items
+	current[parts[len(parts)-1]] = value
 }
 
 func loadConfigEnv(env map[string]string) map[string]string {

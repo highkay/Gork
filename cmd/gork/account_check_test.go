@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -122,5 +123,48 @@ func TestRunGorkCommandHealthcheckRejectsUnknownFlag(t *testing.T) {
 	handled, code, err := runGorkCommand(context.Background(), []string{"healthcheck", "--bad"}, &bytes.Buffer{}, &bytes.Buffer{})
 	if !handled || code != 2 || err == nil {
 		t.Fatalf("handled/code/err = %t/%d/%v", handled, code, err)
+	}
+}
+
+func TestRunGorkCommandConfigValidateAndDocs(t *testing.T) {
+	dir := t.TempDir()
+	defaults := filepath.Join(dir, "defaults.toml")
+	user := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(defaults, []byte("[server]\nport = 8000\n[proxy]\nurl = \"http://127.0.0.1:8080\"\n"), 0o600); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	if err := os.WriteFile(user, []byte("[server]\nport = 9000\n"), 0o600); err != nil {
+		t.Fatalf("write user: %v", err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code, err := runGorkCommand(context.Background(), []string{"config", "validate", "--defaults", defaults, "--config", user}, &stdout, &stderr)
+	if err != nil || !handled || code != 0 || strings.TrimSpace(stdout.String()) != "ok" {
+		t.Fatalf("validate handled/code/err/stdout/stderr = %t/%d/%v/%q/%q", handled, code, err, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	handled, code, err = runGorkCommand(context.Background(), []string{"config", "docs", "--defaults", defaults}, &stdout, &stderr)
+	if err != nil || !handled || code != 0 || !strings.Contains(stdout.String(), "GROK_SERVER_PORT") {
+		t.Fatalf("docs handled/code/err/stdout/stderr = %t/%d/%v/%q/%q", handled, code, err, stdout.String(), stderr.String())
+	}
+}
+
+func TestRunGorkCommandConfigValidateReportsFieldError(t *testing.T) {
+	dir := t.TempDir()
+	defaults := filepath.Join(dir, "defaults.toml")
+	user := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(defaults, []byte("[server]\nport = 8000\n"), 0o600); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	if err := os.WriteFile(user, []byte("[server]\nport = \"bad\"\n"), 0o600); err != nil {
+		t.Fatalf("write user: %v", err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	handled, code, err := runGorkCommand(context.Background(), []string{"config", "validate", "--defaults", defaults, "--config", user}, &stdout, &stderr)
+	if err != nil || !handled || code != 1 || !strings.Contains(stderr.String(), "server.port") {
+		t.Fatalf("validate handled/code/err/stdout/stderr = %t/%d/%v/%q/%q", handled, code, err, stdout.String(), stderr.String())
 	}
 }

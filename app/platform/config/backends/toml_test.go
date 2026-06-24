@@ -67,7 +67,8 @@ func TestTomlConfigBackendApplyPatchDeepMergesAndCreatesParent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Version returned error: %v", err)
 	}
-	if _, ok := version.(float64); !ok || version.(float64) <= 0 {
+	meta, ok := version.(TomlConfigVersion)
+	if !ok || meta.Revision <= 0 || meta.Source != "file" || meta.UpdatedAt <= 0 {
 		t.Fatalf("version=%#v", version)
 	}
 }

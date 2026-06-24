@@ -1,11 +1,13 @@
 package admin
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"unicode"
 
 	"github.com/dslzl/gork/app/platform"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 var startupOnlyConfigPrefixes = []string{
@@ -111,6 +113,28 @@ func ensureRuntimePatchAllowed(payload map[string]any) error {
 		}
 	}
 	return nil
+}
+
+func ensureConfigPatchValid(payload map[string]any) error {
+	defaults, err := platformconfig.LoadTOML(platformconfig.ResolveDefaultsPath())
+	if err != nil {
+		return err
+	}
+	validation := platformconfig.ValidateConfigPatch(defaults, payload)
+	if validation == nil || len(validation.Issues) == 0 {
+		return nil
+	}
+	issue := validation.Issues[0]
+	return platform.NewValidationError(issue.Message, issue.Key, issue.Code)
+}
+
+func updateConfigWithSource(ctx context.Context, store adminConfigStore, patch map[string]any, source string) error {
+	if withSource, ok := store.(interface {
+		UpdateWithSource(context.Context, map[string]any, string) error
+	}); ok {
+		return withSource.UpdateWithSource(ctx, patch, source)
+	}
+	return store.Update(ctx, patch)
 }
 
 func patchTouchesPrefix(payload map[string]any, prefix string) bool {

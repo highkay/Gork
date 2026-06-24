@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -81,27 +82,51 @@ func (s *LocalMediaCacheStore) saveIndexed(mediaType MediaType, path string, raw
 	return s.enforceLimitLocked(db, mediaType, map[string]struct{}{filepath.Base(path): {}})
 }
 
-func (s *LocalMediaCacheStore) reconcileIndexed(mediaType MediaType) error {
+func (s *LocalMediaCacheStore) reconcileIndexed(mediaType MediaType) (MediaCacheReconcileReport, error) {
+	report := MediaCacheReconcileReport{}
 	db, err := s.connectIndex()
 	if err != nil {
-		return err
+		return report, err
 	}
 	defer db.Close()
 	dir, err := s.mediaDir(mediaType)
 	if err != nil {
-		return err
+		return report, err
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return err
+		return report, err
 	}
+	indexed, err := indexedMediaNames(db, mediaType)
+	if err != nil {
+		return report, err
+	}
+	seen := map[string]bool{}
 	if _, err := db.Exec(`DELETE FROM local_media_files WHERE media_type = ?`, string(mediaType)); err != nil {
-		return err
+		return report, err
 	}
 	for _, entry := range entries {
-		if entry.IsDir() || !s.allowed(mediaType, filepath.Ext(entry.Name())) {
+		if entry.IsDir() {
 			continue
 		}
+		if strings.HasSuffix(entry.Name(), ".part") {
+			if info, err := entry.Info(); err == nil {
+				report.TempFiles++
+				report.RemovedBytes += info.Size()
+				report.RemovedNames = appendLimitedName(report.RemovedNames, entry.Name())
+			}
+			_ = os.Remove(filepath.Join(dir, entry.Name()))
+			continue
+		}
+		if !s.allowed(mediaType, filepath.Ext(entry.Name())) {
+			report.OrphanFiles++
+			if info, err := entry.Info(); err == nil {
+				report.RemovedBytes += info.Size()
+				report.RemovedNames = appendLimitedName(report.RemovedNames, entry.Name())
+			}
+			continue
+		}
+		seen[entry.Name()] = true
 		path := filepath.Join(dir, entry.Name())
 		stat, err := os.Stat(path)
 		if err != nil {
@@ -113,10 +138,19 @@ func (s *LocalMediaCacheStore) reconcileIndexed(mediaType MediaType) error {
 				media_type, name, size_bytes, created_at_ns, updated_at_ns
 			) VALUES (?, ?, ?, ?, ?)
 		`, string(mediaType), entry.Name(), stat.Size(), ts, ts); err != nil {
-			return err
+			return report, err
 		}
 	}
-	return s.enforceLimitLocked(db, mediaType, nil)
+	for name := range indexed {
+		if !seen[name] {
+			report.OrphanIndexRows++
+			report.RemovedNames = appendLimitedName(report.RemovedNames, name)
+		}
+	}
+	if err := s.enforceLimitLocked(db, mediaType, nil); err != nil {
+		return report, err
+	}
+	return report, nil
 }
 
 func (s *LocalMediaCacheStore) upsertExistingRow(db *sql.DB, mediaType MediaType, path string) error {
@@ -129,6 +163,7 @@ func (s *LocalMediaCacheStore) upsertExistingRow(db *sql.DB, mediaType MediaType
 	if err != nil {
 		return err
 	}
+	updated := time.Now().UnixNano()
 	_, err = db.Exec(`
 		INSERT INTO local_media_files (
 			media_type, name, size_bytes, created_at_ns, updated_at_ns
@@ -136,8 +171,35 @@ func (s *LocalMediaCacheStore) upsertExistingRow(db *sql.DB, mediaType MediaType
 		ON CONFLICT(media_type, name) DO UPDATE SET
 			size_bytes = excluded.size_bytes,
 			updated_at_ns = excluded.updated_at_ns
-	`, string(mediaType), filepath.Base(path), stat.Size(), created, stat.ModTime().UnixNano())
+	`, string(mediaType), filepath.Base(path), stat.Size(), created, updated)
 	return err
+}
+
+func indexedMediaNames(db *sql.DB, mediaType MediaType) (map[string]bool, error) {
+	rows, err := db.Query(`
+		SELECT name FROM local_media_files
+		WHERE media_type = ?
+	`, string(mediaType))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	names := map[string]bool{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		names[name] = true
+	}
+	return names, rows.Err()
+}
+
+func appendLimitedName(names []string, name string) []string {
+	if len(names) >= 20 {
+		return names
+	}
+	return append(names, name)
 }
 
 func (s *LocalMediaCacheStore) upsertNewRow(db *sql.DB, mediaType MediaType, path string) error {
@@ -194,7 +256,7 @@ func newestName(db *sql.DB, mediaType MediaType) (string, error) {
 	err := db.QueryRow(`
 		SELECT name FROM local_media_files
 		WHERE media_type = ?
-		ORDER BY created_at_ns DESC, name DESC
+		ORDER BY updated_at_ns DESC, name DESC
 		LIMIT 1
 	`, string(mediaType)).Scan(&name)
 	if err == sql.ErrNoRows {

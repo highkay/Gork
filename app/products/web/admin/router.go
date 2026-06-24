@@ -403,8 +403,11 @@ func updateAdminConfig(ctx context.Context, patch map[string]any) (map[string]an
 	if err := ensureRuntimePatchAllowed(patch); err != nil {
 		return nil, err
 	}
+	if err := ensureConfigPatchValid(patch); err != nil {
+		return nil, err
+	}
 	cacheLocalChanged := patchTouchesPrefix(patch, "cache.local")
-	if err := adminRouterConfig.Update(ctx, patch); err != nil {
+	if err := updateConfigWithSource(ctx, adminRouterConfig, patch, "admin"); err != nil {
 		return nil, err
 	}
 	if err := adminRouterConfig.Load(ctx, ""); err != nil {

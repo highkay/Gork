@@ -20,6 +20,12 @@ file_level = "INFO"
 max_files = 7
 
 
+# ==================== 可观测性 ====================
+[observability]
+metrics_enabled = false
+pprof_enabled = false
+
+
 # ==================== 应用功能 ====================
 [features]
 # 是否启用临时对话
@@ -64,9 +70,9 @@ video_format = "grok_url"
 
 # ==================== 本地缓存 ====================
 [cache.local]
-# 图片缓存上限（MB），0 = 不限制；超限后按最旧文件优先清理，并回落到上限的 60%
+# 图片缓存上限（MB），0 = 保存文件但不启用索引、reconcile 或淘汰；大于 0 时按 LRU 清理并回落到上限的 60%
 image_max_mb = 0
-# 视频缓存上限（MB），0 = 不限制；超限后按最旧文件优先清理，并回落到上限的 60%
+# 视频缓存上限（MB），0 = 保存文件但不启用索引、reconcile 或淘汰；大于 0 时按 LRU 清理并回落到上限的 60%
 video_max_mb = 0
 
 
@@ -123,6 +129,16 @@ per_token_timeout_sec = 30
 batch_timeout_sec = 600
 on_demand_min_interval_sec = 300
 
+[account.sso_validation]
+enabled = false
+interval_sec = 300
+batch_size = 100
+concurrency = 10
+max_failures = 3
+
+[startup.migration]
+account_batch_size = 500
+
 [account.invalid_credentials]
 # 运行时发现 invalid credentials 连续达到该次数后才自动 expire
 max_failures = 3
@@ -160,6 +176,16 @@ upload_timeout = 60
 download_timeout = 60
 list_timeout = 60
 delete_timeout = 60
+
+
+# ==================== 反向协议端点 ====================
+[reverse.endpoints]
+base = "https://grok.com"
+assets_cdn = "https://assets.grok.com"
+console_base = "https://console.x.ai"
+accounts_base = "https://accounts.x.ai"
+ws_livekit = "wss://livekit.grok.com"
+console_cluster = "https://us-east-1.api.x.ai"
 
 
 # ==================== NSFW 操作 ====================

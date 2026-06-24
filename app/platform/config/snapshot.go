@@ -219,13 +219,24 @@ func (s *ConfigSnapshot) GetList(key string, defaultValue []any) []any {
 }
 
 func (s *ConfigSnapshot) Update(ctx context.Context, patch map[string]any) error {
+	return s.UpdateWithSource(ctx, patch, "admin")
+}
+
+func (s *ConfigSnapshot) UpdateWithSource(ctx context.Context, patch map[string]any, source string) error {
 	backend, err := s.getBackend()
 	if err != nil {
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if err := backend.ApplyPatch(ctx, patch); err != nil {
+	if withSource, ok := backend.(interface {
+		ApplyPatchWithSource(context.Context, map[string]any, string) error
+	}); ok {
+		err = withSource.ApplyPatchWithSource(ctx, patch, source)
+	} else {
+		err = backend.ApplyPatch(ctx, patch)
+	}
+	if err != nil {
 		return err
 	}
 	s.version = nil
@@ -260,8 +271,16 @@ func ApplyEnvConfig(data map[string]any, prefix string, env map[string]string) m
 	if prefix == "" {
 		prefix = "GROK_"
 	}
+	envToKey := map[string]string{}
+	for key := range FlattenConfig(data, "") {
+		envToKey[EnvNameForKey(prefix, key)] = key
+	}
 	for key, value := range loadConfigEnv(env) {
 		if !strings.HasPrefix(key, prefix) {
+			continue
+		}
+		if dotted, ok := envToKey[key]; ok {
+			SetNested(data, dotted, value)
 			continue
 		}
 		parts := strings.SplitN(strings.ToLower(key[len(prefix):]), "_", 2)

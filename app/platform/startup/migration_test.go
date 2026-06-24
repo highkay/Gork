@@ -142,7 +142,7 @@ func TestMigrateAccountsCopiesEmptyTargetAndRenamesSQLite(t *testing.T) {
 	repo := &fakeMigrationRepo{snapshot: AccountRuntimeSnapshot{}}
 	var renamedFrom, renamedTo string
 
-	err := migrateAccounts(context.Background(), repo, StartupMigrationOptions{
+	err := migrateAccounts(context.Background(), &fakeMigrationConfig{}, repo, StartupMigrationOptions{
 		RepositoryBackendName: "redis",
 		LocalDBPath:           dbPath,
 		LocalSourceFactory: func(path string) (LocalAccountSource, error) {
@@ -187,7 +187,7 @@ func TestMigrateAccountsRenamesSQLiteWhenLocalSourceIsEmpty(t *testing.T) {
 	repo := &fakeMigrationRepo{snapshot: AccountRuntimeSnapshot{}}
 	var renamedFrom, renamedTo string
 
-	err := migrateAccounts(context.Background(), repo, StartupMigrationOptions{
+	err := migrateAccounts(context.Background(), &fakeMigrationConfig{}, repo, StartupMigrationOptions{
 		RepositoryBackendName: "redis",
 		LocalDBPath:           dbPath,
 		LocalSourceFactory: func(path string) (LocalAccountSource, error) {
@@ -206,6 +206,52 @@ func TestMigrateAccountsRenamesSQLiteWhenLocalSourceIsEmpty(t *testing.T) {
 	}
 	if !source.closed || renamedFrom != dbPath || renamedTo != filepath.Join(dir, "accounts.db.migrated") {
 		t.Fatalf("closed=%t renamed=%q -> %q", source.closed, renamedFrom, renamedTo)
+	}
+}
+
+func TestMigrateAccountsDryRunReportsWithoutWritesOrRename(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "accounts.db")
+	if err := os.WriteFile(dbPath, []byte("sqlite"), 0o644); err != nil {
+		t.Fatalf("write sqlite marker: %v", err)
+	}
+	source := &fakeLocalAccountSource{pages: []ListAccountsResult{{
+		Items:      []AccountRecord{{Token: "tok-1", Pool: "basic", Status: "active"}},
+		TotalPages: 1,
+	}}}
+	repo := &fakeMigrationRepo{snapshot: AccountRuntimeSnapshot{}}
+	report := &StartupMigrationReport{}
+	renamed := false
+
+	err := migrateAccounts(context.Background(), &fakeMigrationConfig{}, repo, StartupMigrationOptions{
+		RepositoryBackendName: "redis",
+		LocalDBPath:           dbPath,
+		DryRun:                true,
+		Report:                report,
+		LocalSourceFactory: func(string) (LocalAccountSource, error) {
+			return source, nil
+		},
+		Rename: func(string, string) error {
+			renamed = true
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("migrateAccounts returned error: %v", err)
+	}
+	if renamed || len(repo.upserts) != 0 || report.AccountsCopied != 1 || report.BackupPath == "" {
+		t.Fatalf("renamed=%v upserts=%#v report=%#v", renamed, repo.upserts, report)
+	}
+}
+
+func TestNormalizeOptionsReadsMigrationBatchSizeFromDefaults(t *testing.T) {
+	defaults := filepath.Join(t.TempDir(), "config.defaults.toml")
+	if err := os.WriteFile(defaults, []byte("[startup.migration]\naccount_batch_size = 42\n"), 0o644); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	options := normalizeOptions(StartupMigrationOptions{DefaultsPath: defaults})
+	if options.BatchSize != 42 {
+		t.Fatalf("BatchSize = %d, want 42", options.BatchSize)
 	}
 }
 
@@ -321,7 +367,7 @@ func TestGrok43BackfillQueriesOnlyEligiblePoolsAndMarksComplete(t *testing.T) {
 	if patch := findPatch(repo.patches, "basic-ignored", func(AccountPatch) bool { return true }); patch.Token != "" {
 		t.Fatalf("basic account should not be patched: %#v", patch)
 	}
-	if !fakeConfigBool(config.data, "startup", "migrations", "grok43_quota_backfill") {
+	if !fakeMigrationCompleted(config.data, "grok43_quota_backfill") {
 		t.Fatalf("migration completion marker missing: %#v", config.data)
 	}
 }
@@ -478,6 +524,13 @@ func fakeConfigBool(data map[string]any, keys ...string) bool {
 	}
 	value, _ := current.(bool)
 	return value
+}
+
+func fakeMigrationCompleted(data map[string]any, name string) bool {
+	startup, _ := data["startup"].(map[string]any)
+	migrations, _ := startup["migrations"].(map[string]any)
+	marker, _ := migrations[name].(map[string]any)
+	return marker["status"] == "completed" && marker["source"] == "startup_migration" && marker["finished_at"] != ""
 }
 
 func mergeFakeConfigPatch(data map[string]any, patch map[string]any) map[string]any {

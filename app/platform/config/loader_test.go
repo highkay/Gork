@@ -138,3 +138,34 @@ func TestLoadTOMLMissingAndGetNestedDefaults(t *testing.T) {
 		t.Fatalf("scalar traversal did not return default")
 	}
 }
+
+func TestDefaultSchemaCoversDefaultsExampleAndDeepEnv(t *testing.T) {
+	defaultsPath := ResolveDefaultsPath()
+	defaults, err := LoadTOML(defaultsPath)
+	if err != nil {
+		t.Fatalf("LoadTOML defaults returned error: %v", err)
+	}
+	example, err := LoadTOML(filepath.Join(filepath.Dir(defaultsPath), "config.example.toml"))
+	if err != nil {
+		t.Fatalf("LoadTOML example returned error: %v", err)
+	}
+	defaultKeys := FlattenConfig(defaults, "")
+	exampleKeys := FlattenConfig(example, "")
+	for key := range defaultKeys {
+		if _, ok := exampleKeys[key]; !ok {
+			t.Fatalf("config.example.toml missing default key %s", key)
+		}
+	}
+	if validation := ValidateConfigData(defaults, defaults); validation != nil {
+		t.Fatalf("defaults validation issues = %#v", validation.Issues)
+	}
+	loaded, err := LoadConfig(defaultsPath, LoadConfigOptions{Env: map[string]string{
+		"GROK_REVERSE_ENDPOINTS_BASE": "https://example.test",
+	}})
+	if err != nil {
+		t.Fatalf("LoadConfig returned error: %v", err)
+	}
+	if got := GetNested(loaded, "reverse.endpoints.base", ""); got != "https://example.test" {
+		t.Fatalf("deep env override = %#v", got)
+	}
+}

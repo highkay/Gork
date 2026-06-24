@@ -38,12 +38,31 @@ type StartupMigrationOptions struct {
 	UserConfigPath        string
 	LocalDBPath           string
 	BatchSize             int
+	DryRun                bool
+	Report                *StartupMigrationReport
 	LoadTOML              func(string) (map[string]any, error)
 	CopyFile              func(string, string) error
 	Rename                func(string, string) error
 	LocalSourceFactory    func(string) (LocalAccountSource, error)
 	DefaultQuotaWindow    func(pool string, kind int) map[string]any
 	NormalizeQuotaSet     func(pool string, quotas AccountQuotaSet) AccountQuotaSet
+}
+
+type StartupMigrationReport struct {
+	ConfigKeys       int
+	AccountsCopied   int
+	AccountsSkipped  int
+	AccountsConflict int
+	BackupPath       string
+	DryRun           bool
+	Steps            []StartupMigrationStepReport
+}
+
+type StartupMigrationStepReport struct {
+	Name    string
+	Status  string
+	Count   int
+	Details string
 }
 
 type AccountRuntimeSnapshot struct {
@@ -131,7 +150,7 @@ func RunStartupMigrations(ctx context.Context, config ConfigBackend, repo Accoun
 	if err := migrateBasicRefreshInterval(ctx, config); err != nil {
 		return err
 	}
-	if err := migrateAccounts(ctx, repo, options); err != nil {
+	if err := migrateAccounts(ctx, config, repo, options); err != nil {
 		return err
 	}
 	if err := backfillGrok43Quota(ctx, config, repo, options); err != nil {
@@ -146,20 +165,35 @@ func RunStartupMigrations(ctx context.Context, config ConfigBackend, repo Accoun
 func migrateConfig(ctx context.Context, backend ConfigBackend, options StartupMigrationOptions) error {
 	if options.ConfigBackendName == "local" {
 		if !fileExists(options.UserConfigPath) && fileExists(options.DefaultsPath) {
+			recordMigrationStep(options.Report, "config_seed", "planned", 0, options.UserConfigPath)
+			if options.DryRun {
+				return nil
+			}
 			return options.CopyFile(options.DefaultsPath, options.UserConfigPath)
 		}
+		recordMigrationStep(options.Report, "config_seed", "skipped", 0, "local config exists or defaults missing")
 		return nil
 	}
 	version, err := backend.Version(ctx)
 	if err != nil || !versionIsZero(version) {
+		recordMigrationStep(options.Report, "config_import", "skipped", 0, "backend already has config")
 		return err
 	}
 	if !fileExists(options.UserConfigPath) {
+		recordMigrationStep(options.Report, "config_import", "skipped", 0, "user config missing")
 		return nil
 	}
 	userData, err := options.LoadTOML(options.UserConfigPath)
 	if err != nil || len(userData) == 0 {
 		return err
+	}
+	keys := countKeys(userData)
+	if options.Report != nil {
+		options.Report.ConfigKeys = keys
+	}
+	recordMigrationStep(options.Report, "config_import", "planned", keys, options.UserConfigPath)
+	if options.DryRun {
+		return nil
 	}
 	return backend.ApplyPatch(ctx, userData)
 }
@@ -177,18 +211,47 @@ func migrateBasicRefreshInterval(ctx context.Context, backend ConfigBackend) err
 	return backend.ApplyPatch(ctx, map[string]any{"account": map[string]any{"refresh": map[string]any{"basic_interval_sec": 86400}}})
 }
 
-func migrateAccounts(ctx context.Context, target AccountRepository, options StartupMigrationOptions) error {
+func migrateAccounts(ctx context.Context, config ConfigBackend, target AccountRepository, options StartupMigrationOptions) error {
 	if options.RepositoryBackendName == "local" || !fileExists(options.LocalDBPath) {
+		recordMigrationStep(options.Report, "local_account_import", "skipped", 0, "local backend or source missing")
 		return nil
+	}
+	if config != nil {
+		if marked, err := startupMigrationMarked(ctx, config, "local_account_import"); err != nil {
+			return err
+		} else if marked {
+			recordMigrationStep(options.Report, "local_account_import", "skipped", 0, "already marked complete")
+			return nil
+		}
 	}
 	snapshot, err := target.RuntimeSnapshot(ctx)
 	if err != nil || snapshot.Revision > 0 || len(snapshot.Items) > 0 {
+		if options.Report != nil && err == nil {
+			options.Report.AccountsConflict = len(snapshot.Items)
+		}
+		recordMigrationStep(options.Report, "local_account_import", "skipped", len(snapshot.Items), "target repository is not empty")
 		return err
 	}
-	if _, err := copyAccounts(ctx, options.LocalDBPath, target, options); err != nil {
+	count, err := copyAccounts(ctx, options.LocalDBPath, target, options)
+	if err != nil {
 		return err
 	}
-	return options.Rename(options.LocalDBPath, migratedDBPath(options.LocalDBPath))
+	backupPath := migratedDBPath(options.LocalDBPath)
+	if options.Report != nil {
+		options.Report.AccountsCopied = count
+		options.Report.BackupPath = backupPath
+	}
+	recordMigrationStep(options.Report, "local_account_import", "completed", count, backupPath)
+	if options.DryRun {
+		return nil
+	}
+	if err := options.Rename(options.LocalDBPath, backupPath); err != nil {
+		return err
+	}
+	if config != nil {
+		return markStartupMigration(ctx, config, "local_account_import")
+	}
+	return nil
 }
 
 func copyAccounts(ctx context.Context, sqlitePath string, target AccountRepository, options StartupMigrationOptions) (int, error) {
@@ -204,7 +267,17 @@ func copyAccounts(ctx context.Context, sqlitePath string, target AccountReposito
 	for page := 1; ; page++ {
 		result, err := source.ListAccounts(ctx, ListAccountsQuery{Page: page, PageSize: options.BatchSize, IncludeDeleted: true})
 		if err != nil || len(result.Items) == 0 {
+			if len(result.Items) == 0 && options.Report != nil {
+				options.Report.AccountsSkipped += 0
+			}
 			return total, err
+		}
+		if options.DryRun {
+			total += len(result.Items)
+			if page >= result.TotalPages {
+				return total, nil
+			}
+			continue
 		}
 		if _, err := target.UpsertAccounts(ctx, accountUpserts(result.Items)); err != nil {
 			return total, err
@@ -265,14 +338,14 @@ func normalizeOptions(options StartupMigrationOptions) StartupMigrationOptions {
 	if options.RepositoryBackendName == "" {
 		options.RepositoryBackendName = "local"
 	}
-	if options.BatchSize <= 0 {
-		options.BatchSize = defaultMigrationBatch
-	}
 	if options.UserConfigPath == "" {
 		options.UserConfigPath = platformpaths.DataPath("config.toml")
 	}
 	if options.DefaultsPath == "" {
 		options.DefaultsPath = "config.defaults.toml"
+	}
+	if options.BatchSize <= 0 {
+		options.BatchSize = migrationBatchSizeFromDefaults(options.DefaultsPath)
 	}
 	if options.LocalDBPath == "" {
 		options.LocalDBPath = platformpaths.DataPath("accounts.db")
@@ -287,6 +360,24 @@ func normalizeOptions(options StartupMigrationOptions) StartupMigrationOptions {
 		options.Rename = os.Rename
 	}
 	return options
+}
+
+func migrationBatchSizeFromDefaults(defaultsPath string) int {
+	data, err := platformconfig.LoadTOML(defaultsPath)
+	if err == nil {
+		if value, ok := toInt(platformconfig.GetNested(data, "startup.migration.account_batch_size", nil)); ok && value > 0 {
+			return value
+		}
+	}
+	return defaultMigrationBatch
+}
+
+func recordMigrationStep(report *StartupMigrationReport, name string, status string, count int, details string) {
+	if report == nil {
+		return
+	}
+	report.DryRun = report.DryRun || status == "planned"
+	report.Steps = append(report.Steps, StartupMigrationStepReport{Name: name, Status: status, Count: count, Details: details})
 }
 
 func countKeys(nested map[string]any) int {

@@ -65,7 +65,7 @@ func mediaTrimCandidates(db *sql.DB, mediaType MediaType) ([]mediaTrimCandidate,
 	rows, err := db.Query(`
 		SELECT name, size_bytes FROM local_media_files
 		WHERE media_type = ?
-		ORDER BY created_at_ns ASC, name ASC
+		ORDER BY updated_at_ns ASC, name ASC
 	`, string(mediaType))
 	if err != nil {
 		return nil, err

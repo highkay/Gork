@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const grok43QuotaBackfillMarker = "grok43_quota_backfill"
@@ -38,6 +39,9 @@ func backfillGrok43Quota(ctx context.Context, config ConfigBackend, repo Account
 			}
 		}
 	}
+	if options.DryRun {
+		return nil
+	}
 	if err := applyMigrationPatches(ctx, repo, patches, options.BatchSize); err != nil {
 		return err
 	}
@@ -67,6 +71,9 @@ func normalizeBasicFastOnlyQuota(ctx context.Context, repo AccountRepository, op
 			break
 		}
 	}
+	if options.DryRun {
+		return nil
+	}
 	return applyMigrationPatches(ctx, repo, patches, options.BatchSize)
 }
 
@@ -91,6 +98,9 @@ func backfillConsoleQuota(ctx context.Context, repo AccountRepository, options S
 		if page >= result.TotalPages {
 			break
 		}
+	}
+	if options.DryRun {
+		return nil
 	}
 	return applyMigrationPatches(ctx, repo, patches, options.BatchSize)
 }
@@ -127,14 +137,26 @@ func startupMigrationMarked(ctx context.Context, config ConfigBackend, name stri
 	if !ok {
 		return false, nil
 	}
-	marked, _ := migrations[name].(bool)
-	return marked, nil
+	switch marker := migrations[name].(type) {
+	case bool:
+		return marker, nil
+	case map[string]any:
+		status, _ := marker["status"].(string)
+		return status == "completed", nil
+	default:
+		return false, nil
+	}
 }
 
 func markStartupMigration(ctx context.Context, config ConfigBackend, name string) error {
+	now := time.Now().UTC().Format(time.RFC3339)
 	return config.ApplyPatch(ctx, map[string]any{
 		"startup": map[string]any{
-			"migrations": map[string]any{name: true},
+			"migrations": map[string]any{name: map[string]any{
+				"status":      "completed",
+				"source":      "startup_migration",
+				"finished_at": now,
+			}},
 		},
 	})
 }

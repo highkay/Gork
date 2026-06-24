@@ -26,6 +26,9 @@ func runGorkCommand(ctx context.Context, args []string, stdout io.Writer, stderr
 	if args[0] == "protocol-check" {
 		return runProtocolCheckCommand(ctx, args[1:], stdout)
 	}
+	if args[0] == "config" {
+		return runConfigCommand(ctx, args[1:], stdout, stderr)
+	}
 	if args[0] != "account" || len(args) < 2 || args[1] != "check" {
 		return true, 2, fmt.Errorf("unknown command: %s", strings.Join(args, " "))
 	}

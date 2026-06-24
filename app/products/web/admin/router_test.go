@@ -149,13 +149,13 @@ func TestAdminConfigUpdateSanitizesAndRejectsStartupOnly(t *testing.T) {
 	reconciled := false
 	adminReconcileLocalMediaCache = func(context.Context) error { reconciled = true; return nil }
 
-	body := `{"proxy":{"cf_clearance":" a b ","user_agent":" “UA” "},"cache":{"local":{"image_limit_mb":10}}}`
+	body := `{"proxy":{"clearance":{"cf_cookies":" a b ","user_agent":" “UA” "}},"cache":{"local":{"image_max_mb":10}}}`
 	rec := adminRequest(http.MethodPost, "/admin/api/config", body, "Bearer gork")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("config status=%d body=%s", rec.Code, rec.Body.String())
 	}
-	proxy := cfg.patch["proxy"].(map[string]any)
-	if proxy["cf_clearance"] != "ab" || proxy["user_agent"] != `"UA"` {
+	proxy := cfg.patch["proxy"].(map[string]any)["clearance"].(map[string]any)
+	if proxy["cf_cookies"] != "a b" || proxy["user_agent"] != `"UA"` {
 		t.Fatalf("sanitized proxy=%#v", proxy)
 	}
 	if !cfg.loaded || !reconciled || reloadedLevel != "debug" || reloadedMax != 3 {
@@ -382,7 +382,7 @@ func TestAdminRouterCoreRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 	}{
 		{name: "verify", method: http.MethodGet, path: "/admin/api/verify", status: http.StatusOK, json: map[string]any{"status": "success"}},
 		{name: "config get", method: http.MethodGet, path: "/admin/api/config", status: http.StatusOK, json: map[string]any{"app.admin_key": "<redacted>"}},
-		{name: "config post", method: http.MethodPost, path: "/admin/api/config", body: `{"cache":{"local":{"image_limit_mb":10}}}`, status: http.StatusOK, json: map[string]any{"status": "success", "selection_strategy": "quota"}},
+		{name: "config post", method: http.MethodPost, path: "/admin/api/config", body: `{"cache":{"local":{"image_max_mb":10}}}`, status: http.StatusOK, json: map[string]any{"status": "success", "selection_strategy": "quota"}},
 		{name: "config reset", method: http.MethodPost, path: "/admin/api/config/reset", status: http.StatusOK, json: map[string]any{"status": "success", "selection_strategy": "quota"}},
 		{name: "storage", method: http.MethodGet, path: "/admin/api/storage", status: http.StatusOK, json: map[string]any{"type": "local"}},
 		{name: "status", method: http.MethodGet, path: "/admin/api/status", status: http.StatusOK, json: map[string]any{

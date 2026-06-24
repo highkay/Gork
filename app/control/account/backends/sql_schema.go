@@ -21,7 +21,10 @@ func ensureSQLSchema(ctx context.Context, db localSQLRunner, dialect SQLDialect)
 	if err := ensureSQLColumns(ctx, db, dialect); err != nil {
 		return err
 	}
-	return ensureSQLIndexes(ctx, db, dialect)
+	if err := ensureSQLIndexes(ctx, db, dialect); err != nil {
+		return err
+	}
+	return setSQLSchemaVersion(ctx, db, dialect, "accounts", localAccountSchemaVersion)
 }
 
 func getSQLRevision(ctx context.Context, db localSQLRunner, dialect SQLDialect) (int, error) {
@@ -95,18 +98,42 @@ func sqlTableColumns(
 }
 
 func addSQLJSONColumn(ctx context.Context, db localSQLRunner, dialect SQLDialect, name string) error {
-	if dialect == SQLDialectMySQL {
-		if _, err := db.ExecContext(ctx, "ALTER TABLE accounts ADD COLUMN "+name+" TEXT"); err != nil {
-			return err
-		}
-		if _, err := db.ExecContext(ctx, "UPDATE accounts SET "+name+" = '{}' WHERE "+name+" IS NULL"); err != nil {
-			return err
-		}
-		_, err := db.ExecContext(ctx, "ALTER TABLE accounts MODIFY COLUMN "+name+" TEXT NOT NULL")
+	column, err := safeAccountSQLColumn(name)
+	if err != nil {
 		return err
 	}
-	_, err := db.ExecContext(ctx, "ALTER TABLE accounts ADD COLUMN "+name+" TEXT NOT NULL DEFAULT '{}'")
+	if dialect == SQLDialectMySQL {
+		if _, err := db.ExecContext(ctx, "ALTER TABLE accounts ADD COLUMN "+column+" TEXT"); err != nil {
+			return err
+		}
+		if _, err := db.ExecContext(ctx, "UPDATE accounts SET "+column+" = '{}' WHERE "+column+" IS NULL"); err != nil {
+			return err
+		}
+		_, err := db.ExecContext(ctx, "ALTER TABLE accounts MODIFY COLUMN "+column+" TEXT NOT NULL")
+		return err
+	}
+	_, err = db.ExecContext(ctx, "ALTER TABLE accounts ADD COLUMN "+column+" TEXT NOT NULL DEFAULT '{}'")
 	return err
+}
+
+func setSQLSchemaVersion(ctx context.Context, db localSQLRunner, dialect SQLDialect, name string, version int) error {
+	if dialect == SQLDialectMySQL {
+		_, err := db.ExecContext(ctx, "INSERT INTO account_schema_versions (name, version, applied_at) VALUES (?, ?, UNIX_TIMESTAMP()) ON DUPLICATE KEY UPDATE version = VALUES(version), applied_at = VALUES(applied_at)", name, version)
+		return err
+	}
+	stmt := "INSERT INTO account_schema_versions (name, version, applied_at) VALUES (" + sqlBind(dialect, 1) + ", " + sqlBind(dialect, 2) + ", EXTRACT(EPOCH FROM NOW())::BIGINT) ON CONFLICT (name) DO UPDATE SET version = EXCLUDED.version, applied_at = EXCLUDED.applied_at"
+	_, err := db.ExecContext(ctx, stmt, name, version)
+	return err
+}
+
+func getSQLSchemaVersion(ctx context.Context, db localSQLRunner, dialect SQLDialect, name string) (int, error) {
+	query := "SELECT version FROM account_schema_versions WHERE name = " + sqlBind(dialect, 1)
+	var version int
+	err := db.QueryRowContext(ctx, query, name).Scan(&version)
+	if err == sql.ErrNoRows {
+		return 0, nil
+	}
+	return version, err
 }
 
 func ensureSQLIndexes(ctx context.Context, db localSQLRunner, dialect SQLDialect) error {

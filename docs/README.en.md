@@ -112,7 +112,7 @@ On first startup, the service generates a random initial Admin key for `app.app_
 2. Set `app.api_key` (API auth key; leave empty to disable auth)
 3. Set `app.app_url` (publicly reachable base URL; otherwise image / video links return 403)
 
-> Runtime config is persisted to `${DATA_DIR}/config.toml` and applied immediately. No container restart is required.
+> `config.defaults.toml` is the only default source; `config.example.toml` is a sample. Runtime config is persisted to `${DATA_DIR}/config.toml` and applied immediately. No container restart is required. Admin saves normalize TOML and do not preserve handwritten comments.
 
 <br>
 
@@ -233,7 +233,19 @@ Bootstrap-time variables (`.env` / Compose / `docker run -e`):
 | `ACCOUNT_SQL_POOL_RECYCLE` | Connection recycle time (s) | `1800` |
 | `CONFIG_LOCAL_PATH` | Runtime config file path | `${DATA_DIR}/config.toml` |
 
-Runtime config can also be overridden via `GROK_`-prefixed env vars, e.g. `GROK_APP_API_KEY` overrides `app.api_key`, `GROK_FEATURES_STREAM` overrides `features.stream`.
+Runtime config can also be overridden via `GROK_`-prefixed env vars. The schema maps a config key by uppercasing it and replacing `.` with `_`, e.g. `GROK_APP_API_KEY` overrides `app.api_key`, `GROK_FEATURES_STREAM` overrides `features.stream`, and `GROK_REVERSE_ENDPOINTS_BASE` overrides `reverse.endpoints.base`.
+
+Validate config before rollout:
+
+```bash
+gork config validate --defaults config.defaults.toml --config ./data/config.toml
+```
+
+Export the full config schema table:
+
+```bash
+gork config docs --defaults config.defaults.toml
+```
 
 <br>
 
@@ -385,7 +397,7 @@ In Admin → Config → Proxy, switch `proxy.clearance.mode` to `manual` and pro
 The Go version currently runs as a single-process HTTP service and no longer starts in-container workers through `SERVER_WORKERS`. For horizontal scaling, run multiple container replicas and configure Redis for account storage, task snapshots, and runtime coordination.
 
 **Q: Observability and operations.**
-Every request receives an `X-Request-ID` response header, and access logs record method, sanitized path, status, duration, and request id without raw query strings. Enable `[observability] metrics_enabled = true` to expose Prometheus text metrics at `/metrics`; enable `[observability] pprof_enabled = true` to expose `/debug/pprof/*`. Both are disabled by default. `/admin/api/status` includes runtime, scheduler, proxy clearance, dynamic model refresh, media cache, and recent upstream error summaries. Redis runtime task snapshots are retained according to `RUNTIME_TASK_TTL_S`, so recent batch task progress can be queried across restarts. `logging.max_files` is daily-file retention for `app_{time:YYYY-MM-DD}.log`; logs rotate on date change, not by file size.
+Every request receives an `X-Request-ID` response header, and access logs record method, sanitized path, status, duration, and request id without raw query strings. Enable `[observability] metrics_enabled = true` to expose Prometheus text metrics at `/metrics`; enable `[observability] pprof_enabled = true` to expose `/debug/pprof/*`. Both are disabled by default. `/admin/api/status` includes runtime, scheduler, proxy clearance, dynamic model refresh, media cache, and recent upstream error summaries. Media cache status includes `limit_bytes`, `eviction_policy`, and the latest reconcile report; `cache.local.image_max_mb` / `video_max_mb` set to `0` means files are saved without size limiting, indexing, reconcile, or eviction. Redis runtime task snapshots are retained according to `RUNTIME_TASK_TTL_S`, so recent batch task progress can be queried across restarts. `logging.max_files` is daily-file retention for `app_{time:YYYY-MM-DD}.log`; logs rotate on date change, not by file size.
 
 <br>
 

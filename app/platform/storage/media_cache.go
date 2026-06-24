@@ -22,6 +22,10 @@ const (
 var (
 	imageExts = map[string]struct{}{".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".webp": {}, ".bmp": {}}
 	videoExts = map[string]struct{}{".mp4": {}, ".mov": {}, ".m4v": {}, ".webm": {}, ".avi": {}, ".mkv": {}}
+
+	lockMediaFileFunc   = lockMediaFile
+	unlockMediaFileFunc = unlockMediaFile
+	createMediaTempFile = os.CreateTemp
 )
 
 type MediaCacheConfig interface {
@@ -142,10 +146,11 @@ func (s *LocalMediaCacheStore) Reconcile(mediaType MediaType) error {
 		return err
 	}
 	defer unlock()
-	if err := s.reconcileIndexed(mediaType); err != nil {
+	report, err := s.reconcileIndexed(mediaType)
+	if err != nil {
 		return err
 	}
-	s.recordReconcile(mediaType)
+	s.recordReconcile(mediaType, report)
 	return nil
 }
 
@@ -182,12 +187,13 @@ func (s *LocalMediaCacheStore) recordSave(mediaType MediaType) {
 	s.stats[mediaType] = item
 }
 
-func (s *LocalMediaCacheStore) recordReconcile(mediaType MediaType) {
+func (s *LocalMediaCacheStore) recordReconcile(mediaType MediaType, report MediaCacheReconcileReport) {
 	s.statsMu.Lock()
 	defer s.statsMu.Unlock()
 	item := s.stats[mediaType]
 	item.ReconcileCount++
 	item.LastReconcileAt = time.Now().UnixMilli()
+	item.LastReconcileReport = &report
 	s.stats[mediaType] = item
 }
 
@@ -278,13 +284,13 @@ func (s *LocalMediaCacheStore) guard(mediaType MediaType) (func(), error) {
 		lock.Unlock()
 		return nil, err
 	}
-	if err := lockMediaFile(fd); err != nil {
+	if err := lockMediaFileFunc(fd); err != nil {
 		_ = fd.Close()
 		lock.Unlock()
 		return nil, err
 	}
 	return func() {
-		_ = unlockMediaFile(fd)
+		_ = unlockMediaFileFunc(fd)
 		_ = fd.Close()
 		lock.Unlock()
 	}, nil
@@ -296,7 +302,7 @@ func writeIfMissing(path string, raw []byte) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.part")
+	tmp, err := createMediaTempFile(filepath.Dir(path), "."+filepath.Base(path)+".*.part")
 	if err != nil {
 		return err
 	}

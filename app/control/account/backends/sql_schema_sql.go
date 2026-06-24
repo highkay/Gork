@@ -10,6 +10,7 @@ func sqlSchemaStatements(dialect SQLDialect) []string {
 func mysqlSchemaStatements() []string {
 	return []string{
 		"CREATE TABLE IF NOT EXISTS account_meta (`key` VARCHAR(128) PRIMARY KEY, value TEXT NOT NULL)",
+		"CREATE TABLE IF NOT EXISTS account_schema_versions (name VARCHAR(128) PRIMARY KEY, version INTEGER NOT NULL, applied_at BIGINT NOT NULL)",
 		`CREATE TABLE IF NOT EXISTS accounts (
 			token VARCHAR(512) NOT NULL PRIMARY KEY,
 			pool TEXT NOT NULL,
@@ -42,6 +43,7 @@ func mysqlSchemaStatements() []string {
 func postgresSchemaStatements() []string {
 	return []string{
 		"CREATE TABLE IF NOT EXISTS account_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+		"CREATE TABLE IF NOT EXISTS account_schema_versions (name TEXT PRIMARY KEY, version INTEGER NOT NULL, applied_at BIGINT NOT NULL)",
 		`CREATE TABLE IF NOT EXISTS accounts (
 			token VARCHAR(512) NOT NULL PRIMARY KEY,
 			pool TEXT NOT NULL DEFAULT 'basic',

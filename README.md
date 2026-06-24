@@ -167,7 +167,8 @@ go build -o gork ./cmd/gork
 2. 设置 `app.api_key`（API 调用鉴权密钥，留空则不鉴权）
 3. 设置 `app.app_url`（公网地址，否则图片、视频链接会 403）
 
-> 运行时配置写入 `${DATA_DIR}/config.toml`，保存后即时生效，无需重启容器。
+> 默认配置源是仓库内的 `config.defaults.toml`；`config.example.toml` 仅作样例。运行时配置写入 `${DATA_DIR}/config.toml`，保存后即时生效，无需重启容器。
+> Admin 保存配置会规范化 TOML 并移除手写注释；需要长期保留的说明请写在 `config.example.toml` 或外部文档中。
 
 <br>
 
@@ -336,7 +337,19 @@ server {
 | `RUNTIME_REDIS_LOCK_TTL_MS` | Redis scheduler leader 锁租约时间（毫秒） | `300000` |
 | `CONFIG_LOCAL_PATH` | 运行时配置文件路径 | `${DATA_DIR}/config.toml` |
 
-运行时配置也支持 `GROK_` 前缀环境变量覆盖，例如 `GROK_APP_API_KEY` 覆盖 `app.api_key`，`GROK_FEATURES_STREAM` 覆盖 `features.stream`。
+运行时配置也支持 `GROK_` 前缀环境变量覆盖。映射规则由配置 schema 生成：把配置 key 转成大写并把 `.` 替换为 `_`，例如 `GROK_APP_API_KEY` 覆盖 `app.api_key`，`GROK_FEATURES_STREAM` 覆盖 `features.stream`，`GROK_REVERSE_ENDPOINTS_BASE` 覆盖 `reverse.endpoints.base`。
+
+配置上线前可先校验：
+
+```bash
+gork config validate --defaults config.defaults.toml --config ./data/config.toml
+```
+
+导出完整配置 schema 表：
+
+```bash
+gork config docs --defaults config.defaults.toml
+```
 
 ### 可观测性与运维
 
@@ -344,6 +357,7 @@ server {
 - `[observability] metrics_enabled = true` 后开放 `/metrics`，输出 Prometheus 文本格式的 HTTP 请求数、请求耗时和上游错误状态码计数；默认关闭。
 - `[observability] pprof_enabled = true` 后开放 `/debug/pprof/*`，用于临时 CPU/heap/goroutine 排查；默认关闭，建议只在内网或受保护环境启用。
 - `/admin/api/status` 会返回 runtime、scheduler、proxy clearance、dynamic model refresh、media cache 和最近上游错误摘要。上游错误只保留状态码、分类消息和截断摘要，不保存完整敏感响应。
+- media cache 状态包含 `limit_bytes`、`eviction_policy` 和最近 reconcile 报告。`cache.local.image_max_mb` / `video_max_mb` 为 `0` 时表示保存文件但不启用大小限制、索引、reconcile 或淘汰；大于 `0` 时启用 SQLite 索引和 LRU 淘汰，并回落到上限的 60%。
 - Redis runtime 开启后，后台 batch task snapshot 会按 `RUNTIME_TASK_TTL_S` 保留，跨重启仍可查询最近任务进度；未配置 Redis 时仅使用进程内状态。
 - `logging.max_files` 控制日志文件保留数量。日志按天写入 `app_{time:YYYY-MM-DD}.log`，到自然日切换时轮转；当前实现不按单文件大小切分，超过保留数量的旧日志由文件 sink 清理。
 

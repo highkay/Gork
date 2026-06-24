@@ -3,6 +3,7 @@ package backends
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"testing"
 
 	account "github.com/dslzl/gork/app/control/account"
@@ -93,6 +94,24 @@ func TestDescribeRepositoryTargetAndRedaction(t *testing.T) {
 	}
 	if got := RedactRepositoryURL("not-a-url"); got != "not-a-url" {
 		t.Fatalf("plain redaction = %q", got)
+	}
+}
+
+func TestResolveLocalDBPathHonorsDataDirAndAccountLocalPath(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	if got, want := ResolveLocalDBPath(map[string]string{}), filepath.Join(dataDir, "accounts.db"); got != want {
+		t.Fatalf("default local DB path = %q, want %q", got, want)
+	}
+
+	absolute := filepath.Join(t.TempDir(), "nested", "accounts.db")
+	if got := ResolveLocalDBPath(map[string]string{"ACCOUNT_LOCAL_PATH": absolute}); got != absolute {
+		t.Fatalf("absolute ACCOUNT_LOCAL_PATH = %q, want %q", got, absolute)
+	}
+
+	relative := filepath.Join("custom-data", "accounts.db")
+	if got, want := ResolveLocalDBPath(map[string]string{"ACCOUNT_LOCAL_PATH": relative}), filepath.Join(projectRoot(), relative); got != want {
+		t.Fatalf("relative ACCOUNT_LOCAL_PATH = %q, want %q", got, want)
 	}
 }
 
