@@ -219,7 +219,8 @@ func assetUploadConcurrency() int {
 
 func acquireAssetProxy(ctx context.Context, runtime AssetProxyRuntime, label string) (*controlproxy.ProxyLease, error) {
 	if runtime == nil {
-		return nil, assetTransportError(label, fmt.Errorf("proxy runtime is not configured"))
+		// No proxy runtime configured — use direct connection.
+		return nil, nil
 	}
 	lease, err := runtime.Acquire(ctx)
 	if err != nil {
@@ -239,16 +240,20 @@ func uploadPayload(filename string, mime string, b64 string) ([]byte, error) {
 func handleUploadHTTPFailure(ctx context.Context, runtime AssetProxyRuntime, lease *controlproxy.ProxyLease, response AssetHTTPResponse) error {
 	bodyText := truncateString(string(response.Body), 300)
 	isCloudflare := strings.Contains(strings.ToLower(bodyText), "just a moment")
-	_ = runtime.Feedback(ctx, *lease, controlproxy.BuildFeedback(response.StatusCode, controlproxy.BuildFeedbackOptions{IsCloudflare: isCloudflare}))
+	if runtime != nil && lease != nil {
+		_ = runtime.Feedback(ctx, *lease, controlproxy.BuildFeedback(response.StatusCode, controlproxy.BuildFeedbackOptions{IsCloudflare: isCloudflare}))
+	}
 	return platform.NewUpstreamError(fmt.Sprintf("Asset upload returned %d", response.StatusCode), response.StatusCode, bodyText)
 }
 
 func handleFetchHTTPFailure(ctx context.Context, runtime AssetProxyRuntime, lease *controlproxy.ProxyLease, statusCode int) error {
-	kind := controlproxy.ProxyFeedbackForbidden
-	if statusCode >= 500 {
-		kind = controlproxy.ProxyFeedbackUpstream5xx
+	if runtime != nil && lease != nil {
+		kind := controlproxy.ProxyFeedbackForbidden
+		if statusCode >= 500 {
+			kind = controlproxy.ProxyFeedbackUpstream5xx
+		}
+		_ = runtime.Feedback(ctx, *lease, controlproxy.ProxyFeedback{Kind: kind, StatusCode: &statusCode})
 	}
-	_ = runtime.Feedback(ctx, *lease, controlproxy.ProxyFeedback{Kind: kind, StatusCode: &statusCode})
 	return platform.NewUpstreamError(fmt.Sprintf("Failed to fetch input URL: %d", statusCode), statusCode, "")
 }
 
@@ -270,6 +275,9 @@ func parseUploadResponse(ctx context.Context, runtime AssetProxyRuntime, lease *
 }
 
 func feedbackAssetSuccess(ctx context.Context, runtime AssetProxyRuntime, lease *controlproxy.ProxyLease, includeStatus bool) {
+	if runtime == nil || lease == nil {
+		return
+	}
 	feedback := controlproxy.ProxyFeedback{Kind: controlproxy.ProxyFeedbackSuccess}
 	if includeStatus {
 		status := 200
