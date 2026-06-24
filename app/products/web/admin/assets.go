@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/redact"
 )
 
 const adminAssetsPageSize = 2000
@@ -53,8 +54,9 @@ func handleAdminAssetDeleteItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := adminDeleteAsset(r.Context(), req.Token, req.AssetID); err != nil {
-		adminMarkInvalidCredentials(r.Context(), repo, req.Token, err, "asset delete")
-		writeAdminError(w, adminAssetUpstreamError(err))
+		upstream := adminAssetUpstreamError(err)
+		adminMarkInvalidCredentials(r.Context(), repo, req.Token, upstream, "asset delete")
+		writeAdminError(w, upstream)
 		return
 	}
 	writeAdminJSON(w, http.StatusOK, map[string]any{"status": "success"})
@@ -93,8 +95,9 @@ func buildAdminAssetRows(ctx context.Context, repo adminAssetsRepository, tokens
 func fetchAdminAssetRow(ctx context.Context, repo adminAssetsRepository, token string) map[string]any {
 	resp, err := adminListAssets(ctx, token)
 	if err != nil {
-		adminMarkInvalidCredentials(ctx, repo, token, err, "asset list")
-		return adminAssetRow(token, nil, err.Error())
+		upstream := adminAssetUpstreamError(err)
+		adminMarkInvalidCredentials(ctx, repo, token, upstream, "asset list")
+		return adminAssetRow(token, nil, upstream.Error())
 	}
 	return adminAssetRow(token, adminAssetItemsFromResponse(resp), "")
 }
@@ -102,8 +105,9 @@ func fetchAdminAssetRow(ctx context.Context, repo adminAssetsRepository, token s
 func clearAdminTokenAssets(ctx context.Context, repo adminAssetsRepository, token string) (int, error) {
 	resp, err := adminListAssets(ctx, token)
 	if err != nil {
-		adminMarkInvalidCredentials(ctx, repo, token, err, "asset clear")
-		return 0, adminAssetUpstreamError(err)
+		upstream := adminAssetUpstreamError(err)
+		adminMarkInvalidCredentials(ctx, repo, token, upstream, "asset clear")
+		return 0, upstream
 	}
 	deleted, err := deleteAdminAssetItems(ctx, repo, token, adminAssetItemsFromResponse(resp))
 	if err != nil {
@@ -121,8 +125,9 @@ func deleteAdminAssetItems(ctx context.Context, repo adminAssetsRepository, toke
 			continue
 		}
 		if err := adminDeleteAsset(ctx, token, assetID); err != nil {
-			if adminMarkInvalidCredentials(ctx, repo, token, err, "asset clear") && firstMarked == nil {
-				firstMarked = err
+			upstream := adminAssetUpstreamError(err)
+			if adminMarkInvalidCredentials(ctx, repo, token, upstream, "asset clear") && firstMarked == nil {
+				firstMarked = upstream
 			}
 			continue
 		}
@@ -272,5 +277,6 @@ func adminAssetUpstreamError(err error) error {
 	if errors.As(err, &upstream) {
 		return upstream
 	}
-	return platform.NewUpstreamError(err.Error(), 502, err.Error())
+	errText := redact.Excerpt(err.Error(), 300)
+	return platform.NewUpstreamError(errText, 502, errText)
 }

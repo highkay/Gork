@@ -2,9 +2,9 @@ package openai
 
 import (
 	"context"
-	"strings"
 
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/redact"
 )
 
 func upstreamBodyExcerpt(err *platform.UpstreamError, limit int) string {
@@ -14,14 +14,14 @@ func upstreamBodyExcerpt(err *platform.UpstreamError, limit int) string {
 	if limit <= 0 {
 		limit = 240
 	}
-	body := strings.ReplaceAll(err.Body, "\n", `\n`)
-	if len(body) > limit {
-		body = body[:limit]
+	return redact.Excerpt(err.Body, limit)
+}
+
+func upstreamBodyHash(err *platform.UpstreamError) string {
+	if err == nil || err.Body == "" {
+		return ""
 	}
-	if body == "" {
-		return "-"
-	}
-	return body
+	return redact.SHA256Hex(err.Body)
 }
 
 func transportUpstreamError(err error, context string) *platform.UpstreamError {
@@ -32,11 +32,8 @@ func transportUpstreamError(err error, context string) *platform.UpstreamError {
 	if errorsAs(err, &upstream) {
 		return upstream
 	}
-	body := strings.ReplaceAll(err.Error(), "\n", `\n`)
-	if len(body) > 400 {
-		body = body[:400]
-	}
-	return platform.NewUpstreamError(context+": "+err.Error(), 502, body)
+	body := redact.Excerpt(err.Error(), 400)
+	return platform.NewUpstreamError(context+": "+body, 502, body)
 }
 
 func logTaskException(err error) {

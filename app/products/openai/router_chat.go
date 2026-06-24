@@ -8,10 +8,12 @@ import (
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/httpbody"
 	"github.com/dslzl/gork/app/platform/logging"
 )
 
 func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
+	httpbody.LimitJSON(w, r)
 	var req ChatCompletionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeRouterError(w, platform.NewValidationError("Invalid JSON body", "body", ""))
@@ -117,6 +119,7 @@ func logChatStreamError(modelName string, err error) {
 			"status", upstream.Status,
 			"message", truncateStreamErrorText(upstream.Message, 400),
 			"body_len", len(upstream.Body),
+			"body_sha256", upstreamBodyHash(upstream),
 			"body_excerpt", truncateStreamErrorText(upstreamBodyExcerpt(upstream, 400), 400),
 		)
 		return

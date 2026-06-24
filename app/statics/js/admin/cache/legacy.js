@@ -487,7 +487,7 @@ function _renderAssets(view = getAssetView()) {
       }
     }
   }
-  tbody.innerHTML = rows.join('');
+  tbody.innerHTML = _sanitizeCacheHTML(rows.join(''));
   syncAssetSelectAll(view);
   updateAssetBatchButtons(view);
 }
@@ -795,6 +795,30 @@ function _maskToken(token) {
 
 function _esc(value) {
   return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function _sanitizeCacheHTML(html) {
+  const template = document.createElement('template');
+  template.innerHTML = String(html || '');
+  const blocked = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta']);
+  const walk = (node) => {
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node;
+    if (blocked.has(el.tagName.toLowerCase())) {
+      el.remove();
+      return;
+    }
+    Array.from(el.attributes).forEach((attr) => {
+      const name = attr.name.toLowerCase();
+      const value = String(attr.value || '').trim().toLowerCase();
+      if (name.startsWith('on') || value.startsWith('javascript:')) {
+        el.removeAttribute(attr.name);
+      }
+    });
+    Array.from(el.children).forEach(walk);
+  };
+  Array.from(template.content.children).forEach(walk);
+  return template.innerHTML;
 }
 
 (async () => {

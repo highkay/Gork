@@ -104,6 +104,37 @@ func TestAdminConfigAndStorageEndpointsMatchPythonShape(t *testing.T) {
 	}
 }
 
+func TestAdminConfigRevealSensitiveValuesRequiresConfirmationHeader(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	adminRouterConfig = &fakeAdminConfig{raw: map[string]any{
+		"app":      map[string]any{"app_key": "gork", "api_key": "secret"},
+		"database": map[string]any{"dsn": "postgres://user:pass@localhost/db"},
+	}}
+
+	rec := adminRequest(http.MethodGet, "/admin/api/config", "", "Bearer gork")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("redacted config status/body=%d/%s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "secret") || strings.Contains(rec.Body.String(), "user:pass") {
+		t.Fatalf("default config leaked sensitive value: %s", rec.Body.String())
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/api/config", nil)
+	req.Header.Set("Authorization", "Bearer gork")
+	req.Header.Set("X-Admin-Reveal-Sensitive", "confirm")
+	rec = httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("revealed config status/body=%d/%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "secret") || !strings.Contains(rec.Body.String(), "user:pass") {
+		t.Fatalf("confirmed reveal did not include raw sensitive values: %s", rec.Body.String())
+	}
+	if rec.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("reveal response cache-control=%q", rec.Header().Get("Cache-Control"))
+	}
+}
+
 func TestAdminConfigUpdateSanitizesAndRejectsStartupOnly(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	cfg := &fakeAdminConfig{strs: map[string]string{"logging.file_level": "debug"}, ints: map[string]int{"logging.max_files": 3}}

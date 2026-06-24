@@ -136,7 +136,8 @@ func ConnectLiveKitWS(ctx context.Context, token, accessToken string, options Li
 	connection, err := option.Client.Connect(ctx, request)
 	if err != nil {
 		_ = option.ProxyRuntime.Feedback(ctx, lease, controlproxy.ProxyFeedback{Kind: controlproxy.ProxyFeedbackTransportError})
-		return nil, platform.NewUpstreamError(fmt.Sprintf("connect_livekit_ws: %v", err), 502, err.Error())
+		errText := redactedTransportError(err)
+		return nil, platform.NewUpstreamError(fmt.Sprintf("connect_livekit_ws: %s", errText), 502, errText)
 	}
 	return connection, nil
 }
@@ -207,7 +208,8 @@ func handleLiveKitTokenError(ctx context.Context, runtime LiveKitProxyRuntime, l
 		return err
 	}
 	_ = runtime.Feedback(ctx, lease, controlproxy.ProxyFeedback{Kind: controlproxy.ProxyFeedbackTransportError})
-	return platform.NewUpstreamError(fmt.Sprintf("fetch_livekit_token: transport error: %v", err), 502, err.Error())
+	errText := redactedTransportError(err)
+	return platform.NewUpstreamError(fmt.Sprintf("fetch_livekit_token: transport error: %s", errText), 502, errText)
 }
 
 type netLiveKitHTTPClient struct{}

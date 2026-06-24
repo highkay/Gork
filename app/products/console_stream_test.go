@@ -8,6 +8,7 @@ import (
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
+	"github.com/dslzl/gork/app/platform/redact"
 )
 
 func TestStreamConsoleChatConfiguresDefaultPoster(t *testing.T) {
@@ -54,7 +55,7 @@ func TestConsoleHTTPEndpointUsesResponsesAPI(t *testing.T) {
 
 func TestRedactConsoleDiagnosticTextKeepsReasonAndHidesSecrets(t *testing.T) {
 	raw := `token expired sso=abc123; sso-rw=rw456; cf_clearance=cf789 Authorization: Bearer bearer-token-secret abcdefghijklmnopqrstuvwxyz123456`
-	got := redactConsoleDiagnosticText(raw)
+	got := redact.SensitiveText(raw)
 	for _, secret := range []string{"abc123", "rw456", "cf789", "bearer-token-secret", "abcdefghijklmnopqrstuvwxyz123456"} {
 		if strings.Contains(got, secret) {
 			t.Fatalf("redacted diagnostic leaked %q in %q", secret, got)

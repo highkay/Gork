@@ -48,7 +48,7 @@ func (netHTTPAssetsClient) GetBytesStream(ctx context.Context, request AssetsHTT
 		defer cancel()
 		defer response.Body.Close()
 		body, _ := readLimitedHTTPBody(response.Body, defaultMaxHTTPBodyBytes)
-		return nil, platform.NewUpstreamError(fmt.Sprintf("HTTP %d", response.StatusCode), response.StatusCode, truncateString(string(body), 300))
+		return nil, platform.NewUpstreamError(fmt.Sprintf("HTTP %d", response.StatusCode), response.StatusCode, redactedTransportExcerpt(string(body)))
 	}
 	return &cancelOnCloseReader{ReadCloser: response.Body, cancel: cancel}, nil
 }
@@ -71,7 +71,7 @@ func doAssetsHTTPRequest(ctx context.Context, method string, request AssetsHTTPR
 		return AssetHTTPResponse{}, err
 	}
 	if response.StatusCode != 200 {
-		return AssetHTTPResponse{}, platform.NewUpstreamError(fmt.Sprintf("HTTP %d", response.StatusCode), response.StatusCode, truncateString(string(responseBody), 300))
+		return AssetHTTPResponse{}, platform.NewUpstreamError(fmt.Sprintf("HTTP %d", response.StatusCode), response.StatusCode, redactedTransportExcerpt(string(responseBody)))
 	}
 	return AssetHTTPResponse{StatusCode: response.StatusCode, Body: responseBody, Headers: firstHeaderValues(response.Header)}, nil
 }

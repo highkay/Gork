@@ -8,6 +8,7 @@ import (
 
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/httpbody"
 )
 
 func webUIProtected(method string, handler http.HandlerFunc) http.HandlerFunc {
@@ -15,6 +16,9 @@ func webUIProtected(method string, handler http.HandlerFunc) http.HandlerFunc {
 		if r.Method != method {
 			writeWebUIJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "Method not allowed"}})
 			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			httpbody.LimitJSON(w, r)
 		}
 		rateLimitKey := webUIAuthRateLimitKey(r)
 		if !webUIAuthRateLimiter.Allow(rateLimitKey) {

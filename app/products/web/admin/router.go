@@ -20,6 +20,7 @@ import (
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/config"
+	"github.com/dslzl/gork/app/platform/httpbody"
 	"github.com/dslzl/gork/app/platform/logging"
 	"github.com/dslzl/gork/app/platform/observability"
 	appruntime "github.com/dslzl/gork/app/platform/runtime"
@@ -163,6 +164,9 @@ func adminProtectedAny(handlers map[string]http.HandlerFunc) http.HandlerFunc {
 			writeAdminJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "Method not allowed"}})
 			return
 		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			httpbody.Limit(w, r, httpbody.DefaultMultipartLimitBytes)
+		}
 		queryAppKey := strings.TrimSpace(r.URL.Query().Get("app_key"))
 		rateLimitKey := adminAuthRateLimitKey(r)
 		if !adminAuthRateLimiter.Allow(rateLimitKey) {
@@ -221,8 +225,18 @@ func handleAdminProtocolCheckLatest(w http.ResponseWriter, _ *http.Request) {
 	writeAdminJSON(w, http.StatusOK, results)
 }
 
-func handleAdminGetConfig(w http.ResponseWriter, _ *http.Request) {
-	writeAdminJSON(w, http.StatusOK, redactAdminConfig(adminRouterConfig.Raw()))
+func handleAdminGetConfig(w http.ResponseWriter, r *http.Request) {
+	raw := adminRouterConfig.Raw()
+	if adminRevealSensitiveConfirmed(r) {
+		w.Header().Set("Cache-Control", "no-store")
+		writeAdminJSON(w, http.StatusOK, raw)
+		return
+	}
+	writeAdminJSON(w, http.StatusOK, redactAdminConfig(raw))
+}
+
+func adminRevealSensitiveConfirmed(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Admin-Reveal-Sensitive")), "confirm")
 }
 
 func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {

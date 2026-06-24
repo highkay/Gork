@@ -80,7 +80,8 @@ func postMediaWithProxy(ctx context.Context, rawURL, token string, payload map[s
 	body, err := json.Marshal(payload)
 	if err != nil {
 		_ = option.ProxyRuntime.Feedback(ctx, lease, controlproxy.ProxyFeedback{Kind: controlproxy.ProxyFeedbackTransportError})
-		return nil, platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %v", label, err), 502, err.Error())
+		errText := redactedTransportError(err)
+		return nil, platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %s", label, errText), 502, errText)
 	}
 	result, err := option.Client.PostJSON(ctx, MediaHTTPRequest{
 		URL:     rawURL,
@@ -137,7 +138,8 @@ func handleMediaError(ctx context.Context, runtime MediaProxyRuntime, lease cont
 		return err
 	}
 	_ = runtime.Feedback(ctx, lease, controlproxy.ProxyFeedback{Kind: controlproxy.ProxyFeedbackTransportError})
-	return platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %v", label, err), 502, err.Error())
+	errText := redactedTransportError(err)
+	return platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %s", label, errText), 502, errText)
 }
 
 type netMediaHTTPClient struct{}

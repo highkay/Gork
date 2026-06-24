@@ -2,6 +2,7 @@ package webui
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -152,6 +153,15 @@ func TestWebUIVoiceTokenDefaultsAndErrors(t *testing.T) {
 
 	rec = webUIRequest(http.MethodPost, "/webui/api/voice/token", `{}`, "Bearer web")
 	assertWebUIErrorContains(t, rec, http.StatusBadGateway, "Upstream returned no voice token")
+
+	webUIVoiceFetchToken = func(context.Context, string, webUIVoiceOptions) (map[string]any, error) {
+		return nil, errors.New("token failed cf_clearance=cloudflare-secret")
+	}
+	rec = webUIRequest(http.MethodPost, "/webui/api/voice/token", `{}`, "Bearer web")
+	assertWebUIErrorContains(t, rec, http.StatusBadGateway, `Voice token error: token failed cf_clearance=\u003credacted\u003e`)
+	if strings.Contains(rec.Body.String(), "cloudflare-secret") {
+		t.Fatalf("voice error leaked secret: %s", rec.Body.String())
+	}
 }
 
 func assertWebUIErrorContains(t *testing.T, rec *httptest.ResponseRecorder, status int, text string) {

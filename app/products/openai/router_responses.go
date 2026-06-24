@@ -7,9 +7,11 @@ import (
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/httpbody"
 )
 
 func handleResponses(w http.ResponseWriter, r *http.Request) {
+	httpbody.LimitJSON(w, r)
 	var req ResponsesCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeRouterError(w, platform.NewValidationError("Invalid JSON body", "body", ""))

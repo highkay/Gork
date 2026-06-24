@@ -81,10 +81,13 @@ func TestMediaPostWithProxyAppliesUpstreamAndTransportFeedback(t *testing.T) {
 	assertMediaFeedback(t, upstreamRuntime.feedbacks, 0, controlproxy.ProxyFeedbackChallenge, mediaIntPtr(403))
 
 	transportRuntime := newFakeMediaProxyRuntime("transport-lease")
-	transportClient := &fakeMediaHTTPClient{err: errors.New("dial failed")}
+	transportClient := &fakeMediaHTTPClient{err: errors.New("dial failed api_key=secret-token-value")}
 	_, err = UpscaleVideo(context.Background(), "token", "video-1", MediaOptions{ProxyRuntime: transportRuntime, Client: transportClient})
-	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "upscale_video: transport error: dial failed") {
+	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "upscale_video: transport error: dial failed api_key=<redacted>") {
 		t.Fatalf("transport error = %#v", err)
+	}
+	if strings.Contains(upstream.Body, "secret-token-value") {
+		t.Fatalf("transport error body leaked secret: %q", upstream.Body)
 	}
 	assertMediaFeedback(t, transportRuntime.feedbacks, 0, controlproxy.ProxyFeedbackTransportError, nil)
 }

@@ -119,7 +119,7 @@ func TestAdminAssetsDeleteItemMarksUpstreamFailures(t *testing.T) {
 	repo := &fakeAdminAssetsRepo{}
 	adminAssetsRepoProvider = func() adminAssetsRepository { return repo }
 	adminDeleteAsset = func(context.Context, string, string) error {
-		return errors.New("delete blocked")
+		return errors.New("delete blocked Bearer abcdefghijklmnop")
 	}
 	var marked []string
 	adminMarkInvalidCredentials = func(_ context.Context, _ adminAssetsRepository, token string, err error, source string) bool {
@@ -133,10 +133,10 @@ func TestAdminAssetsDeleteItemMarksUpstreamFailures(t *testing.T) {
 		t.Fatalf("status/body=%d/%#v", rec.Code, body)
 	}
 	errBody := body["error"].(map[string]any)
-	if errBody["code"] != "upstream_error" || errBody["message"] != "delete blocked" {
+	if errBody["code"] != "upstream_error" || errBody["message"] != "delete blocked Bearer <redacted>" {
 		t.Fatalf("error body = %#v", errBody)
 	}
-	if len(marked) != 1 || marked[0] != "tok|delete blocked|asset delete" {
+	if len(marked) != 1 || marked[0] != "tok|delete blocked Bearer <redacted>|asset delete" {
 		t.Fatalf("marked = %#v", marked)
 	}
 }

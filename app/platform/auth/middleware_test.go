@@ -50,8 +50,8 @@ func TestVerifyAPIKeyAllowsDisabledBearerAndXAPIKey(t *testing.T) {
 	if err := VerifyAPIKey("", "beta", settings); err != nil {
 		t.Fatalf("x-api-key rejected: %v", err)
 	}
-	assertAuthError(t, VerifyAPIKey("", "", settings), 401, "Missing or invalid Authorization header.")
-	assertAuthError(t, VerifyAPIKey("Bearer wrong", "", settings), 403, "Invalid API key.")
+	assertAuthError(t, VerifyAPIKey("", "", settings), 401, "Authentication failed.")
+	assertAuthError(t, VerifyAPIKey("Bearer wrong", "", settings), 401, "Authentication failed.")
 }
 
 func TestVerifyAdminKeyMatchesHeaderAndQueryBehavior(t *testing.T) {
@@ -62,27 +62,27 @@ func TestVerifyAdminKeyMatchesHeaderAndQueryBehavior(t *testing.T) {
 	if err := VerifyAdminKey("", "admin", settings); err != nil {
 		t.Fatalf("admin query key rejected: %v", err)
 	}
-	assertAuthError(t, VerifyAdminKey("", "", AuthSettings{AdminKey: ""}), 401, "Admin key is not configured.")
-	assertAuthError(t, VerifyAdminKey("", "", settings), 401, "Missing authentication token.")
-	assertAuthError(t, VerifyAdminKey("Bearer wrong", "", settings), 401, "Invalid authentication token.")
+	assertAuthError(t, VerifyAdminKey("", "", AuthSettings{AdminKey: ""}), 401, "Authentication failed.")
+	assertAuthError(t, VerifyAdminKey("", "", settings), 401, "Authentication failed.")
+	assertAuthError(t, VerifyAdminKey("Bearer wrong", "", settings), 401, "Authentication failed.")
 }
 
 func TestVerifyAdminKeyDoesNotDefaultToWellKnownDevelopmentKey(t *testing.T) {
-	assertAuthError(t, VerifyAdminKey("Bearer gork", "", AuthSettings{}), 401, "Admin key is not configured.")
+	assertAuthError(t, VerifyAdminKey("Bearer gork", "", AuthSettings{}), 401, "Authentication failed.")
 }
 
 func TestVerifyWebUIKeyMatchesEnabledAndBearerBehavior(t *testing.T) {
 	if err := VerifyWebUIKey("", AuthSettings{WebUIEnabled: true}); err != nil {
 		t.Fatalf("enabled webui without key should allow request: %v", err)
 	}
-	assertAuthError(t, VerifyWebUIKey("", AuthSettings{}), 401, "WebUI access is disabled.")
+	assertAuthError(t, VerifyWebUIKey("", AuthSettings{}), 401, "Authentication failed.")
 
 	settings := AuthSettings{WebUIKey: "web"}
 	if err := VerifyWebUIKey("Bearer web", settings); err != nil {
 		t.Fatalf("webui bearer rejected: %v", err)
 	}
-	assertAuthError(t, VerifyWebUIKey("", settings), 401, "Missing authentication token.")
-	assertAuthError(t, VerifyWebUIKey("Bearer wrong", settings), 401, "Invalid authentication token.")
+	assertAuthError(t, VerifyWebUIKey("", settings), 401, "Authentication failed.")
+	assertAuthError(t, VerifyWebUIKey("Bearer wrong", settings), 401, "Authentication failed.")
 }
 
 func assertAuthError(t *testing.T, err error, status int, message string) {

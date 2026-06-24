@@ -67,10 +67,13 @@ func TestFetchLiveKitTokenAppliesUpstreamAndTransportFeedback(t *testing.T) {
 	assertLiveKitFeedback(t, upstreamRuntime.feedbacks, 0, controlproxy.ProxyFeedbackUpstream5xx, liveKitIntPtr(503))
 
 	transportRuntime := newFakeLiveKitProxyRuntime("transport-lease")
-	transportClient := &fakeLiveKitHTTPClient{err: errors.New("dial failed")}
+	transportClient := &fakeLiveKitHTTPClient{err: errors.New("dial failed cf_clearance=cloudflare-secret")}
 	_, err = FetchLiveKitToken(context.Background(), "token", LiveKitOptions{ProxyRuntime: transportRuntime, Client: transportClient})
-	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "fetch_livekit_token: transport error: dial failed") {
+	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "fetch_livekit_token: transport error: dial failed cf_clearance=<redacted>") {
 		t.Fatalf("transport error = %#v", err)
+	}
+	if strings.Contains(upstream.Body, "cloudflare-secret") {
+		t.Fatalf("transport error body leaked secret: %q", upstream.Body)
 	}
 	assertLiveKitFeedback(t, transportRuntime.feedbacks, 0, controlproxy.ProxyFeedbackTransportError, nil)
 }
@@ -159,15 +162,18 @@ func TestConnectLiveKitWSCloseIgnoresFeedbackErrorLikePython(t *testing.T) {
 
 func TestConnectLiveKitWSFailureReportsTransportFeedback(t *testing.T) {
 	runtime := newFakeLiveKitProxyRuntime("ws-fail-lease")
-	client := &fakeLiveKitWebSocketClient{err: errors.New("connect failed")}
+	client := &fakeLiveKitWebSocketClient{err: errors.New("connect failed Bearer abcdefghijklmnop")}
 
 	_, err := ConnectLiveKitWS(context.Background(), "token", "access", LiveKitWSOptions{
 		ProxyRuntime: runtime,
 		Client:       client,
 	})
 	var upstream *platform.UpstreamError
-	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "connect_livekit_ws: connect failed") {
+	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "connect_livekit_ws: connect failed Bearer <redacted>") {
 		t.Fatalf("connect error = %#v", err)
+	}
+	if strings.Contains(upstream.Body, "abcdefghijklmnop") {
+		t.Fatalf("websocket error body leaked secret: %q", upstream.Body)
 	}
 	assertLiveKitFeedback(t, runtime.feedbacks, 0, controlproxy.ProxyFeedbackTransportError, nil)
 }

@@ -2,12 +2,8 @@ package products
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"regexp"
-	"strings"
 	"time"
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
@@ -16,6 +12,7 @@ import (
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/logging"
+	"github.com/dslzl/gork/app/platform/redact"
 )
 
 var consoleStreamPosterFactory = func() protocol.ConsoleStreamPoster {
@@ -85,51 +82,19 @@ func proxyLeasePtr(lease controlproxy.ProxyLease) *controlproxy.ProxyLease {
 func logConsoleTransportError(endpoint string, err error) {
 	var upstream *platform.UpstreamError
 	if errors.As(err, &upstream) {
-		body := redactConsoleDiagnosticText(upstream.Body)
 		logging.Logger.Warn(
 			"console upstream request failed",
 			"endpoint", endpoint,
 			"status", upstream.Status,
 			"body_len", len(upstream.Body),
-			"body_sha256", consoleBodyHash(upstream.Body),
-			"body_excerpt", truncateConsoleDiagnosticText(body, 400),
+			"body_sha256", redact.SHA256Hex(upstream.Body),
+			"body_excerpt", redact.Excerpt(upstream.Body, 400),
 		)
 		return
 	}
 	logging.Logger.Warn(
 		"console transport request failed",
 		"endpoint", endpoint,
-		"error", truncateConsoleDiagnosticText(redactConsoleDiagnosticText(err.Error()), 400),
+		"error", redact.Excerpt(err.Error(), 400),
 	)
-}
-
-func consoleBodyHash(body string) string {
-	if body == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(body))
-	return fmt.Sprintf("%x", sum[:8])
-}
-
-func truncateConsoleDiagnosticText(value string, limit int) string {
-	if limit <= 0 || len(value) <= limit {
-		return value
-	}
-	return value[:limit]
-}
-
-func redactConsoleDiagnosticText(value string) string {
-	out := strings.ReplaceAll(value, "\n", `\n`)
-	replacements := []struct {
-		pattern *regexp.Regexp
-		repl    string
-	}{
-		{regexp.MustCompile(`(?i)\b(sso|sso-rw|cf_clearance)=([^;\s"'\\]+)`), `${1}=<redacted>`},
-		{regexp.MustCompile(`(?i)(bearer\s+)([A-Za-z0-9._~+/=-]{8,})`), `${1}<redacted>`},
-		{regexp.MustCompile(`\b[A-Za-z0-9_-]{32,}\b`), `<redacted>`},
-	}
-	for _, replacement := range replacements {
-		out = replacement.pattern.ReplaceAllString(out, replacement.repl)
-	}
-	return out
 }

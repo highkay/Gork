@@ -13,6 +13,7 @@ import (
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 	platform "github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/redact"
 	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
@@ -180,7 +181,8 @@ func writeWebUIVoiceError(w http.ResponseWriter, err error) {
 		writeWebUIError(w, err)
 		return
 	}
-	writeWebUIError(w, platform.NewUpstreamError("Voice token error: "+err.Error(), 502, ""))
+	errText := redact.Excerpt(err.Error(), 300)
+	writeWebUIError(w, platform.NewUpstreamError("Voice token error: "+errText, 502, errText))
 }
 
 func defaultWebUIVoiceFetchToken(ctx context.Context, token string, options webUIVoiceOptions) (map[string]any, error) {

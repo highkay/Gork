@@ -137,8 +137,8 @@ func TestChatUpstreamErrorHelpersMatchPython(t *testing.T) {
 	if got := transportUpstreamError(upstream, "ctx"); got != upstream {
 		t.Fatalf("transportUpstreamError(existing) returned %#v", got)
 	}
-	wrapped := transportUpstreamError(errors.New("dial\nfail"), "chat upstream")
-	if wrapped.Status != 502 || wrapped.Body != `dial\nfail` || !strings.Contains(wrapped.Error(), "chat upstream: dial") {
+	wrapped := transportUpstreamError(errors.New("dial\nfail Bearer abcdefghijklmnop"), "chat upstream")
+	if wrapped.Status != 502 || wrapped.Body != `dial\nfail Bearer <redacted>` || !strings.Contains(wrapped.Error(), "chat upstream: dial") || strings.Contains(wrapped.Error(), "abcdefghijklmnop") {
 		t.Fatalf("wrapped upstream=%#v body=%q err=%v", wrapped, wrapped.Body, wrapped)
 	}
 }

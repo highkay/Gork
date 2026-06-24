@@ -11,10 +11,6 @@ function _toastContainer() {
   return c;
 }
 
-function _esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
 function showToast(message, type = 'success') {
   const tone = type === 'error' ? 'error' : (type === 'info' ? 'info' : 'success');
   const icon = tone === 'success'
@@ -24,7 +20,13 @@ function showToast(message, type = 'success') {
       : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>';
   const el = document.createElement('div');
   el.className = `toast toast-${tone}`;
-  el.innerHTML = `<div class="toast-icon">${icon}</div><div class="toast-content">${_esc(message)}</div>`;
+  const iconEl = document.createElement('div');
+  iconEl.className = 'toast-icon';
+  iconEl.insertAdjacentHTML('beforeend', icon);
+  const contentEl = document.createElement('div');
+  contentEl.className = 'toast-content';
+  contentEl.textContent = String(message ?? '');
+  el.append(iconEl, contentEl);
   _toastContainer().appendChild(el);
   setTimeout(() => {
     el.classList.add('out');
@@ -48,13 +50,24 @@ function showProgressToast(label) {
 
   const el = document.createElement('div');
   el.className = 'toast toast-info';
-  el.innerHTML = `
-    <div class="toast-icon">${SPIN}</div>
-    <div class="toast-content">
-      <div class="toast-progress-label">${_esc(label)}</div>
-      <div class="toast-progress-track"><div class="toast-progress-fill" style="width:0%"></div></div>
-    </div>
-    <span class="toast-progress-count"></span>`;
+  const iconWrap = document.createElement('div');
+  iconWrap.className = 'toast-icon';
+  iconWrap.insertAdjacentHTML('beforeend', SPIN);
+  const content = document.createElement('div');
+  content.className = 'toast-content';
+  const labelNode = document.createElement('div');
+  labelNode.className = 'toast-progress-label';
+  labelNode.textContent = String(label ?? '');
+  const track = document.createElement('div');
+  track.className = 'toast-progress-track';
+  const fillNode = document.createElement('div');
+  fillNode.className = 'toast-progress-fill';
+  fillNode.style.width = '0%';
+  track.appendChild(fillNode);
+  content.append(labelNode, track);
+  const count = document.createElement('span');
+  count.className = 'toast-progress-count';
+  el.append(iconWrap, content, count);
   _toastContainer().appendChild(el);
 
   const iconEl  = el.querySelector('.toast-icon');

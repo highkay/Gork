@@ -252,7 +252,8 @@ func feedbackAssetsSuccess(ctx context.Context, runtime AssetsProxyRuntime, leas
 }
 
 func assetsTransportError(label string, err error) *platform.UpstreamError {
-	return platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %v", label, err), 502, err.Error())
+	errText := redactedTransportError(err)
+	return platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %s", label, errText), 502, errText)
 }
 
 func assetDownloadHeaders(contentType *string) map[string]string {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/httpbody"
 )
 
 type AnthropicMessagesRequest struct {
@@ -23,6 +24,7 @@ type AnthropicMessagesRequest struct {
 }
 
 func handleAnthropicMessages(w http.ResponseWriter, r *http.Request) {
+	httpbody.LimitJSON(w, r)
 	req, err := decodeAnthropicMessagesRequest(r)
 	if err != nil {
 		writeAnthropicError(w, err)

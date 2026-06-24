@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -26,7 +28,10 @@ var (
 	appStartedAt = time.Now()
 
 	appMainEnsureConfig = func(ctx context.Context) error {
-		return config.GlobalConfig.EnsureLoaded(ctx, "")
+		if err := config.GlobalConfig.EnsureLoaded(ctx, ""); err != nil {
+			return err
+		}
+		return appMainEnsureInitialAdminKey(ctx)
 	}
 	appMainLoadRequestConfig = func(ctx context.Context) error {
 		return config.GlobalConfig.Load(ctx, "")
@@ -36,6 +41,9 @@ var (
 	}
 	appMainSetupLogging = func() error {
 		return logging.SetupLogging(logging.LoggingOptions{})
+	}
+	appMainInitialAdminKeyWriter = func(key string) {
+		_, _ = fmt.Fprintf(os.Stderr, "Initial Admin key generated: %s\nOpen /admin/login with this key, then save a new Admin key in configuration.\n", key)
 	}
 	appMainObservabilityConfig = func() appMainObservabilitySettings {
 		return appMainObservabilitySettings{
@@ -83,6 +91,32 @@ func NewApp(options AppOptions) *App {
 func defaultStartupHooks() []Hook {
 	startupHooks, _ := defaultLifecycleHooks()
 	return startupHooks
+}
+
+func appMainEnsureInitialAdminKey(ctx context.Context) error {
+	if strings.TrimSpace(fmt.Sprint(config.GetConfig("app.app_key", ""))) != "" {
+		return nil
+	}
+	key, err := appMainGenerateInitialAdminKey()
+	if err != nil {
+		return err
+	}
+	if err := config.GlobalConfig.Update(ctx, map[string]any{"app": map[string]any{"app_key": key}}); err != nil {
+		return err
+	}
+	if err := config.GlobalConfig.Load(ctx, ""); err != nil {
+		return err
+	}
+	appMainInitialAdminKeyWriter(key)
+	return nil
+}
+
+func appMainGenerateInitialAdminKey() (string, error) {
+	var raw [32]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(raw[:]), nil
 }
 
 func (app *App) Handler() http.Handler {

@@ -21,6 +21,7 @@ import (
 	controlmodel "github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/httpbody"
 	"github.com/dslzl/gork/app/platform/storage"
 )
 
@@ -287,6 +288,26 @@ func TestRouterChatCompletionsDispatchesOptions(t *testing.T) {
 	}
 	if got.Temperature != 0.2 || got.TopP != 0.3 {
 		t.Fatalf("sampling=%v/%v", got.Temperature, got.TopP)
+	}
+}
+
+func TestRouterChatCompletionsRejectsOversizedJSONBody(t *testing.T) {
+	resetRouterDepsForTest(t)
+	called := false
+	routerCompletions = func(context.Context, chatCompletionOptions) (chatCompletionResult, error) {
+		called = true
+		return chatCompletionResult{}, nil
+	}
+
+	body := strings.NewReader(`{"model":"grok-4.20-fast","messages":[{"role":"user","content":"` + strings.Repeat("x", int(httpbody.DefaultJSONLimitBytes)) + `"}]}`)
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", body))
+
+	assertRouterGoldenJSON(t, rec, http.StatusBadRequest, map[string]any{
+		"error.type": "invalid_request_error",
+	})
+	if called {
+		t.Fatal("oversized request reached chat completion dispatcher")
 	}
 }
 

@@ -249,7 +249,7 @@ func decodeHTTPJSON(body []byte, allowEmpty bool) (map[string]any, error) {
 }
 
 func httpStatusError(response HTTPResponse, limit int) *platform.UpstreamError {
-	bodyText := truncateString(string(response.Body), limit)
+	bodyText := redactedTransportExcerptLimit(string(response.Body), limit)
 	return platform.NewUpstreamError(fmt.Sprintf("Upstream returned %d", response.StatusCode), response.StatusCode, bodyText)
 }
 
@@ -258,8 +258,8 @@ func httpTransportError(err error) error {
 	if errors.As(err, &upstream) {
 		return upstream
 	}
-	body := truncateString(strings.ReplaceAll(err.Error(), "\n", "\\n"), 400)
-	return platform.NewUpstreamError(fmt.Sprintf("Transport request failed: %v", err), 502, body)
+	errText := redactedTransportExcerptLimit(err.Error(), 400)
+	return platform.NewUpstreamError(fmt.Sprintf("Transport request failed: %s", errText), 502, errText)
 }
 
 func closeHTTPResponse(response HTTPResponse) {

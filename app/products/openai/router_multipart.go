@@ -8,9 +8,11 @@ import (
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/httpbody"
 )
 
 func handleImageEdits(w http.ResponseWriter, r *http.Request) {
+	httpbody.LimitMultipart(w, r)
 	if err := r.ParseMultipartForm(64 << 20); err != nil {
 		writeRouterError(w, platform.NewValidationError("Invalid multipart body", "body", ""))
 		return
@@ -76,13 +78,17 @@ func imageEditMultipartContent(prompt string, uploads []*multipart.FileHeader) (
 
 func handleVideosCreate(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		httpbody.LimitMultipart(w, r)
 		if err := r.ParseMultipartForm(64 << 20); err != nil {
 			writeRouterError(w, platform.NewValidationError("Invalid multipart body", "body", ""))
 			return
 		}
-	} else if err := r.ParseForm(); err != nil {
-		writeRouterError(w, platform.NewValidationError("Invalid form body", "body", ""))
-		return
+	} else {
+		httpbody.LimitJSON(w, r)
+		if err := r.ParseForm(); err != nil {
+			writeRouterError(w, platform.NewValidationError("Invalid form body", "body", ""))
+			return
+		}
 	}
 	if err := validateRouterVideoParams(r.FormValue("size"), func(param string) bool {
 		return strings.TrimSpace(r.FormValue(param)) != ""

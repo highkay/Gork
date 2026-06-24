@@ -185,10 +185,13 @@ func TestListAssetsAppliesUpstreamAndTransportFeedback(t *testing.T) {
 	assertAssetsFeedback(t, upstreamRuntime.feedbacks, 0, controlproxy.ProxyFeedbackUpstream5xx, intPtr(503))
 
 	transportRuntime := newFakeAssetsProxyRuntime("transport-lease")
-	transportClient := &fakeAssetsHTTPClient{err: errors.New("dial failed")}
+	transportClient := &fakeAssetsHTTPClient{err: errors.New("dial failed sso=secret-cookie")}
 	_, err = ListAssets(context.Background(), "token", nil, AssetsOptions{ProxyRuntime: transportRuntime, Client: transportClient})
-	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "list_assets: transport error: dial failed") {
+	if !errors.As(err, &upstream) || upstream.Status != 502 || !strings.Contains(upstream.Message, "list_assets: transport error: dial failed sso=<redacted>") {
 		t.Fatalf("transport error = %T %#v", err, err)
+	}
+	if strings.Contains(upstream.Body, "secret-cookie") {
+		t.Fatalf("transport error body leaked secret: %q", upstream.Body)
 	}
 	assertAssetsFeedback(t, transportRuntime.feedbacks, 0, controlproxy.ProxyFeedbackTransportError, nil)
 }

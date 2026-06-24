@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
+	"github.com/dslzl/gork/app/platform/config"
 	configbackends "github.com/dslzl/gork/app/platform/config/backends"
 	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 	platformstartup "github.com/dslzl/gork/app/platform/startup"
@@ -482,6 +484,38 @@ func TestDefaultAccountDirectoryLifecycleDoesNotBlockStartupOnLargeBootstrap(t *
 	}
 }
 
+func TestAppMainEnsureInitialAdminKeyGeneratesAndPersistsMissingKey(t *testing.T) {
+	data := map[string]any{"app": map[string]any{"app_key": ""}}
+	backend := lifecycleConfigBackend{data: &data}
+	previousConfig := config.GlobalConfig
+	previousWriter := appMainInitialAdminKeyWriter
+	var generatedKey string
+	t.Cleanup(func() {
+		config.GlobalConfig = previousConfig
+		appMainInitialAdminKeyWriter = previousWriter
+	})
+	config.GlobalConfig = config.NewConfigSnapshot(backend, config.ConfigSnapshotOptions{})
+	if err := config.GlobalConfig.Load(context.Background(), ""); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	appMainInitialAdminKeyWriter = func(key string) { generatedKey = key }
+
+	if err := appMainEnsureInitialAdminKey(context.Background()); err != nil {
+		t.Fatalf("ensure initial admin key: %v", err)
+	}
+
+	if len(generatedKey) != 64 {
+		t.Fatalf("generated key length=%d key=%q", len(generatedKey), generatedKey)
+	}
+	if strings.TrimSpace(config.GetConfig("app.app_key", "").(string)) != generatedKey {
+		t.Fatalf("global config app key was not reloaded")
+	}
+	appData, ok := data["app"].(map[string]any)
+	if !ok || appData["app_key"] != generatedKey {
+		t.Fatalf("backend app key not persisted: %#v", data)
+	}
+}
+
 func waitForDirectoryRevision(t *testing.T, directory interface{ Revision() int }, revision int) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -500,12 +534,32 @@ func (b lifecycleConfigBackend) Load(context.Context) (map[string]any, error) {
 	}
 	return *b.data, nil
 }
-func (lifecycleConfigBackend) ApplyPatch(context.Context, map[string]any) error {
+func (b lifecycleConfigBackend) ApplyPatch(_ context.Context, patch map[string]any) error {
+	if b.data == nil {
+		return nil
+	}
+	mergeLifecycleConfigData(*b.data, patch)
 	return nil
 }
 func (lifecycleConfigBackend) Clear(context.Context) error          { return nil }
 func (lifecycleConfigBackend) Version(context.Context) (any, error) { return 0, nil }
 func (lifecycleConfigBackend) Close(context.Context) error          { return nil }
+
+func mergeLifecycleConfigData(dst, patch map[string]any) {
+	for key, value := range patch {
+		nestedPatch, ok := value.(map[string]any)
+		if !ok {
+			dst[key] = value
+			continue
+		}
+		nestedDst, _ := dst[key].(map[string]any)
+		if nestedDst == nil {
+			nestedDst = map[string]any{}
+			dst[key] = nestedDst
+		}
+		mergeLifecycleConfigData(nestedDst, nestedPatch)
+	}
+}
 
 type lifecycleAccountRepository struct {
 	snapshot  accountcontrol.RuntimeSnapshot

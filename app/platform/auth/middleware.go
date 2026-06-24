@@ -89,30 +89,30 @@ func VerifyAPIKey(authorization, xAPIKey string, settings AuthSettings) error {
 		token = xAPIKey
 	}
 	if token == "" {
-		return authHTTPError(401, "Missing or invalid Authorization header.")
+		return authHTTPError(401)
 	}
 	for _, key := range allowed {
 		if constantTimeStringEqual(token, key) {
 			return nil
 		}
 	}
-	return authHTTPError(403, "Invalid API key.")
+	return authHTTPError(401)
 }
 
 func VerifyAdminKey(authorization, appKey string, settings AuthSettings) error {
 	key := GetAdminKey(settings)
 	if key == "" {
-		return authHTTPError(401, "Admin key is not configured.")
+		return authHTTPError(401)
 	}
 	token, ok := ExtractBearer(authorization)
 	if !ok {
 		token = appKey
 	}
 	if token == "" {
-		return authHTTPError(401, "Missing authentication token.")
+		return authHTTPError(401)
 	}
 	if !constantTimeStringEqual(token, key) {
-		return authHTTPError(401, "Invalid authentication token.")
+		return authHTTPError(401)
 	}
 	return nil
 }
@@ -123,14 +123,14 @@ func VerifyWebUIKey(authorization string, settings AuthSettings) error {
 		if IsWebUIEnabled(settings) {
 			return nil
 		}
-		return authHTTPError(401, "WebUI access is disabled.")
+		return authHTTPError(401)
 	}
 	token, ok := ExtractBearer(authorization)
 	if !ok || token == "" {
-		return authHTTPError(401, "Missing authentication token.")
+		return authHTTPError(401)
 	}
 	if !constantTimeStringEqual(token, webuiKey) {
-		return authHTTPError(401, "Invalid authentication token.")
+		return authHTTPError(401)
 	}
 	return nil
 }
@@ -175,6 +175,6 @@ func constantTimeStringEqual(left, right string) bool {
 	return subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
 }
 
-func authHTTPError(status int, message string) *platform.AppError {
-	return platform.NewAppError(message, platform.ErrorKindAuthentication, "authentication_error", status, nil)
+func authHTTPError(status int) *platform.AppError {
+	return platform.NewAppError("Authentication failed.", platform.ErrorKindAuthentication, "authentication_error", status, nil)
 }

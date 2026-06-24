@@ -57,14 +57,14 @@ func TestPostJSONBuildsHeadersAndParsesAllowedStatuses(t *testing.T) {
 	}
 }
 
-func TestPostJSONFailureReturnsUpstreamErrorWithTruncatedBody(t *testing.T) {
-	client := &fakeHTTPClient{responses: []HTTPResponse{{StatusCode: 500, Body: []byte(strings.Repeat("x", 500))}}}
+func TestPostJSONFailureReturnsUpstreamErrorWithRedactedTruncatedBody(t *testing.T) {
+	client := &fakeHTTPClient{responses: []HTTPResponse{{StatusCode: 500, Body: []byte("sso=secret-cookie " + strings.Repeat("x ", 500))}}}
 	_, err := PostJSON(context.Background(), "https://grok.test/json", "token", nil, HTTPOptions{Client: client})
 	var upstream *platform.UpstreamError
 	if !errors.As(err, &upstream) {
 		t.Fatalf("error = %T %v, want UpstreamError", err, err)
 	}
-	if upstream.Status != 500 || upstream.Message != "Upstream returned 500" || len(upstream.Body) != 400 {
+	if upstream.Status != 500 || upstream.Message != "Upstream returned 500" || len(upstream.Body) > 400 || strings.Contains(upstream.Body, "secret-cookie") {
 		t.Fatalf("upstream error = %#v", upstream)
 	}
 }
@@ -127,7 +127,7 @@ func TestNetHTTPClientReturnsGzipDecodeError(t *testing.T) {
 }
 
 func TestHTTPTransportErrorMatchesResettableSessionWrapper(t *testing.T) {
-	client := &fakeHTTPClient{err: errors.New("dial\nfailed")}
+	client := &fakeHTTPClient{err: errors.New("dial\nfailed Bearer abcdefghijklmnop")}
 	_, err := PostJSON(context.Background(), "https://grok.test/json", "token", nil, HTTPOptions{Client: client})
 	var upstream *platform.UpstreamError
 	if !errors.As(err, &upstream) {
@@ -135,7 +135,8 @@ func TestHTTPTransportErrorMatchesResettableSessionWrapper(t *testing.T) {
 	}
 	if upstream.Status != 502 ||
 		!strings.Contains(upstream.Message, "Transport request failed: dial") ||
-		upstream.Body != "dial\\nfailed" {
+		upstream.Body != `dial\nfailed Bearer <redacted>` ||
+		strings.Contains(upstream.Message, "abcdefghijklmnop") {
 		t.Fatalf("transport upstream error = %#v", upstream)
 	}
 
@@ -329,7 +330,7 @@ func TestPostStreamFailureClosesResponseAndTruncatesBody(t *testing.T) {
 	if !errors.As(err, &upstream) {
 		t.Fatalf("error = %T %v, want UpstreamError", err, err)
 	}
-	if upstream.Status != 503 || upstream.Message != "Upstream returned 503" || len(upstream.Body) != 400 {
+	if upstream.Status != 503 || upstream.Message != "Upstream returned 503" || len(upstream.Body) > 400 {
 		t.Fatalf("upstream error = %#v", upstream)
 	}
 	if !stream.closed {
