@@ -34,7 +34,10 @@ jobs:
         run: docker build -t gork:ci .
 
       - name: Start container
-        run: docker run -d --name gork-health-smoke -p 18080:8000 gork:ci
+        run: |
+          docker run -d --name gork-health-smoke -p 18080:8000 \
+            -e GROK_APP_API_KEY=ci-smoke-key \
+            gork:ci
 
       - name: Wait for healthcheck
         run: |
@@ -46,6 +49,18 @@ jobs:
           done
           docker logs gork-health-smoke
           exit 1
+
+      - name: Smoke HTTP endpoints
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:18080/health
+          curl --fail --silent --show-error http://127.0.0.1:18080/meta
+
+          unauth_status="$(curl --silent --output /tmp/models-unauth.json --write-out '%{http_code}' http://127.0.0.1:18080/v1/models)"
+          test "$unauth_status" = "401"
+
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer ci-smoke-key" \
+            http://127.0.0.1:18080/v1/models
 
       - name: Stop container
         if: always()

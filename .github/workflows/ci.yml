@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+env:
+  STATICCHECK_VERSION: 2025.1.1
+  STATICCHECK_CHECKS: "all,-ST*,-S1011,-U1000,-SA1019,-SA4006,-S1017,-S1016,-SA4011"
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify modules
+        run: go mod verify
+
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Resolve Go paths
+        id: go-paths
+        run: |
+          echo "gopath=$(go env GOPATH)" >> "$GITHUB_OUTPUT"
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache staticcheck
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.go-paths.outputs.gopath }}/bin/staticcheck
+            ${{ steps.go-paths.outputs.gopath }}/pkg/mod
+            ${{ steps.go-paths.outputs.gocache }}
+          key: staticcheck-${{ runner.os }}-${{ env.STATICCHECK_VERSION }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            staticcheck-${{ runner.os }}-${{ env.STATICCHECK_VERSION }}-
+
+      - name: Run staticcheck
+        run: |
+          if ! command -v staticcheck >/dev/null 2>&1; then
+            go install honnef.co/go/tools/cmd/staticcheck@${STATICCHECK_VERSION}
+          fi
+          staticcheck -checks="${STATICCHECK_CHECKS}" ./...
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - name: control-dataplane
+            packages: ./app/control/... ./app/dataplane/...
+          - name: platform
+            packages: ./app/platform/...
+          - name: products
+            packages: ./app/products/...
+          - name: root-tools
+            packages: ./app ./cmd/gork ./scripts ./tools/coveragecheck ./tools/govulnsummary
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go test shard
+        run: go test ${{ matrix.shard.packages }}
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Generate coverage profile
+        run: |
+          go test -covermode=count -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out > coverage.txt
+          go run ./tools/coveragecheck -profile coverage.out -out coverage-summary.json
+
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.out
+            coverage.txt
+            coverage-summary.json
+
+  windows-paths:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Windows path-sensitive tests
+        run: go test ./app/platform ./app/platform/storage ./app/control/account/backends

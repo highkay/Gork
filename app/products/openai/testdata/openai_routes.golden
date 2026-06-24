@@ -1,0 +1,10 @@
+GET /v1/models auth
+GET /v1/models/ auth
+POST /v1/chat/completions auth
+POST /v1/responses auth
+POST /v1/images/generations auth
+POST /v1/images/edits auth
+POST /v1/videos auth
+GET /v1/videos/ auth
+GET /v1/files/video public
+GET /v1/files/image public

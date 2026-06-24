@@ -1,0 +1,56 @@
+name: Quality Nightly
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * *"
+
+jobs:
+  race:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - ./app/platform/runtime
+          - ./app/platform/config
+          - ./app/control/account
+          - ./app/control/proxy
+          - ./app/products/openai
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run race tests
+        run: go test -race ${{ matrix.package }}
+
+  dependency-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Generate Go dependency update report
+        run: |
+          go list -m -u -json all > go-mod-updates.json
+          go list -m -u all | tee go-mod-updates.txt
+
+      - name: Upload dependency update report
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-dependency-updates
+          path: |
+            go-mod-updates.json
+            go-mod-updates.txt

@@ -195,6 +195,27 @@ func FuzzParseGRPCWebResponseTrailers(f *testing.F) {
 	})
 }
 
+func FuzzParseGRPCWebResponseFrames(f *testing.F) {
+	for _, seed := range [][]byte{
+		EncodeGRPCWebPayload([]byte("hello")),
+		grpcFrame(0x80, []byte("grpc-status: 0\r\n")),
+		[]byte("not a frame"),
+	} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, body []byte) {
+		response, err := ParseGRPCWebResponse(body, "application/grpc-web+proto", nil)
+		if err != nil {
+			return
+		}
+		for _, message := range response.Messages {
+			if message == nil {
+				t.Fatalf("nil message in response")
+			}
+		}
+	})
+}
+
 func grpcFrame(flag byte, payload []byte) []byte {
 	frame := []byte{flag, byte(len(payload) >> 24), byte(len(payload) >> 16), byte(len(payload) >> 8), byte(len(payload))}
 	return append(frame, payload...)

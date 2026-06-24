@@ -1,0 +1,16 @@
+MOUNT /admin/api/
+MOUNT /webui/api/
+GET /
+GET /admin
+GET /admin/login
+GET /admin/account
+GET /admin/config
+GET /admin/cache
+GET /webui
+GET /webui/login
+GET /webui/chat
+GET /webui/chatkit
+GET /webui/masonry
+GET /webui/api/verify
+GET /meta
+GET /meta/update

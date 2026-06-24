@@ -26,25 +26,51 @@ var (
 	webRouterServeHTML      = serveWebRouterHTML
 )
 
+type webRoute struct {
+	Method  string
+	Path    string
+	Handler http.Handler
+}
+
+func webMount(path string, handler http.Handler) webRoute {
+	return webRoute{Path: path, Handler: handler}
+}
+
+func webGet(path string, handler http.HandlerFunc) webRoute {
+	return webRoute{Method: http.MethodGet, Path: path, Handler: handler}
+}
+
+func webRoutes() []webRoute {
+	return []webRoute{
+		webMount("/admin/api/", adminproduct.NewRouter()),
+		webMount("/webui/api/", webuiapi.NewRouter()),
+		webGet("/", handleWebRoot),
+		webGet("/admin", redirectWeb("/admin/login")),
+		webGet("/admin/login", serveWebPage("admin/login.html")),
+		webGet("/admin/account", serveWebPage("admin/account.html")),
+		webGet("/admin/config", serveWebPage("admin/config.html")),
+		webGet("/admin/cache", serveWebPage("admin/cache.html")),
+		webGet("/webui", redirectWeb("/webui/login")),
+		webGet("/webui/login", handleWebUILogin),
+		webGet("/webui/chat", serveWebUIPage("webui/chat.html")),
+		webGet("/webui/chatkit", serveWebUIPage("webui/chatkit.html")),
+		webGet("/webui/masonry", serveWebUIPage("webui/masonry.html")),
+		webGet("/webui/api/verify", handleWebUIVerify),
+		webGet("/meta", handleWebMeta),
+		webGet("/meta/update", handleWebUpdateMeta),
+	}
+}
+
 // NewRouter returns the unified frontend HTTP surface.
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("/admin/api/", adminproduct.NewRouter())
-	mux.Handle("/webui/api/", webuiapi.NewRouter())
-	mux.HandleFunc("/", webMethod(http.MethodGet, handleWebRoot))
-	mux.HandleFunc("/admin", webMethod(http.MethodGet, redirectWeb("/admin/login")))
-	mux.HandleFunc("/admin/login", webMethod(http.MethodGet, serveWebPage("admin/login.html")))
-	mux.HandleFunc("/admin/account", webMethod(http.MethodGet, serveWebPage("admin/account.html")))
-	mux.HandleFunc("/admin/config", webMethod(http.MethodGet, serveWebPage("admin/config.html")))
-	mux.HandleFunc("/admin/cache", webMethod(http.MethodGet, serveWebPage("admin/cache.html")))
-	mux.HandleFunc("/webui", webMethod(http.MethodGet, redirectWeb("/webui/login")))
-	mux.HandleFunc("/webui/login", webMethod(http.MethodGet, handleWebUILogin))
-	mux.HandleFunc("/webui/chat", webMethod(http.MethodGet, serveWebUIPage("webui/chat.html")))
-	mux.HandleFunc("/webui/chatkit", webMethod(http.MethodGet, serveWebUIPage("webui/chatkit.html")))
-	mux.HandleFunc("/webui/masonry", webMethod(http.MethodGet, serveWebUIPage("webui/masonry.html")))
-	mux.HandleFunc("/webui/api/verify", webMethod(http.MethodGet, handleWebUIVerify))
-	mux.HandleFunc("/meta", webMethod(http.MethodGet, handleWebMeta))
-	mux.HandleFunc("/meta/update", webMethod(http.MethodGet, handleWebUpdateMeta))
+	for _, route := range webRoutes() {
+		if route.Method == "" {
+			mux.Handle(route.Path, route.Handler)
+			continue
+		}
+		mux.Handle(route.Path, webMethod(route.Method, route.Handler.ServeHTTP))
+	}
 	return mux
 }
 

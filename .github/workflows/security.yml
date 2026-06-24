@@ -67,11 +67,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Detect Python dependency manifests
+        id: python-manifests
+        run: |
+          if ls pyproject.toml uv.lock requirements*.txt poetry.lock Pipfile.lock >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No Python dependency manifests found; pip-audit is skipped for the Go mainline."
+          fi
       - name: Install uv
+        if: steps.python-manifests.outputs.present == 'true'
         uses: astral-sh/setup-uv@v3
       - name: Export requirements
+        if: steps.python-manifests.outputs.present == 'true'
         run: uv export --frozen --no-dev --format requirements-txt -o /tmp/req.txt
       - name: Run pip-audit
+        if: steps.python-manifests.outputs.present == 'true'
         run: |
           uvx pip-audit -r /tmp/req.txt --progress-spinner off \
             --ignore-vuln PYSEC-2026-161
@@ -88,7 +100,22 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Run govulncheck
-        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+        run: |
+          set +e
+          go run golang.org/x/vuln/cmd/govulncheck@latest -json ./... > govulncheck.json
+          status=$?
+          set -e
+          go run ./tools/govulnsummary -input govulncheck.json | tee govulncheck-summary.txt
+          exit "$status"
+      - name: Upload govulncheck report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: govulncheck-report
+          path: |
+            govulncheck.json
+            govulncheck-summary.txt
+          if-no-files-found: ignore
 
   trivy-fs:
     name: Go Module and Static Asset Scan

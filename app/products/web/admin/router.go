@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	goruntime "runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -114,47 +115,70 @@ var (
 	adminProtocolCheckLatest []reverse.ProtocolCheckResult
 )
 
+type adminRoute struct {
+	Path     string
+	Methods  []string
+	Handlers map[string]http.HandlerFunc
+}
+
+func adminRouteOne(method, path string, handler http.HandlerFunc) adminRoute {
+	return adminRoute{Path: path, Methods: []string{method}, Handlers: map[string]http.HandlerFunc{method: handler}}
+}
+
+func adminRouteMany(path string, handlers map[string]http.HandlerFunc) adminRoute {
+	methods := make([]string, 0, len(handlers))
+	for method := range handlers {
+		methods = append(methods, method)
+	}
+	sort.Strings(methods)
+	return adminRoute{Path: path, Methods: methods, Handlers: handlers}
+}
+
+func adminRoutes() []adminRoute {
+	return []adminRoute{
+		adminRouteOne(http.MethodGet, "/admin/api/verify", handleAdminVerify),
+		adminRouteMany("/admin/api/config", map[string]http.HandlerFunc{
+			http.MethodGet: handleAdminGetConfig, http.MethodPost: handleAdminUpdateConfig,
+		}),
+		adminRouteOne(http.MethodPost, "/admin/api/config/reset", handleAdminResetConfig),
+		adminRouteOne(http.MethodGet, "/admin/api/storage", handleAdminStorage),
+		adminRouteOne(http.MethodGet, "/admin/api/status", handleAdminStatus),
+		adminRouteOne(http.MethodPost, "/admin/api/sync", handleAdminSync),
+		adminRouteOne(http.MethodGet, "/admin/api/assets", handleAdminAssetsList),
+		adminRouteOne(http.MethodPost, "/admin/api/assets/delete-item", handleAdminAssetDeleteItem),
+		adminRouteOne(http.MethodPost, "/admin/api/assets/clear-token", handleAdminAssetClearToken),
+		adminRouteOne(http.MethodPost, "/admin/api/batch/nsfw", handleAdminBatchNSFW),
+		adminRouteOne(http.MethodPost, "/admin/api/batch/refresh", handleAdminBatchRefresh),
+		adminRouteOne(http.MethodPost, "/admin/api/batch/cache-clear", handleAdminBatchCacheClear),
+		adminRouteMany("/admin/api/batch/", map[string]http.HandlerFunc{
+			http.MethodGet: handleAdminBatchStream, http.MethodPost: handleAdminBatchCancel,
+		}),
+		adminRouteOne(http.MethodGet, "/admin/api/cache", handleAdminCacheStats),
+		adminRouteOne(http.MethodGet, "/admin/api/cache/list", handleAdminCacheList),
+		adminRouteOne(http.MethodPost, "/admin/api/cache/clear", handleAdminCacheClear),
+		adminRouteOne(http.MethodPost, "/admin/api/cache/item/delete", handleAdminCacheDeleteItem),
+		adminRouteOne(http.MethodPost, "/admin/api/cache/items/delete", handleAdminCacheDeleteItems),
+		adminRouteOne(http.MethodPost, "/admin/api/protocol-check", handleAdminProtocolCheck),
+		adminRouteOne(http.MethodGet, "/admin/api/protocol-check/latest", handleAdminProtocolCheckLatest),
+		adminRouteMany("/admin/api/tokens", map[string]http.HandlerFunc{
+			http.MethodGet: handleAdminTokensList, http.MethodPost: handleAdminTokensSave, http.MethodDelete: handleAdminTokensDelete,
+		}),
+		adminRouteOne(http.MethodPost, "/admin/api/tokens/import-async", handleAdminTokensImportAsync),
+		adminRouteOne(http.MethodPost, "/admin/api/tokens/add", handleAdminTokensAdd),
+		adminRouteOne(http.MethodPut, "/admin/api/tokens/edit", handleAdminTokensEdit),
+		adminRouteOne(http.MethodPost, "/admin/api/tokens/disabled", handleAdminTokensToggle),
+		adminRouteOne(http.MethodPost, "/admin/api/tokens/disabled/batch", handleAdminTokensToggleBatch),
+		adminRouteOne(http.MethodPut, "/admin/api/tokens/pool", handleAdminTokensPool),
+	}
+}
+
 // NewRouter returns the /admin/api HTTP surface.
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/admin/api/verify", adminProtected(http.MethodGet, handleAdminVerify))
-	mux.HandleFunc("/admin/api/config", adminProtectedAny(map[string]http.HandlerFunc{
-		http.MethodGet: handleAdminGetConfig, http.MethodPost: handleAdminUpdateConfig,
-	}))
-	mux.HandleFunc("/admin/api/config/reset", adminProtected(http.MethodPost, handleAdminResetConfig))
-	mux.HandleFunc("/admin/api/storage", adminProtected(http.MethodGet, handleAdminStorage))
-	mux.HandleFunc("/admin/api/status", adminProtected(http.MethodGet, handleAdminStatus))
-	mux.HandleFunc("/admin/api/sync", adminProtected(http.MethodPost, handleAdminSync))
-	mux.HandleFunc("/admin/api/assets", adminProtected(http.MethodGet, handleAdminAssetsList))
-	mux.HandleFunc("/admin/api/assets/delete-item", adminProtected(http.MethodPost, handleAdminAssetDeleteItem))
-	mux.HandleFunc("/admin/api/assets/clear-token", adminProtected(http.MethodPost, handleAdminAssetClearToken))
-	mux.HandleFunc("/admin/api/batch/nsfw", adminProtected(http.MethodPost, handleAdminBatchNSFW))
-	mux.HandleFunc("/admin/api/batch/refresh", adminProtected(http.MethodPost, handleAdminBatchRefresh))
-	mux.HandleFunc("/admin/api/batch/cache-clear", adminProtected(http.MethodPost, handleAdminBatchCacheClear))
-	mux.HandleFunc("/admin/api/batch/", adminProtectedAny(map[string]http.HandlerFunc{
-		http.MethodGet: handleAdminBatchStream, http.MethodPost: handleAdminBatchCancel,
-	}))
-	mux.HandleFunc("/admin/api/cache", adminProtected(http.MethodGet, handleAdminCacheStats))
-	mux.HandleFunc("/admin/api/cache/list", adminProtected(http.MethodGet, handleAdminCacheList))
-	mux.HandleFunc("/admin/api/cache/clear", adminProtected(http.MethodPost, handleAdminCacheClear))
-	mux.HandleFunc("/admin/api/cache/item/delete", adminProtected(http.MethodPost, handleAdminCacheDeleteItem))
-	mux.HandleFunc("/admin/api/cache/items/delete", adminProtected(http.MethodPost, handleAdminCacheDeleteItems))
-	mux.HandleFunc("/admin/api/protocol-check", adminProtected(http.MethodPost, handleAdminProtocolCheck))
-	mux.HandleFunc("/admin/api/protocol-check/latest", adminProtected(http.MethodGet, handleAdminProtocolCheckLatest))
-	mux.HandleFunc("/admin/api/tokens", adminProtectedAny(map[string]http.HandlerFunc{
-		http.MethodGet: handleAdminTokensList, http.MethodPost: handleAdminTokensSave, http.MethodDelete: handleAdminTokensDelete,
-	}))
-	mux.HandleFunc("/admin/api/tokens/import-async", adminProtected(http.MethodPost, handleAdminTokensImportAsync))
-	mux.HandleFunc("/admin/api/tokens/add", adminProtected(http.MethodPost, handleAdminTokensAdd))
-	mux.HandleFunc("/admin/api/tokens/edit", adminProtected(http.MethodPut, handleAdminTokensEdit))
-	mux.HandleFunc("/admin/api/tokens/disabled", adminProtected(http.MethodPost, handleAdminTokensToggle))
-	mux.HandleFunc("/admin/api/tokens/disabled/batch", adminProtected(http.MethodPost, handleAdminTokensToggleBatch))
-	mux.HandleFunc("/admin/api/tokens/pool", adminProtected(http.MethodPut, handleAdminTokensPool))
+	for _, route := range adminRoutes() {
+		mux.HandleFunc(route.Path, adminProtectedAny(route.Handlers))
+	}
 	return mux
-}
-
-func adminProtected(method string, handler http.HandlerFunc) http.HandlerFunc {
-	return adminProtectedAny(map[string]http.HandlerFunc{method: handler})
 }
 
 func adminProtectedAny(handlers map[string]http.HandlerFunc) http.HandlerFunc {

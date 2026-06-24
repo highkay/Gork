@@ -22,19 +22,38 @@ var (
 	}
 )
 
+type openAIRoute struct {
+	Method    string
+	Path      string
+	Handler   http.HandlerFunc
+	Protected bool
+}
+
+func openAIRoutes() []openAIRoute {
+	return []openAIRoute{
+		{Method: http.MethodGet, Path: "/v1/models", Handler: handleListModels, Protected: true},
+		{Method: http.MethodGet, Path: "/v1/models/", Handler: handleGetModel, Protected: true},
+		{Method: http.MethodPost, Path: "/v1/chat/completions", Handler: handleChatCompletions, Protected: true},
+		{Method: http.MethodPost, Path: "/v1/responses", Handler: handleResponses, Protected: true},
+		{Method: http.MethodPost, Path: "/v1/images/generations", Handler: handleImageGenerations, Protected: true},
+		{Method: http.MethodPost, Path: "/v1/images/edits", Handler: handleImageEdits, Protected: true},
+		{Method: http.MethodPost, Path: "/v1/videos", Handler: handleVideosCreate, Protected: true},
+		{Method: http.MethodGet, Path: "/v1/videos/", Handler: handleVideosRead, Protected: true},
+		{Method: http.MethodGet, Path: "/v1/files/video", Handler: handleServeVideo},
+		{Method: http.MethodGet, Path: "/v1/files/image", Handler: handleServeImage},
+	}
+}
+
 // NewRouter returns the OpenAI-compatible /v1 HTTP surface.
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/models", routerProtected(http.MethodGet, handleListModels))
-	mux.HandleFunc("/v1/models/", routerProtected(http.MethodGet, handleGetModel))
-	mux.HandleFunc("/v1/chat/completions", routerProtected(http.MethodPost, handleChatCompletions))
-	mux.HandleFunc("/v1/responses", routerProtected(http.MethodPost, handleResponses))
-	mux.HandleFunc("/v1/images/generations", routerProtected(http.MethodPost, handleImageGenerations))
-	mux.HandleFunc("/v1/images/edits", routerProtected(http.MethodPost, handleImageEdits))
-	mux.HandleFunc("/v1/videos", routerProtected(http.MethodPost, handleVideosCreate))
-	mux.HandleFunc("/v1/videos/", routerProtected(http.MethodGet, handleVideosRead))
-	mux.HandleFunc("/v1/files/video", routerMethod(http.MethodGet, handleServeVideo))
-	mux.HandleFunc("/v1/files/image", routerMethod(http.MethodGet, handleServeImage))
+	for _, route := range openAIRoutes() {
+		handler := routerMethod(route.Method, route.Handler)
+		if route.Protected {
+			handler = routerProtected(route.Method, route.Handler)
+		}
+		mux.HandleFunc(route.Path, handler)
+	}
 	return mux
 }
 

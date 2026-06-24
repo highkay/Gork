@@ -19,10 +19,24 @@ var (
 	}
 )
 
+type anthropicRoute struct {
+	Method  string
+	Path    string
+	Handler http.HandlerFunc
+}
+
+func anthropicRoutes() []anthropicRoute {
+	return []anthropicRoute{
+		{Method: http.MethodPost, Path: "/v1/messages", Handler: handleAnthropicMessages},
+	}
+}
+
 // NewRouter returns the Anthropic-compatible /v1 HTTP surface.
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/messages", anthropicProtected(http.MethodPost, handleAnthropicMessages))
+	for _, route := range anthropicRoutes() {
+		mux.HandleFunc(route.Path, anthropicProtected(route.Method, route.Handler))
+	}
 	return mux
 }
 

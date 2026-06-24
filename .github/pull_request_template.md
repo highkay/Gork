@@ -8,8 +8,18 @@
 
 - [ ] Targeted Go package test, if applicable
 - [ ] `go test ./...`
-- [ ] `uv run python -m unittest discover -s tests`
+- [ ] `go vet ./...`
+- [ ] `staticcheck -checks="all,-ST*,-S1011,-U1000,-SA1019,-SA4006,-S1017,-S1016,-SA4011" ./...`
 - [ ] `git diff --check`
+
+## Risk Areas
+
+- [ ] Auth or admin access control
+- [ ] Config loading, validation, or env override
+- [ ] Storage, cache, migrations, or persistence
+- [ ] Proxy selection, clearance, or upstream networking
+- [ ] Upstream protocol compatibility
+- [ ] Static frontend or WebUI/Admin route behavior
 
 ## Related
 
