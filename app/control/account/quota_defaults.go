@@ -75,6 +75,9 @@ func NormalizeQuotaWindow(pool string, modeID int, window *QuotaWindow) *QuotaWi
 	if pool == "basic" && modeID == 1 {
 		return normalizeBasicFastWindow(window)
 	}
+	if pool == "basic" && modeID == 5 {
+		return normalizeBasicConsoleWindow(window)
+	}
 	return window
 }
 
@@ -144,6 +147,18 @@ func supportedModesForPool(pool string) map[int]bool {
 		return supported
 	}
 	return supportedModeIDsByPool["basic"]
+}
+
+func normalizeBasicConsoleWindow(window *QuotaWindow) *QuotaWindow {
+	normalized := QuotaWindow{
+		Remaining:     clampInt(window.Remaining, 0, basicConsoleLimit),
+		Total:         basicConsoleLimit,
+		WindowSeconds: basicConsoleWindowSeconds,
+		ResetAt:       cloneInt64Ptr(window.ResetAt),
+		SyncedAt:      cloneInt64Ptr(window.SyncedAt),
+		Source:        window.Source,
+	}
+	return &normalized
 }
 
 func normalizeBasicFastWindow(window *QuotaWindow) *QuotaWindow {

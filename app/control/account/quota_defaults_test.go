@@ -124,7 +124,7 @@ func TestNormalizeQuotaWindowAndSet(t *testing.T) {
 	if normalized.Fast.Total != 30 || normalized.Fast.WindowSeconds != 1800 {
 		t.Fatalf("NormalizeQuotaSet basic fast = %#v", normalized.Fast)
 	}
-	if normalized.Heavy != nil || normalized.Grok43 != nil || normalized.Console == nil || normalized.Console.Total != 99 {
+	if normalized.Heavy != nil || normalized.Grok43 != nil || normalized.Console == nil || normalized.Console.Total != 20 || normalized.Console.WindowSeconds != 3600 {
 		t.Fatalf("NormalizeQuotaSet basic optional modes = %#v", normalized)
 	}
 	input.Console = nil

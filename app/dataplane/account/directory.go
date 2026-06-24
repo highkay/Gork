@@ -193,7 +193,11 @@ func (d *AccountDirectory) Feedback(token string, kind controlaccount.FeedbackKi
 		}
 	case controlaccount.FeedbackKindRateLimited:
 		if strategy == strategyRandom {
-			ApplyRateLimitedRandom(d.table, idx, modeID, poolCoolingSec(d.table.PoolByIdx[idx]))
+			cooling := poolCoolingSec(d.table.PoolByIdx[idx])
+			if modeID == 5 {
+				cooling = 14400 // console 429 冷却 4 小时
+			}
+			ApplyRateLimitedRandom(d.table, idx, modeID, cooling)
 		} else {
 			ApplyRateLimitedQuota(d.table, idx, modeID)
 		}
