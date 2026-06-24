@@ -74,13 +74,16 @@ func quotaSelect(table *AccountRuntimeTable, poolID int, modeID int, options Sel
 	totalCol := table.totalCol(modeID)
 	windowCol := table.windowCol(modeID)
 	maybeResetWindows(table, candidates, modeID, resetCol, quotaCol, totalCol, windowCol, poolID, options.NowS)
-	// inflight 硬上限过滤，避免单账号堆积导致上游风控
+	maxInflight := options.MaxInflight
+	if maxInflight <= 0 {
+		maxInflight = quotaMaxInflight
+	}
 	working := map[int]bool{}
 	for idx := range candidates {
 		if options.ExcludeIdxs[idx] || quotaCol[idx] <= 0 {
 			continue
 		}
-		if table.InflightByIdx[idx] >= quotaMaxInflight {
+		if table.InflightByIdx[idx] >= maxInflight {
 			continue
 		}
 		working[idx] = true

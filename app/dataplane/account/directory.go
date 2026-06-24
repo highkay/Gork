@@ -133,6 +133,7 @@ func (d *AccountDirectory) reserve(poolCandidates any, modeID int, options Reser
 		ExcludeIdxs:   excludeIdxs(d.table, options.ExcludeTokens),
 		PreferTagIdxs: preferTagIdxs(d.table, options.PreferTags),
 		NowS:          ts,
+		MaxInflight:   directoryConfigSource.GetInt("account.selection.max_inflight", 0),
 	}
 	selectedIdx := 0
 	ok := false
