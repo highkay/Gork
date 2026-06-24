@@ -2,6 +2,8 @@ package openai
 
 import (
 	"log/slog"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -58,6 +60,47 @@ func isConsoleRateLimitError(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "429") || strings.Contains(msg, "rate_limit") || strings.Contains(msg, "resource-exhausted")
+}
+
+// Console429Info holds parsed information from a 429 response body.
+type Console429Info struct {
+	PerSecondActual int
+	PerSecondLimit  int
+	PerMinuteActual int
+	PerMinuteLimit  int
+	IsPerSecondHit  bool // per-second actual >= limit
+	IsPerMinuteHit  bool // per-minute actual >= limit
+}
+
+// Regex patterns for parsing 429 response body
+var (
+	perSecondPattern = regexp.MustCompile(`Requests per Second \(actual/limit\): (\d+)/(\d+)`)
+	perMinutePattern = regexp.MustCompile(`Requests per Minute \(actual/limit\): (\d+)/(\d+)`)
+)
+
+// parseConsole429Info parses the 429 response body to determine which rate limit was hit.
+func parseConsole429Info(body string) Console429Info {
+	var info Console429Info
+
+	// Parse per-second
+	if matches := perSecondPattern.FindStringSubmatch(body); len(matches) == 3 {
+		info.PerSecondActual, _ = strconv.Atoi(matches[1])
+		info.PerSecondLimit, _ = strconv.Atoi(matches[2])
+		if info.PerSecondLimit > 0 {
+			info.IsPerSecondHit = info.PerSecondActual >= info.PerSecondLimit
+		}
+	}
+
+	// Parse per-minute
+	if matches := perMinutePattern.FindStringSubmatch(body); len(matches) == 3 {
+		info.PerMinuteActual, _ = strconv.Atoi(matches[1])
+		info.PerMinuteLimit, _ = strconv.Atoi(matches[2])
+		if info.PerMinuteLimit > 0 {
+			info.IsPerMinuteHit = info.PerMinuteActual >= info.PerMinuteLimit
+		}
+	}
+
+	return info
 }
 
 // Global console circuit breaker - tracking only, no blocking

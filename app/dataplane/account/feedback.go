@@ -37,6 +37,11 @@ func ApplyRateLimitedRandom(table *AccountRuntimeTable, idx int, modeID int, coo
 		if ts > resetCol[idx] {
 			resetCol[idx] = ts
 		}
+		// 只对 console 模式设置账号级冷却（CoolingUntilSByIdx）
+		// 其他模式的冷却是模式级别的（通过 resetCol）
+		if modeID == 5 && ts > table.CoolingUntilSByIdx[idx] {
+			table.CoolingUntilSByIdx[idx] = ts
+		}
 	}
 	adjustHealth(table, idx, rateLimitFactor)
 }

@@ -64,11 +64,27 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 		}
 		lastErr = err
 
-		// On 429: random delay 1-5s, then retry (don't block, compete for shared quota)
+		// On 429: parse response to determine rate limit type, then retry with appropriate delay
 		if isConsoleRateLimitError(err) {
-			consoleCircuitBreaker.trip() // Log only, no blocking
+			errBody := err.Error()
+			info := parseConsole429Info(errBody)
+			consoleCircuitBreaker.trip()
+
 			if attempt < maxRetries {
-				delay := time.Duration(1000+rand.Intn(4000)) * time.Millisecond // 1-5s
+				var delay time.Duration
+				if info.IsPerMinuteHit {
+					// Per-minute: team-level limit, wait longer (5-10s), max 2 retries
+					delay = time.Duration(5000+rand.Intn(5000)) * time.Millisecond
+					if attempt >= 2 {
+						return chatCompletionResult{}, err
+					}
+				} else if info.IsPerSecondHit {
+					// Per-second: wait 2s for window to clear
+					delay = 2 * time.Second
+				} else {
+					// Unknown 429: default 2s delay
+					delay = 2 * time.Second
+				}
 				select {
 				case <-time.After(delay):
 					excluded = append(excluded, account.Token)

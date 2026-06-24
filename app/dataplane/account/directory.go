@@ -196,7 +196,7 @@ func (d *AccountDirectory) Feedback(token string, kind controlaccount.FeedbackKi
 		if strategy == strategyRandom {
 			cooling := poolCoolingSec(d.table.PoolByIdx[idx])
 			if modeID == 5 {
-				cooling = 14400 // console 429 冷却 4 小时
+				cooling = 60 // console 429 冷却 60 秒（等 per-minute 窗口重置）
 			}
 			ApplyRateLimitedRandom(d.table, idx, modeID, cooling)
 		} else {

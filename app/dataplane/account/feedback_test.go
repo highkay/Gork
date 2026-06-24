@@ -59,6 +59,26 @@ func TestApplySuccessAndRateLimitFeedbackMatchesPythonStrategies(t *testing.T) {
 	}
 }
 
+func TestConsoleRateLimitSetsCoolingUntilSByIdx(t *testing.T) {
+	table, idx := feedbackTable()
+	before := int(appruntime.NowS())
+	table.HealthByIdx[idx] = 0.8
+	table.QuotaConsoleByIdx[idx] = 7
+	table.ResetConsoleAtByIdx[idx] = 0
+	ApplyRateLimitedRandom(table, idx, 5, 60)
+	if table.CoolingUntilSByIdx[idx] < before+60 {
+		t.Fatalf("console rate-limit should set CoolingUntilSByIdx: got %d, want >= %d",
+			table.CoolingUntilSByIdx[idx], before+60)
+	}
+	if table.QuotaConsoleByIdx[idx] != 0 {
+		t.Fatalf("console rate-limit should zero quota: got %d", table.QuotaConsoleByIdx[idx])
+	}
+	if table.ResetConsoleAtByIdx[idx] < before+60 {
+		t.Fatalf("console rate-limit should set reset: got %d, want >= %d",
+			table.ResetConsoleAtByIdx[idx], before+60)
+	}
+}
+
 func TestApplyStatusChangeRefreshesAvailabilityIndexesLikePython(t *testing.T) {
 	table, idx := feedbackTable()
 	key := ModeKey{PoolID: 0, ModeID: 1}
