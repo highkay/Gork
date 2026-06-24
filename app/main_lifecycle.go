@@ -67,7 +67,8 @@ var (
 	appMainStartRefreshRuntime        appMainLifecycleStep                = defaultAppMainStartRefreshRuntime
 	appMainStartProxyScheduler        appMainLifecycleStep                = defaultAppMainStartProxyScheduler
 	appMainAcquireSchedulerFileLock   func(context.Context) (Hook, error) = acquireAppMainSchedulerFileLock
-	appMainConsoleResetInterval                                           = 30 * time.Second
+	appMainConsoleResetInterval      = 30 * time.Second
+	appMainConsole429RecoveryInterval = 10 * time.Minute
 )
 
 func defaultLifecycleHooks() ([]Hook, []Hook) {
@@ -280,6 +281,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 	}
 	state.bindAdminRuntimeWithRefresh(service)
 	consoleResetCleanup := appMainStartConsoleQuotaResetLoop(service, appMainConsoleResetInterval)
+	console429RecoveryCleanup := appMainStartConsole429RecoveryLoop(service, appMainConsole429RecoveryInterval)
 	accountcontrol.SetRefreshService(service)
 	accountcontrol.SetRefreshScheduler(scheduler)
 	accountcontrol.SetSSOValidationScheduler(validationScheduler)
@@ -289,6 +291,10 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 		if consoleResetCleanup != nil {
 			consoleResetCleanup(ctx)
 			consoleResetCleanup = nil
+		}
+		if console429RecoveryCleanup != nil {
+			console429RecoveryCleanup(ctx)
+			console429RecoveryCleanup = nil
 		}
 		scheduler.Stop()
 		validationScheduler.Stop()
@@ -327,6 +333,33 @@ func appMainStartConsoleQuotaResetLoop(service *accountcontrol.AccountRefreshSer
 				return
 			case <-timer.C:
 				_, _ = service.ResetExpiredConsoleWindows(ctx)
+				timer.Reset(interval)
+			}
+		}
+	}()
+	return func(context.Context) error {
+		cancel()
+		<-done
+		return nil
+	}
+}
+
+func appMainStartConsole429RecoveryLoop(service *accountcontrol.AccountRefreshService, interval time.Duration) Hook {
+	if service == nil || interval <= 0 {
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		timer := time.NewTimer(interval)
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-timer.C:
+				_, _ = service.RecoverConsoleExpiredAccounts(ctx)
 				timer.Reset(interval)
 			}
 		}

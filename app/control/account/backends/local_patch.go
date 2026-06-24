@@ -250,4 +250,6 @@ var failureExtKeys = []string{
 	"expired_at",
 	"expired_reason",
 	"forbidden_strikes",
+	"console_429_count",
+	"console_429_last_at",
 }

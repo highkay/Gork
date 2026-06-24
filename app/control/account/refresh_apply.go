@@ -152,19 +152,58 @@ func (s *AccountRefreshService) recordSpecificFailure(ctx context.Context, token
 	return true
 }
 
+const (
+	console429MaxStrikes    = 3
+	console429WindowHours  = 12
+	console429WindowMillis = int64(console429WindowHours) * 3600 * 1000
+)
+
 func (s *AccountRefreshService) patchRateLimitedFailure(ctx context.Context, record AccountRecord, modeID int) error {
 	one := 1
 	now := refreshNowMS()
 	reason := "rate_limited"
 	patch := AccountPatch{Token: record.Token, UsageFailDelta: &one, LastFailAt: &now, LastFailReason: &reason}
-	if quotaSet, err := record.QuotaSet(); err == nil {
-		if window := quotaSet.Get(modeID); window != nil {
-			setQuotaPatch(&patch, modeID, rateLimitedWindowPatch(*window, now).ToDict())
+
+	if modeID == 5 {
+		// Console 429: use sliding window counter in ext instead of clearing quota
+		count := 0
+		lastAt := int64(0)
+		if v, ok := record.Ext["console_429_count"]; ok {
+			if n, ok := v.(float64); ok {
+				count = int(n)
+			}
+		}
+		if v, ok := record.Ext["console_429_last_at"]; ok {
+			if n, ok := v.(float64); ok {
+				lastAt = int64(n)
+			}
+		}
+		// Sliding window: reset if older than 12h
+		if now-lastAt > console429WindowMillis {
+			count = 0
+		}
+		count++
+		patch.ExtMerge = map[string]any{
+			"console_429_count":  count,
+			"console_429_last_at": now,
+		}
+		if count >= console429MaxStrikes {
+			expireReason := "console_429_strikes"
+			patch.Status = ptrAccountStatus(AccountStatusExpired)
+			patch.StateReason = &expireReason
+		}
+	} else {
+		if quotaSet, err := record.QuotaSet(); err == nil {
+			if window := quotaSet.Get(modeID); window != nil {
+				setQuotaPatch(&patch, modeID, rateLimitedWindowPatch(*window, now).ToDict())
+			}
 		}
 	}
 	_, err := s.repo.PatchAccounts(ctx, []AccountPatch{patch})
 	return swallowRefreshError(err)
 }
+
+func ptrAccountStatus(s AccountStatus) *AccountStatus { return &s }
 
 func (s *AccountRefreshService) applySingleMode(
 	ctx context.Context,
@@ -216,6 +255,45 @@ func (s *AccountRefreshService) singleModePatch(
 		patch.LastUseAt = &useAtMS
 	}
 	return &patch, nil
+}
+
+// RecoverConsoleExpiredAccounts resets accounts that were expired due to
+// console_429_strikes and whose 12h sliding window has elapsed.
+func (s *AccountRefreshService) RecoverConsoleExpiredAccounts(ctx context.Context) (int, error) {
+	snapshot, err := s.repo.RuntimeSnapshot(ctx)
+	if err != nil {
+		return 0, err
+	}
+	now := refreshNowMS()
+	var patches []AccountPatch
+	for _, record := range snapshot.Items {
+		if record.Status != AccountStatusExpired {
+			continue
+		}
+		if record.StateReason == nil || *record.StateReason != "console_429_strikes" {
+			continue
+		}
+		lastAt := int64(0)
+		if v, ok := record.Ext["console_429_last_at"]; ok {
+			if n, ok := v.(float64); ok {
+				lastAt = int64(n)
+			}
+		}
+		if now-lastAt < console429WindowMillis {
+			continue // still within 12h window
+		}
+		patches = append(patches, AccountPatch{
+			Token:         record.Token,
+			ClearFailures: true, // resets status→active, clears failureExtKeys including console_429_*
+		})
+	}
+	if len(patches) == 0 {
+		return 0, nil
+	}
+	if _, err := s.repo.PatchAccounts(ctx, patches); err != nil {
+		return 0, err
+	}
+	return len(patches), nil
 }
 
 func (s *AccountRefreshService) expireInvalidCredentials(ctx context.Context, record AccountRecord, err error) (RefreshResult, bool, error) {

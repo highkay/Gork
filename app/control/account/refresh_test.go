@@ -557,3 +557,75 @@ func TestRecordFailureAsyncRateLimitedPatchesEstimatedQuota(t *testing.T) {
 		t.Fatalf("rate-limited quota patch = %#v", patch.QuotaFast)
 	}
 }
+
+func TestRecoverConsoleExpiredAccountsResetsAfterWindow(t *testing.T) {
+	oldNow := refreshNowMS
+	refreshNowMS = func() int64 { return 50_000_000 }
+	t.Cleanup(func() { refreshNowMS = oldNow })
+
+	staleReason := "console_429_strikes"
+	staleLastAt := float64(49_990_000) // 10s ago → within window, NOT recovered
+	recoverableLastAt := float64(5_000_000) // 45M ms ago (12.5h) > 12h window → recovered
+	otherReason := "invalid_credentials"
+
+	records := []AccountRecord{
+		{Token: "tok-stale", Pool: "basic", Status: AccountStatusExpired, StateReason: &staleReason,
+			Ext: map[string]any{"console_429_count": float64(3), "console_429_last_at": staleLastAt},
+			Quota: DefaultQuotaSet("basic").ToDict()},
+		{Token: "tok-expired", Pool: "basic", Status: AccountStatusExpired, StateReason: &staleReason,
+			Ext: map[string]any{"console_429_count": float64(3), "console_429_last_at": recoverableLastAt},
+			Quota: DefaultQuotaSet("basic").ToDict()},
+		{Token: "tok-other", Pool: "basic", Status: AccountStatusExpired, StateReason: &otherReason,
+			Ext: map[string]any{}, Quota: DefaultQuotaSet("basic").ToDict()},
+		{Token: "tok-active", Pool: "basic", Status: AccountStatusActive,
+			Ext: map[string]any{}, Quota: DefaultQuotaSet("basic").ToDict()},
+	}
+	snapshot := RuntimeSnapshot{Items: records}
+	repo := &fakeRefreshRepo{records: records, snapshot: snapshot}
+	service := NewAccountRefreshService(repo, AccountRefreshOptions{})
+
+	recovered, err := service.RecoverConsoleExpiredAccounts(context.Background())
+
+	if err != nil {
+		t.Fatalf("RecoverConsoleExpiredAccounts returned error: %v", err)
+	}
+	if recovered != 1 {
+		t.Fatalf("expected 1 recovered, got %d; patches: %#v", recovered, repo.patches)
+	}
+	patch := repo.patches[0]
+	if patch.Token != "tok-expired" {
+		t.Fatalf("expected tok-expired, got %s", patch.Token)
+	}
+	if !patch.ClearFailures {
+		t.Fatalf("expected ClearFailures=true, got false")
+	}
+}
+
+func TestRecoverConsoleExpiredAccountsNoMatch(t *testing.T) {
+	oldNow := refreshNowMS
+	refreshNowMS = func() int64 { return 50_000_000 }
+	t.Cleanup(func() { refreshNowMS = oldNow })
+
+	reason := "console_429_strikes"
+	recentLastAt := float64(49_990_000) // 10s ago, within 12h window
+	records := []AccountRecord{
+		{Token: "tok-recent", Pool: "basic", Status: AccountStatusExpired, StateReason: &reason,
+			Ext: map[string]any{"console_429_count": float64(3), "console_429_last_at": recentLastAt},
+			Quota: DefaultQuotaSet("basic").ToDict()},
+	}
+	snapshot := RuntimeSnapshot{Items: records}
+	repo := &fakeRefreshRepo{records: records, snapshot: snapshot}
+	service := NewAccountRefreshService(repo, AccountRefreshOptions{})
+
+	recovered, err := service.RecoverConsoleExpiredAccounts(context.Background())
+
+	if err != nil {
+		t.Fatalf("RecoverConsoleExpiredAccounts returned error: %v", err)
+	}
+	if recovered != 0 {
+		t.Fatalf("expected 0 recovered, got %d", recovered)
+	}
+	if len(repo.patches) != 0 {
+		t.Fatalf("expected no patches, got %d", len(repo.patches))
+	}
+}
