@@ -58,7 +58,11 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 			return chatCompletionResult{}, platform.NewRateLimitError("No available accounts for this model tier")
 		}
 
-		slog.Info("console attempt", "attempt", attempt, "excluded_count", len(excluded), "token_prefix", account.Token[:8]+"...")
+		tokenPrefix := account.Token
+		if len(tokenPrefix) > 8 {
+			tokenPrefix = tokenPrefix[:8] + "..."
+		}
+		slog.Info("console attempt", "attempt", attempt, "excluded_count", len(excluded), "token_prefix", tokenPrefix)
 
 		result, err := runConsoleCompletionAttempt(ctx, options, account, responseID, isStream, timeoutS)
 		finishChatAttempt(ctx, directory, account, err == nil, err)
