@@ -11,41 +11,97 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/dslzl/gork/app/platform/config"
 )
 
 const webUIWebSocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+const defaultWebUIWebSocketMaxMessageBytes = 1 << 20
 
 type webUIWebSocket struct {
-	conn   net.Conn
-	reader *bufio.Reader
-	mu     sync.Mutex
+	conn            net.Conn
+	reader          *bufio.Reader
+	mu              sync.Mutex
+	closeOnce       sync.Once
+	release         func()
+	maxMessageBytes int
+	readTimeout     time.Duration
+	writeTimeout    time.Duration
 }
+
+type webUIWebSocketOptions struct {
+	MaxMessageBytes     int
+	MaxConnections      int
+	MaxConnectionsPerIP int
+	ReadTimeout         time.Duration
+	WriteTimeout        time.Duration
+	AllowedOrigins      []any
+}
+
+type webUIWebSocketConnectionLimiter struct {
+	mu    sync.Mutex
+	total int
+	byIP  map[string]int
+}
+
+var (
+	webUIWebSocketOptionsProvider = defaultWebUIWebSocketOptions
+	webUIWebSocketLimiter         = newWebUIWebSocketConnectionLimiter()
+)
 
 func acceptWebUIWebSocket(w http.ResponseWriter, r *http.Request) (*webUIWebSocket, error) {
 	if !webUIWebSocketUpgradeRequest(r) {
 		http.Error(w, "Bad websocket upgrade", http.StatusBadRequest)
 		return nil, errors.New("bad websocket upgrade")
 	}
+	options := webUIWebSocketOptionsProvider()
+	if !webUIWebSocketOriginAllowed(r, options) {
+		http.Error(w, "Forbidden websocket origin", http.StatusForbidden)
+		return nil, errors.New("forbidden websocket origin")
+	}
+	release, ok := webUIWebSocketLimiter.Acquire(webUIWebSocketRemoteIP(r), options)
+	if !ok {
+		http.Error(w, "Too many websocket connections", http.StatusTooManyRequests)
+		return nil, errors.New("too many websocket connections")
+	}
 	hijacker, ok := w.(http.Hijacker)
 	if !ok {
+		release()
 		http.Error(w, "Websocket unsupported", http.StatusInternalServerError)
 		return nil, errors.New("websocket unsupported")
 	}
 	conn, rw, err := hijacker.Hijack()
 	if err != nil {
+		release()
 		return nil, err
 	}
 	accept := webUIWebSocketAccept(r.Header.Get("Sec-WebSocket-Key"))
 	_, _ = fmt.Fprintf(rw, "HTTP/1.1 101 Switching Protocols\r\n")
 	_, _ = fmt.Fprintf(rw, "Upgrade: websocket\r\nConnection: Upgrade\r\n")
-	_, _ = fmt.Fprintf(rw, "Sec-WebSocket-Accept: %s\r\n\r\n", accept)
+	_, _ = fmt.Fprintf(rw, "Sec-WebSocket-Accept: %s\r\n", accept)
+	for key, values := range w.Header() {
+		for _, value := range values {
+			_, _ = fmt.Fprintf(rw, "%s: %s\r\n", key, value)
+		}
+	}
+	_, _ = fmt.Fprintf(rw, "\r\n")
 	if err := rw.Flush(); err != nil {
 		_ = conn.Close()
+		release()
 		return nil, err
 	}
-	return &webUIWebSocket{conn: conn, reader: rw.Reader}, nil
+	return &webUIWebSocket{
+		conn:            conn,
+		reader:          rw.Reader,
+		release:         release,
+		maxMessageBytes: options.MaxMessageBytes,
+		readTimeout:     options.ReadTimeout,
+		writeTimeout:    options.WriteTimeout,
+	}, nil
 }
 
 func webUIWebSocketUpgradeRequest(r *http.Request) bool {
@@ -58,6 +114,72 @@ func webUIWebSocketUpgradeRequest(r *http.Request) bool {
 func webUIWebSocketAccept(key string) string {
 	sum := sha1.Sum([]byte(strings.TrimSpace(key) + webUIWebSocketGUID))
 	return base64.StdEncoding.EncodeToString(sum[:])
+}
+
+func defaultWebUIWebSocketOptions() webUIWebSocketOptions {
+	return webUIWebSocketOptions{
+		MaxMessageBytes:     intFromAny(config.GetConfig("security.websocket.max_message_bytes", defaultWebUIWebSocketMaxMessageBytes), defaultWebUIWebSocketMaxMessageBytes),
+		MaxConnections:      intFromAny(config.GetConfig("security.websocket.max_connections", 128), 128),
+		MaxConnectionsPerIP: intFromAny(config.GetConfig("security.websocket.max_connections_per_ip", 16), 16),
+		ReadTimeout:         time.Duration(intFromAny(config.GetConfig("security.websocket.read_timeout_seconds", 60), 60)) * time.Second,
+		WriteTimeout:        time.Duration(intFromAny(config.GetConfig("security.websocket.write_timeout_seconds", 15), 15)) * time.Second,
+		AllowedOrigins:      config.GlobalConfig.GetList("security.cors.web_allowed_origins", nil),
+	}
+}
+
+func newWebUIWebSocketConnectionLimiter() *webUIWebSocketConnectionLimiter {
+	return &webUIWebSocketConnectionLimiter{byIP: map[string]int{}}
+}
+
+func (l *webUIWebSocketConnectionLimiter) Acquire(ip string, options webUIWebSocketOptions) (func(), bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if options.MaxConnections > 0 && l.total >= options.MaxConnections {
+		return nil, false
+	}
+	if options.MaxConnectionsPerIP > 0 && l.byIP[ip] >= options.MaxConnectionsPerIP {
+		return nil, false
+	}
+	l.total++
+	l.byIP[ip]++
+	return func() {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+		l.total--
+		l.byIP[ip]--
+		if l.byIP[ip] <= 0 {
+			delete(l.byIP, ip)
+		}
+	}, true
+}
+
+func webUIWebSocketOriginAllowed(r *http.Request, options webUIWebSocketOptions) bool {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" || webUIWebSocketSameOrigin(r, origin) {
+		return true
+	}
+	for _, value := range options.AllowedOrigins {
+		if strings.TrimSpace(fmt.Sprint(value)) == origin {
+			return true
+		}
+	}
+	return false
+}
+
+func webUIWebSocketSameOrigin(r *http.Request, origin string) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Host, r.Host)
+}
+
+func webUIWebSocketRemoteIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 func (ws *webUIWebSocket) ReadText() (string, error) {
@@ -90,11 +212,21 @@ func (ws *webUIWebSocket) WriteText(text string) error {
 }
 
 func (ws *webUIWebSocket) Close() error {
-	_ = ws.writeFrame(8, nil)
-	return ws.conn.Close()
+	var err error
+	ws.closeOnce.Do(func() {
+		_ = ws.writeFrame(8, nil)
+		err = ws.conn.Close()
+		if ws.release != nil {
+			ws.release()
+		}
+	})
+	return err
 }
 
 func (ws *webUIWebSocket) readFrame() (byte, []byte, error) {
+	if ws.readTimeout > 0 {
+		_ = ws.conn.SetReadDeadline(time.Now().Add(ws.readTimeout))
+	}
 	first, err := ws.reader.ReadByte()
 	if err != nil {
 		return 0, nil, err
@@ -106,6 +238,9 @@ func (ws *webUIWebSocket) readFrame() (byte, []byte, error) {
 	length, err := ws.readFrameLength(second)
 	if err != nil {
 		return 0, nil, err
+	}
+	if ws.maxMessageBytes > 0 && length > ws.maxMessageBytes {
+		return 0, nil, errors.New("websocket message too large")
 	}
 	mask, err := ws.readMask(second)
 	if err != nil {
@@ -157,6 +292,9 @@ func (ws *webUIWebSocket) readMask(second byte) ([]byte, error) {
 func (ws *webUIWebSocket) writeFrame(opcode byte, payload []byte) error {
 	ws.mu.Lock()
 	defer ws.mu.Unlock()
+	if ws.writeTimeout > 0 {
+		_ = ws.conn.SetWriteDeadline(time.Now().Add(ws.writeTimeout))
+	}
 	header := webUIWebSocketFrameHeader(opcode, len(payload))
 	if _, err := ws.conn.Write(header); err != nil {
 		return err

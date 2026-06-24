@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	goruntime "runtime"
@@ -24,6 +25,7 @@ import (
 	appruntime "github.com/dslzl/gork/app/platform/runtime"
 	"github.com/dslzl/gork/app/platform/storage"
 	"github.com/dslzl/gork/app/products/openai"
+	"github.com/dslzl/gork/app/products/web/ratelimit"
 )
 
 type adminConfigStore interface {
@@ -49,8 +51,13 @@ var (
 	adminStartedAt = time.Now()
 
 	adminRouterAuthSettings = func() auth.AuthSettings {
-		return auth.AuthSettings{AdminKey: config.GetConfig("app.admin_key", nil)}
+		adminKey := config.GetConfig("app.app_key", nil)
+		if adminKey == nil || adminKey == "" {
+			adminKey = config.GetConfig("app.admin_key", nil)
+		}
+		return auth.AuthSettings{AdminKey: adminKey}
 	}
+	adminAuthRateLimiter   = ratelimit.New(5, time.Minute)
 	adminRouterConfig      = adminConfigStore(config.GlobalConfig)
 	adminReloadFileLogging = func(level string, maxFiles int) error {
 		return logging.ReloadFileLogging(logging.ReloadFileLoggingOptions{FileLevel: level, MaxFiles: maxFiles})
@@ -156,12 +163,36 @@ func adminProtectedAny(handlers map[string]http.HandlerFunc) http.HandlerFunc {
 			writeAdminJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "Method not allowed"}})
 			return
 		}
-		if err := auth.VerifyAdminKey(r.Header.Get("Authorization"), r.URL.Query().Get("app_key"), adminRouterAuthSettings()); err != nil {
+		queryAppKey := strings.TrimSpace(r.URL.Query().Get("app_key"))
+		rateLimitKey := adminAuthRateLimitKey(r)
+		if !adminAuthRateLimiter.Allow(rateLimitKey) {
+			writeAdminJSON(w, http.StatusTooManyRequests, map[string]any{"error": map[string]any{"message": "Too many authentication attempts"}})
+			return
+		}
+		if err := auth.VerifyAdminKey(r.Header.Get("Authorization"), queryAppKey, adminRouterAuthSettings()); err != nil {
+			adminAuthRateLimiter.Fail(rateLimitKey)
 			writeAdminError(w, err)
 			return
 		}
+		adminAuthRateLimiter.Success(rateLimitKey)
+		if queryAppKey != "" && strings.TrimSpace(r.Header.Get("Authorization")) == "" {
+			writeAdminQueryAuthDeprecationHeaders(w)
+		}
 		handler(w, r)
 	}
+}
+
+func writeAdminQueryAuthDeprecationHeaders(w http.ResponseWriter) {
+	w.Header().Set("Deprecation", "true")
+	w.Header().Set("Warning", `299 - "app_key query authentication is deprecated; use Authorization: Bearer"`)
+}
+
+func adminAuthRateLimitKey(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 func handleAdminVerify(w http.ResponseWriter, _ *http.Request) {
@@ -191,7 +222,7 @@ func handleAdminProtocolCheckLatest(w http.ResponseWriter, _ *http.Request) {
 }
 
 func handleAdminGetConfig(w http.ResponseWriter, _ *http.Request) {
-	writeAdminJSON(w, http.StatusOK, adminRouterConfig.Raw())
+	writeAdminJSON(w, http.StatusOK, redactAdminConfig(adminRouterConfig.Raw()))
 }
 
 func handleAdminUpdateConfig(w http.ResponseWriter, r *http.Request) {
@@ -394,6 +425,63 @@ func resetAdminConfig(ctx context.Context) (map[string]any, error) {
 
 func adminDirectoryError() error {
 	return platform.NewAppError("Account directory not initialised", platform.ErrorKindServer, "directory_not_initialised", 503, nil)
+}
+
+func redactAdminConfig(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		redacted := make(map[string]any, len(typed))
+		for key, item := range typed {
+			if adminConfigKeySensitive(key) {
+				redacted[key] = "<redacted>"
+				continue
+			}
+			redacted[key] = redactAdminConfig(item)
+		}
+		return redacted
+	case []any:
+		redacted := make([]any, len(typed))
+		for i, item := range typed {
+			redacted[i] = redactAdminConfig(item)
+		}
+		return redacted
+	case string:
+		if adminConfigStringSensitive(typed) {
+			return "<redacted>"
+		}
+		return typed
+	default:
+		return typed
+	}
+}
+
+func adminConfigKeySensitive(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	sensitiveTerms := []string{
+		"app_key",
+		"admin_key",
+		"api_key",
+		"bearer",
+		"cf_clearance",
+		"credential",
+		"dsn",
+		"password",
+		"passwd",
+		"secret",
+		"sso",
+		"token",
+	}
+	for _, term := range sensitiveTerms {
+		if strings.Contains(normalized, term) {
+			return true
+		}
+	}
+	return false
+}
+
+func adminConfigStringSensitive(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	return strings.Contains(trimmed, "://") && strings.Contains(trimmed, "@")
 }
 
 func writeAdminJSON(w http.ResponseWriter, status int, payload any) {

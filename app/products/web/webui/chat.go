@@ -8,6 +8,7 @@ import (
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/products/openai"
+	"github.com/dslzl/gork/app/products/web/ratelimit"
 )
 
 var (
@@ -18,6 +19,7 @@ var (
 		}
 	}
 	webUIListModels         = controlmodel.ListEnabled
+	webUIAuthRateLimiter    = ratelimit.New(5, time.Minute)
 	webUIUnixNow            = defaultWebUIUnixNow
 	webUIChatCompletions    = defaultWebUIChatCompletions
 	webUIImagineEvents      = defaultWebUIImagineEvents

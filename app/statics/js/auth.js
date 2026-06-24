@@ -78,25 +78,71 @@ async function _decrypt(s) {
 
 /* Key store factory */
 function _keyStore(k) {
+  const modeKey = `${k}:mode`;
+  const storageGet = (store, key) => {
+    try {
+      return store.getItem(key) || '';
+    } catch {
+      return '';
+    }
+  };
+  const storageSet = (store, key, value) => {
+    try {
+      store.setItem(key, value);
+    } catch {
+      /* ignore unavailable storage */
+    }
+  };
+  const storageRemove = (store, key) => {
+    try {
+      store.removeItem(key);
+    } catch {
+      /* ignore unavailable storage */
+    }
+  };
+  const clearPersistent = () => {
+    storageRemove(localStorage, k);
+    storageRemove(localStorage, modeKey);
+  };
   return {
     get: async () => {
-      const s = localStorage.getItem(k) || '';
+      const sessionValue = storageGet(sessionStorage, k);
+      const persistentValue = storageGet(localStorage, k);
+      const s = sessionValue || persistentValue;
       if (!s) return '';
       try {
-        return await _decrypt(s);
+        const value = await _decrypt(s);
+        if (!sessionValue && storageGet(localStorage, modeKey) !== 'persistent') {
+          storageSet(sessionStorage, k, (await _encrypt(value)) || '');
+          clearPersistent();
+        }
+        return value;
       } catch {
-        localStorage.removeItem(k);
+        storageRemove(sessionStorage, k);
+        clearPersistent();
         return '';
       }
     },
-    set: async (v) => {
+    set: async (v, options = {}) => {
       if (!v) {
-        localStorage.removeItem(k);
+        storageRemove(sessionStorage, k);
+        clearPersistent();
         return;
       }
-      localStorage.setItem(k, (await _encrypt(v)) || '');
+      const encrypted = (await _encrypt(v)) || '';
+      if (options.remember === true) {
+        storageRemove(sessionStorage, k);
+        storageSet(localStorage, k, encrypted);
+        storageSet(localStorage, modeKey, 'persistent');
+        return;
+      }
+      storageSet(sessionStorage, k, encrypted);
+      clearPersistent();
     },
-    clear: () => localStorage.removeItem(k),
+    clear: () => {
+      storageRemove(sessionStorage, k);
+      clearPersistent();
+    },
   };
 }
 

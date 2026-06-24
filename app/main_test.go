@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	platformconfig "github.com/dslzl/gork/app/platform/config"
+	configbackends "github.com/dslzl/gork/app/platform/config/backends"
 	"github.com/dslzl/gork/app/platform/observability"
 )
 
@@ -47,6 +49,7 @@ func TestNewAppCORSAndErrorRecovery(t *testing.T) {
 	})
 	req := httptest.NewRequest(http.MethodGet, "/admin", nil)
 	req.Header.Set("Origin", "https://example.test")
+	req.Host = "example.test"
 	rec := httptest.NewRecorder()
 	app.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusInternalServerError || !strings.Contains(rec.Body.String(), "Internal server error") {
@@ -54,6 +57,58 @@ func TestNewAppCORSAndErrorRecovery(t *testing.T) {
 	}
 	if rec.Header().Get("Access-Control-Allow-Origin") == "" {
 		t.Fatalf("missing CORS headers: %#v", rec.Header())
+	}
+}
+
+func TestNewAppCORSRejectsWildcardCredentialsAndSplitsAPIFallback(t *testing.T) {
+	stubAppMainRequestMiddleware(t)
+	app := NewApp(AppOptions{WebRouter: textHandler("web")})
+
+	req := httptest.NewRequest(http.MethodOptions, "/v1/models", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("preflight status=%d", rec.Code)
+	}
+	if rec.Header().Get("Access-Control-Allow-Origin") == "*" {
+		t.Fatalf("CORS must not allow wildcard origin when credentials are possible: %#v", rec.Header())
+	}
+	if rec.Header().Get("Access-Control-Allow-Credentials") == "true" {
+		t.Fatalf("untrusted API origin should not receive credentials header: %#v", rec.Header())
+	}
+
+	req = httptest.NewRequest(http.MethodOptions, "/admin", nil)
+	req.Header.Set("Origin", "http://example.com")
+	req.Host = "example.com"
+	rec = httptest.NewRecorder()
+	app.Handler().ServeHTTP(rec, req)
+	if rec.Header().Get("Access-Control-Allow-Origin") != "http://example.com" ||
+		rec.Header().Get("Access-Control-Allow-Credentials") != "true" {
+		t.Fatalf("same-origin web preflight headers=%#v", rec.Header())
+	}
+}
+
+func TestNewAppSecurityHeaders(t *testing.T) {
+	stubAppMainRequestMiddleware(t)
+	app := NewApp(AppOptions{OpenAIRouter: textHandler("openai"), WebRouter: textHandler("web")})
+
+	rec := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin", nil))
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" ||
+		rec.Header().Get("Referrer-Policy") == "" ||
+		rec.Header().Get("Permissions-Policy") == "" ||
+		rec.Header().Get("Content-Security-Policy") == "" {
+		t.Fatalf("admin security headers=%#v", rec.Header())
+	}
+
+	rec = httptest.NewRecorder()
+	app.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/models", nil))
+	if rec.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("api missing base security headers=%#v", rec.Header())
+	}
+	if rec.Header().Get("Content-Security-Policy") != "" {
+		t.Fatalf("api should not receive web CSP: %#v", rec.Header())
 	}
 }
 
@@ -118,6 +173,17 @@ func TestDefaultLifecycleWiresAdminAccountRuntime(t *testing.T) {
 	t.Setenv("DATA_DIR", t.TempDir())
 	t.Setenv("HOST", "127.0.0.1")
 	t.Setenv("PORT", "0")
+	data := map[string]any{"app": map[string]any{"app_key": "gork"}}
+	oldCreateConfigBackend := appMainCreateConfigBackend
+	oldGlobalConfig := platformconfig.GlobalConfig
+	t.Cleanup(func() {
+		appMainCreateConfigBackend = oldCreateConfigBackend
+		platformconfig.GlobalConfig = oldGlobalConfig
+	})
+	appMainCreateConfigBackend = func(configbackends.FactoryOptions) (configbackends.ConfigBackend, error) {
+		return lifecycleConfigBackend{data: &data}, nil
+	}
+	platformconfig.GlobalConfig = platformconfig.NewConfigSnapshot(lifecycleConfigBackend{data: &data}, platformconfig.ConfigSnapshotOptions{})
 
 	app := NewApp(AppOptions{})
 	if err := app.Start(context.Background()); err != nil {

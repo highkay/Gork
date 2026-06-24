@@ -89,6 +89,12 @@ func webUIImagineToken(r *http.Request) string {
 	return strings.TrimSpace(r.URL.Query().Get("access_token"))
 }
 
+func webUIImagineLegacyAccessToken(r *http.Request) bool {
+	return strings.TrimSpace(r.URL.Query().Get("access_token")) != "" &&
+		strings.TrimSpace(r.URL.Query().Get("ticket")) == "" &&
+		strings.TrimSpace(r.Header.Get("Authorization")) == ""
+}
+
 func parseOptionalBool(value any) *bool {
 	if value == nil {
 		return nil

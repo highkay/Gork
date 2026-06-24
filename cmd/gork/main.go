@@ -11,6 +11,8 @@ import (
 	"time"
 
 	grokapp "github.com/dslzl/gork/app"
+	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/platform/config"
 )
 
 func main() {
@@ -36,10 +38,18 @@ func main() {
 		}
 	}()
 
-	server := &http.Server{
-		Addr:              listenAddress(),
+	server, err := newGorkHTTPServer(gorkHTTPServerOptions{
+		Address:           listenAddress(),
 		Handler:           application.Handler(),
-		ReadHeaderTimeout: 15 * time.Second,
+		APIKeys:           auth.GetAPIKeys(auth.AuthSettings{APIKey: config.GlobalConfig.Get("app.api_key", "")}),
+		AllowUnauth:       allowUnauthenticatedAPI(),
+		ReadTimeout:       configSeconds("server.read_timeout_seconds", 0),
+		ReadHeaderTimeout: configSeconds("server.read_header_timeout_seconds", 15),
+		IdleTimeout:       configSeconds("server.idle_timeout_seconds", 0),
+		MaxHeaderBytes:    config.GlobalConfig.GetInt("server.max_header_bytes", 0),
+	})
+	if err != nil {
+		log.Fatalf("server configuration failed: %v", err)
 	}
 	go func() {
 		<-ctx.Done()
@@ -63,4 +73,21 @@ func listenAddress() string {
 		port = "8000"
 	}
 	return host + ":" + port
+}
+
+func allowUnauthenticatedAPI() bool {
+	switch os.Getenv("ALLOW_UNAUTHENTICATED_API") {
+	case "1", "true", "TRUE", "yes", "YES", "on", "ON":
+		return true
+	default:
+		return false
+	}
+}
+
+func configSeconds(key string, fallback int) time.Duration {
+	seconds := config.GlobalConfig.GetInt(key, fallback)
+	if seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }

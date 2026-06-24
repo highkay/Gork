@@ -12,6 +12,7 @@ import (
 
 	controlmodel "github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform/auth"
+	"github.com/dslzl/gork/app/products/web/ratelimit"
 )
 
 func TestWebUIModelsRequiresKeyAndMatchesPythonShape(t *testing.T) {
@@ -45,6 +46,23 @@ func TestWebUIModelsRequiresKeyAndMatchesPythonShape(t *testing.T) {
 	}
 	if data[2].(map[string]any)["capability"] != "image_edit" || data[3].(map[string]any)["capability"] != "video" {
 		t.Fatalf("capabilities = %#v %#v", data[2], data[3])
+	}
+}
+
+func TestWebUIProtectedRateLimitsFailedAuth(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	webUIAuthRateLimiter = ratelimit.New(2, time.Minute)
+
+	for i := 0; i < 2; i++ {
+		rec := webUIRequest(http.MethodGet, "/webui/api/models", "", "Bearer wrong")
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("failure %d status=%d body=%s", i, rec.Code, rec.Body.String())
+		}
+	}
+	rec := webUIRequest(http.MethodGet, "/webui/api/models", "", "Bearer wrong")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rate limited status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 
@@ -214,6 +232,7 @@ func decodeWebUIBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]an
 func resetWebUITestDeps(t *testing.T) {
 	t.Helper()
 	oldAuth := webUIAuthSettings
+	oldAuthLimiter := webUIAuthRateLimiter
 	oldModels := webUIListModels
 	oldNow := webUIUnixNow
 	oldChat := webUIChatCompletions
@@ -222,9 +241,12 @@ func resetWebUITestDeps(t *testing.T) {
 	oldImagineNSFW := webUIImagineDefaultNSFW
 	oldImagineNow := webUIImagineNow
 	oldImagineTickets := webUIImagineTickets
+	oldWebSocketOptions := webUIWebSocketOptionsProvider
+	oldWebSocketLimiter := webUIWebSocketLimiter
 	oldVoiceDirectory := webUIVoiceDirectory
 	oldVoiceFetch := webUIVoiceFetchToken
 	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{} }
+	webUIAuthRateLimiter = ratelimit.New(5, time.Minute)
 	webUIListModels = controlmodel.ListEnabled
 	webUIUnixNow = defaultWebUIUnixNow
 	webUIChatCompletions = defaultWebUIChatCompletions
@@ -233,10 +255,13 @@ func resetWebUITestDeps(t *testing.T) {
 	webUIImagineDefaultNSFW = defaultWebUIImagineDefaultNSFW
 	webUIImagineNow = time.Now
 	webUIImagineTickets = newWebUIImagineTicketStore()
+	webUIWebSocketOptionsProvider = defaultWebUIWebSocketOptions
+	webUIWebSocketLimiter = newWebUIWebSocketConnectionLimiter()
 	webUIVoiceDirectory = defaultWebUIVoiceDirectory
 	webUIVoiceFetchToken = defaultWebUIVoiceFetchToken
 	t.Cleanup(func() {
 		webUIAuthSettings = oldAuth
+		webUIAuthRateLimiter = oldAuthLimiter
 		webUIListModels = oldModels
 		webUIUnixNow = oldNow
 		webUIChatCompletions = oldChat
@@ -245,6 +270,8 @@ func resetWebUITestDeps(t *testing.T) {
 		webUIImagineDefaultNSFW = oldImagineNSFW
 		webUIImagineNow = oldImagineNow
 		webUIImagineTickets = oldImagineTickets
+		webUIWebSocketOptionsProvider = oldWebSocketOptions
+		webUIWebSocketLimiter = oldWebSocketLimiter
 		webUIVoiceDirectory = oldVoiceDirectory
 		webUIVoiceFetchToken = oldVoiceFetch
 	})

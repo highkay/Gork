@@ -3,6 +3,7 @@ package webui
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 
 	"github.com/dslzl/gork/app/platform"
@@ -15,12 +16,27 @@ func webUIProtected(method string, handler http.HandlerFunc) http.HandlerFunc {
 			writeWebUIJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "Method not allowed"}})
 			return
 		}
+		rateLimitKey := webUIAuthRateLimitKey(r)
+		if !webUIAuthRateLimiter.Allow(rateLimitKey) {
+			writeWebUIJSON(w, http.StatusTooManyRequests, map[string]any{"error": map[string]any{"message": "Too many authentication attempts"}})
+			return
+		}
 		if err := auth.VerifyWebUIKey(r.Header.Get("Authorization"), webUIAuthSettings()); err != nil {
+			webUIAuthRateLimiter.Fail(rateLimitKey)
 			writeWebUIError(w, err)
 			return
 		}
+		webUIAuthRateLimiter.Success(rateLimitKey)
 		handler(w, r)
 	}
+}
+
+func webUIAuthRateLimitKey(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
+	}
+	return r.RemoteAddr
 }
 
 func writeWebUIJSON(w http.ResponseWriter, status int, payload any) {

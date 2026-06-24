@@ -43,6 +43,10 @@ func handleWebUIImagineWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 		return
 	}
+	if webUIImagineLegacyAccessToken(r) {
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Warning", `299 - "access_token query authentication is deprecated; use a WebSocket ticket"`)
+	}
 	ws, err := acceptWebUIWebSocket(w, r)
 	if err != nil {
 		return

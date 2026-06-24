@@ -8,11 +8,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	reverse "github.com/dslzl/gork/app/dataplane/reverse"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/storage"
+	"github.com/dslzl/gork/app/products/web/ratelimit"
 )
 
 func TestAdminRouterVerifyRequiresAdminKey(t *testing.T) {
@@ -31,12 +33,34 @@ func TestAdminRouterVerifyRequiresAdminKey(t *testing.T) {
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"status":"success"`) {
 		t.Fatalf("query key status/body=%d/%s", rec.Code, rec.Body.String())
 	}
+	if rec.Header().Get("Deprecation") != "true" || rec.Header().Get("Warning") == "" {
+		t.Fatalf("query key response should include deprecation headers: %#v", rec.Header())
+	}
+}
+
+func TestAdminRouterRateLimitsFailedAuth(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{AdminKey: "secret"} }
+	adminAuthRateLimiter = ratelimit.New(2, time.Minute)
+
+	for i := 0; i < 2; i++ {
+		rec := adminRequest(http.MethodGet, "/admin/api/verify", "", "Bearer wrong")
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("failure %d status=%d body=%s", i, rec.Code, rec.Body.String())
+		}
+	}
+	rec := adminRequest(http.MethodGet, "/admin/api/verify", "", "Bearer wrong")
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rate limited status=%d body=%s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestAdminConfigAndStorageEndpointsMatchPythonShape(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	adminRouterConfig = &fakeAdminConfig{raw: map[string]any{
-		"app": map[string]any{"admin_key": "gork"},
+		"app":      map[string]any{"app_key": "gork", "api_key": "secret"},
+		"database": map[string]any{"dsn": "postgres://user:pass@localhost/db"},
+		"proxy":    map[string]any{"url": "http://user:pass@proxy"},
 	}}
 	adminStorageBackend = func() string { return "local" }
 	adminSchedulerStatus = func() map[string]any {
@@ -64,8 +88,14 @@ func TestAdminConfigAndStorageEndpointsMatchPythonShape(t *testing.T) {
 	}
 
 	rec := adminRequest(http.MethodGet, "/admin/api/config", "", "Bearer gork")
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"admin_key":"gork"`) {
+	if rec.Code != http.StatusOK {
 		t.Fatalf("config status/body=%d/%s", rec.Code, rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "gork") || strings.Contains(rec.Body.String(), "secret") || strings.Contains(rec.Body.String(), "user:pass") {
+		t.Fatalf("config leaked sensitive value: %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), `\u003credacted\u003e`) {
+		t.Fatalf("config did not include redaction marker: %s", rec.Body.String())
 	}
 
 	rec = adminRequest(http.MethodGet, "/admin/api/storage", "", "Bearer gork")
@@ -320,7 +350,7 @@ func TestAdminRouterCoreRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		json   map[string]any
 	}{
 		{name: "verify", method: http.MethodGet, path: "/admin/api/verify", status: http.StatusOK, json: map[string]any{"status": "success"}},
-		{name: "config get", method: http.MethodGet, path: "/admin/api/config", status: http.StatusOK, json: map[string]any{"app.admin_key": "gork"}},
+		{name: "config get", method: http.MethodGet, path: "/admin/api/config", status: http.StatusOK, json: map[string]any{"app.admin_key": "<redacted>"}},
 		{name: "config post", method: http.MethodPost, path: "/admin/api/config", body: `{"cache":{"local":{"image_limit_mb":10}}}`, status: http.StatusOK, json: map[string]any{"status": "success", "selection_strategy": "quota"}},
 		{name: "config reset", method: http.MethodPost, path: "/admin/api/config/reset", status: http.StatusOK, json: map[string]any{"status": "success", "selection_strategy": "quota"}},
 		{name: "storage", method: http.MethodGet, path: "/admin/api/storage", status: http.StatusOK, json: map[string]any{"type": "local"}},
@@ -405,6 +435,7 @@ func adminGoldenJSONValue(body map[string]any, dotted string) (any, bool) {
 func resetAdminRouterDepsForTest(t *testing.T) {
 	t.Helper()
 	oldAuth := adminRouterAuthSettings
+	oldAuthLimiter := adminAuthRateLimiter
 	oldConfig := adminRouterConfig
 	oldRuntime := adminReconcileRefreshRuntime
 	oldRuntimeStatus := adminRuntimeStatus
@@ -437,7 +468,8 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	oldTokensNow := adminTokensNowMS
 	oldProtocolCheckRunner := adminProtocolCheckRunner
 	oldProtocolCheckLatest := append([]reverse.ProtocolCheckResult(nil), adminProtocolCheckLatest...)
-	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{} }
+	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{AdminKey: "gork"} }
+	adminAuthRateLimiter = ratelimit.New(5, time.Minute)
 	adminRouterConfig = &fakeAdminConfig{}
 	adminReconcileRefreshRuntime = func() string { return "" }
 	adminRuntimeStatus = func() map[string]any { return nil }
@@ -476,6 +508,7 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	adminProtocolCheckLatest = nil
 	t.Cleanup(func() {
 		adminRouterAuthSettings = oldAuth
+		adminAuthRateLimiter = oldAuthLimiter
 		adminRouterConfig = oldConfig
 		adminReconcileRefreshRuntime = oldRuntime
 		adminRuntimeStatus = oldRuntimeStatus

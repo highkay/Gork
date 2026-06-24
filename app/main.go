@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/pprof"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -190,7 +192,8 @@ func serveAppFavicon(w http.ResponseWriter, r *http.Request, staticsRoot string)
 
 func withAppMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeAppCORSHeaders(w)
+		writeAppCORSHeaders(w, r)
+		writeAppSecurityHeaders(w, r)
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -207,11 +210,78 @@ func withAppMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func writeAppCORSHeaders(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	w.Header().Set("Access-Control-Allow-Methods", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "*")
+func writeAppSecurityHeaders(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	if appBoolConfig("security.headers.hsts_enabled", false) {
+		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+	}
+	if strings.HasPrefix(r.URL.Path, "/admin") || strings.HasPrefix(r.URL.Path, "/webui") {
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'")
+	}
+}
+
+func writeAppCORSHeaders(w http.ResponseWriter, r *http.Request) {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin == "" {
+		return
+	}
+	allowed, credentials := appCORSOriginAllowed(r, origin)
+	if !allowed {
+		return
+	}
+	w.Header().Set("Access-Control-Allow-Origin", origin)
+	w.Header().Set("Vary", "Origin")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-API-Key")
+	if credentials {
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+	}
+}
+
+func appCORSOriginAllowed(r *http.Request, origin string) (bool, bool) {
+	if strings.HasPrefix(r.URL.Path, "/v1/") {
+		return appOriginInList(origin, config.GlobalConfig.GetList("security.cors.api_allowed_origins", nil)), false
+	}
+	if appSameOrigin(r, origin) || appOriginInList(origin, config.GlobalConfig.GetList("security.cors.web_allowed_origins", nil)) {
+		return true, true
+	}
+	return false, false
+}
+
+func appSameOrigin(r *http.Request, origin string) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" {
+		return false
+	}
+	return strings.EqualFold(parsed.Host, r.Host)
+}
+
+func appOriginInList(origin string, values []any) bool {
+	for _, value := range values {
+		candidate := strings.TrimSpace(fmt.Sprint(value))
+		if candidate == origin {
+			return true
+		}
+	}
+	return false
+}
+
+func appBoolConfig(key string, fallback bool) bool {
+	value := config.GetConfig(key, fallback)
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
+		}
+	}
+	return fallback
 }
 
 func recoverAppPanic(w http.ResponseWriter) {

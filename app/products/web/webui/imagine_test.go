@@ -2,6 +2,7 @@ package webui
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
@@ -93,7 +94,7 @@ func TestWebUIImagineWebSocketNoAccountAndStop(t *testing.T) {
 		return nil, true, ctx.Err()
 	}
 
-	client := newWebUIWSTestClient(t, "")
+	client := newWebUIWSTestClient(t, "Bearer web")
 	defer client.Close()
 	client.SendJSON(map[string]any{"type": "start", "prompt": "slow"})
 	_ = client.ReadJSON()
@@ -183,6 +184,77 @@ func TestWebUIImagineWebSocketAcceptsOneTimeTicket(t *testing.T) {
 	}
 }
 
+func TestWebUIImagineWebSocketLegacyAccessTokenWarns(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	server := httptest.NewServer(NewRouter())
+	defer server.Close()
+
+	conn, _, resp := webUIWSDialResponse(t, server.URL, "/webui/api/imagine/ws?access_token=web", "", nil)
+	if conn != nil {
+		_ = conn.Close()
+	}
+	if resp.StatusCode != http.StatusSwitchingProtocols {
+		t.Fatalf("legacy access_token websocket status = %d", resp.StatusCode)
+	}
+	if resp.Header.Get("Deprecation") != "true" || resp.Header.Get("Warning") == "" {
+		t.Fatalf("legacy access_token missing deprecation headers: %#v", resp.Header)
+	}
+}
+
+func TestWebUIImagineWebSocketRejectsCrossOrigin(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	server := httptest.NewServer(NewRouter())
+	defer server.Close()
+
+	conn, _, status := webUIWSDialWithHeaders(t, server.URL, "/webui/api/imagine/ws", "Bearer web", map[string]string{"Origin": "https://evil.test"})
+	if conn != nil {
+		_ = conn.Close()
+	}
+	if status != http.StatusForbidden {
+		t.Fatalf("cross-origin websocket status = %d", status)
+	}
+}
+
+func TestWebUIImagineWebSocketConnectionLimit(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	webUIWebSocketOptionsProvider = func() webUIWebSocketOptions {
+		return webUIWebSocketOptions{MaxMessageBytes: 1024, MaxConnections: 1, MaxConnectionsPerIP: 1}
+	}
+	server := httptest.NewServer(NewRouter())
+	defer server.Close()
+
+	first, _, status := webUIWSDial(t, server.URL, "/webui/api/imagine/ws", "Bearer web")
+	if first != nil {
+		defer first.Close()
+	}
+	if status != http.StatusSwitchingProtocols {
+		t.Fatalf("first websocket status = %d", status)
+	}
+	second, _, status := webUIWSDial(t, server.URL, "/webui/api/imagine/ws", "Bearer web")
+	if second != nil {
+		_ = second.Close()
+	}
+	if status != http.StatusTooManyRequests {
+		t.Fatalf("second websocket status = %d", status)
+	}
+}
+
+func TestWebUIWebSocketRejectsOversizeMessage(t *testing.T) {
+	payload := []byte("12345")
+	frame := append([]byte{0x81, byte(0x80 | len(payload)), 1, 2, 3, 4}, payload...)
+	for i := range payload {
+		frame[6+i] ^= []byte{1, 2, 3, 4}[i%4]
+	}
+	ws := &webUIWebSocket{reader: bufio.NewReader(bytes.NewReader(frame)), maxMessageBytes: 4}
+	_, _, err := ws.readFrame()
+	if err == nil || !strings.Contains(err.Error(), "message too large") {
+		t.Fatalf("oversize error = %v", err)
+	}
+}
+
 func assertWebUIWSError(t *testing.T, payload map[string]any, message, code string) {
 	t.Helper()
 	if payload["type"] != "error" || payload["message"] != message || payload["code"] != code {
@@ -201,9 +273,6 @@ func newWebUIWSTestClient(t *testing.T, authorization string) *webUIWSTestClient
 	server := httptest.NewServer(NewRouter())
 	t.Cleanup(server.Close)
 	target := "/webui/api/imagine/ws"
-	if authorization == "" {
-		target += "?access_token=web"
-	}
 	conn, reader, status := webUIWSDial(t, server.URL, target, authorization)
 	if status != http.StatusSwitchingProtocols {
 		t.Fatalf("websocket status = %d", status)
@@ -221,6 +290,18 @@ func webUIWSDialStatus(t *testing.T, serverURL, authorization string) int {
 }
 
 func webUIWSDial(t *testing.T, serverURL, target, authorization string) (net.Conn, *bufio.Reader, int) {
+	t.Helper()
+	conn, reader, resp := webUIWSDialResponse(t, serverURL, target, authorization, nil)
+	return conn, reader, resp.StatusCode
+}
+
+func webUIWSDialWithHeaders(t *testing.T, serverURL, target, authorization string, headers map[string]string) (net.Conn, *bufio.Reader, int) {
+	t.Helper()
+	conn, reader, resp := webUIWSDialResponse(t, serverURL, target, authorization, headers)
+	return conn, reader, resp.StatusCode
+}
+
+func webUIWSDialResponse(t *testing.T, serverURL, target, authorization string, headers map[string]string) (net.Conn, *bufio.Reader, *http.Response) {
 	t.Helper()
 	parsed, err := url.Parse(serverURL)
 	if err != nil {
@@ -242,6 +323,9 @@ func webUIWSDial(t *testing.T, serverURL, target, authorization string) (net.Con
 	if authorization != "" {
 		lines = append(lines, "Authorization: "+authorization)
 	}
+	for key, value := range headers {
+		lines = append(lines, key+": "+value)
+	}
 	_, _ = fmt.Fprintf(conn, "%s\r\n\r\n", strings.Join(lines, "\r\n"))
 	reader := bufio.NewReader(conn)
 	resp, err := http.ReadResponse(reader, nil)
@@ -249,7 +333,7 @@ func webUIWSDial(t *testing.T, serverURL, target, authorization string) (net.Con
 		_ = conn.Close()
 		t.Fatal(err)
 	}
-	return conn, reader, resp.StatusCode
+	return conn, reader, resp
 }
 
 func webUIWSKey(t *testing.T) string {
