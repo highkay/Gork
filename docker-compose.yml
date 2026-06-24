@@ -1,7 +1,7 @@
 services:
   gork:
     container_name: gork
-    image: ghcr.io/dslzl/gork:latest
+    image: ${GORK_IMAGE:-ghcr.io/dslzl/gork:latest}
     ports:
       - "${HOST_PORT:-8000}:${PORT:-${SERVER_PORT:-8000}}"
     environment:
@@ -13,6 +13,7 @@ services:
       SERVER_PORT: ${SERVER_PORT:-8000}
       DATA_DIR: ${DATA_DIR:-/app/data}
       LOG_DIR: ${LOG_DIR:-/app/logs}
+      TMPDIR: ${TMPDIR:-/app/data/tmp}
       ACCOUNT_STORAGE: ${ACCOUNT_STORAGE:-local}
       ACCOUNT_LOCAL_PATH: ${ACCOUNT_LOCAL_PATH:-data/accounts.db}
       ACCOUNT_REDIS_URL: ${ACCOUNT_REDIS_URL:-}
@@ -35,29 +36,38 @@ services:
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:$${PORT:-8000}/health || exit 1"]
+      test: ["CMD", "/app/gork", "healthcheck"]
       interval: 30s
       timeout: 5s
       start_period: 15s
       retries: 3
     restart: unless-stopped
+    mem_limit: ${GORK_MEM_LIMIT:-768m}
+    cpus: ${GORK_CPUS:-1.0}
 
   redis:
     profiles: ["redis"]
     container_name: gork-redis
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99}
     command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - ./data/redis:/data
     restart: unless-stopped
+    mem_limit: ${REDIS_MEM_LIMIT:-256m}
+    cpus: ${REDIS_CPUS:-0.5}
 
   # 如果出口 IP 不干净，可取消以下注释使用 Warp 作为落地代理
   # 启用后将 proxy.base_proxy_url 设为 socks5://warp:1080
   # warp:
   #   container_name: warp
-  #   image: caomingjun/warp:latest
+  #   image: ${WARP_IMAGE:-caomingjun/warp@sha256:905b91c3fe197a625611064ef0664f27e9ecdd0a30a91c4ae7046e06a2bf2643}
   #   restart: unless-stopped
+  #   mem_limit: ${WARP_MEM_LIMIT:-256m}
+  #   cpus: ${WARP_CPUS:-0.5}
   #   ports:
   #     - "127.0.0.1:1080:1080"
   #   environment:
@@ -68,10 +78,12 @@ services:
   # 启用 CF 自动刷新时取消以下注释
   # flaresolverr:
   #   container_name: flaresolverr
-  #   image: ghcr.io/flaresolverr/flaresolverr:latest
+  #   image: ${FLARESOLVERR_IMAGE:-ghcr.io/flaresolverr/flaresolverr@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47}
   #   ports:
   #     - "127.0.0.1:8191:8191"
   #   environment:
   #     TZ: Asia/Shanghai
   #     LOG_LEVEL: info
   #   restart: unless-stopped
+  #   mem_limit: ${FLARESOLVERR_MEM_LIMIT:-512m}
+  #   cpus: ${FLARESOLVERR_CPUS:-1.0}

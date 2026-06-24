@@ -59,8 +59,11 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref_type == 'branch' }}
+            type=ref,event=branch
             type=ref,event=tag
             type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -73,3 +76,5 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           pull: true
+          sbom: true
+          provenance: true

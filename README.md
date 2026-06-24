@@ -32,20 +32,24 @@ Gork 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 OpenA
 
 | 项 | 值 |
 | :-- | :-- |
-| 镜像地址 | `ghcr.io/dslzl/gork:latest` |
+| 默认镜像 | `ghcr.io/dslzl/gork:latest`（生产建议改用版本、sha 或 digest） |
 | 架构 | `linux/amd64`, `linux/arm64` |
 | 基础镜像 | Go 静态二进制运行镜像 |
 | 默认端口 | `8000` |
 | 默认数据目录 | `/app/data` |
 | 默认日志目录 | `/app/logs` |
 
+镜像发布会同时生成 `latest`、分支 tag、语义化版本 tag 和 `sha-<commit>` tag，并附带 SBOM 与 provenance attestation。生产部署建议在 `.env` 中设置 `GORK_IMAGE=ghcr.io/dslzl/gork:<version|sha-tag>`，需要完全固定供应链时可改为 `GORK_IMAGE=ghcr.io/dslzl/gork@sha256:<digest>`。
+
 ### privoxy-warp 镜像（防封版专用）
 
 | 项 | 值 |
 | :-- | :-- |
-| 镜像地址 | `ghcr.io/jiujiu532/privoxy-warp:latest` |
+| 默认镜像 | Compose 默认固定到 digest，可通过 `PRIVOXY_WARP_IMAGE` 覆盖 |
 | 架构 | `linux/amd64`, `linux/arm64` |
 | 说明 | 预配置好 WARP SOCKS5 转发规则的 Privoxy，与 `caomingjun/warp` 配合使用 |
+
+Compose 示例中的第三方镜像默认 pin 到 digest，并保留 `WARP_IMAGE`、`PRIVOXY_WARP_IMAGE`、`FLARESOLVERR_IMAGE`、`REDIS_IMAGE` 等环境变量用于显式升级。
 
 <br>
 
@@ -79,6 +83,8 @@ docker compose logs -f gork
 
 > 使用 `docker-compose.yml`，仅启动 gork 容器，代理配置默认为空（直连）。
 
+Compose 默认开启 `read_only: true` 与 `no-new-privileges`。容器内只有 `/app/data`、`/app/logs` 可写，临时文件写入 `/app/data/tmp`；如果自定义挂载目录，需要确保这两个目录对容器内运行用户可写。
+
 ### 方式二：防封版（WARP + FlareSolverr 一键部署）
 
 > **前置要求**：服务器需支持 `NET_ADMIN` + `SYS_MODULE` 权限（KVM/XEN 虚拟化均支持，OpenVZ/LXC 不支持）。
@@ -88,6 +94,14 @@ git clone https://github.com/dslzl/gork
 cd gork
 docker compose -f docker-compose.warp.yml up -d
 ```
+
+启动后可运行 smoke check，确认 gork 健康检查可用，并通过本机 Privoxy 出口访问 `grok.com`：
+
+```bash
+sh scripts/smoke_warp_clearance.sh
+```
+
+脚本默认使用 `docker-compose.warp.yml`、`http://127.0.0.1:40080` 和 `https://grok.com`，可通过 `COMPOSE_FILE`、`PROXY_URL`、`TARGET_URL` 覆盖。
 
 防封版会自动启动以下服务并完成配置：
 
@@ -112,7 +126,7 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
   --restart unless-stopped \
-  ghcr.io/dslzl/gork:latest
+  ghcr.io/dslzl/gork:<version-or-sha-tag>
 ```
 
 Windows PowerShell：
@@ -127,7 +141,7 @@ docker run -d `
   -v ${PWD}/data:/app/data `
   -v ${PWD}/logs:/app/logs `
   --restart unless-stopped `
-  ghcr.io/dslzl/gork:latest
+  ghcr.io/dslzl/gork:<version-or-sha-tag>
 ```
 
 ### 方式四：本地源码部署
@@ -147,7 +161,7 @@ go build -o gork ./cmd/gork
 
 ### 首次启动
 
-服务启动后访问 `http://localhost:8000/admin/login`，默认密码为 `gork`，进入后依次完成：
+服务首次启动时会为 `app.app_key` 生成随机初始 Admin key 并输出到日志。访问 `http://localhost:8000/admin/login`，使用日志中的初始 key 登录后依次完成：
 
 1. 修改 `app.app_key`（Admin 后台登录密码）
 2. 设置 `app.api_key`（API 调用鉴权密钥，留空则不鉴权）
@@ -164,20 +178,24 @@ go build -o gork ./cmd/gork
 ### 标准版升级
 
 ```bash
-docker pull ghcr.io/dslzl/gork:latest
+GORK_IMAGE=ghcr.io/dslzl/gork:<version-or-sha-tag>
+docker pull "$GORK_IMAGE"
 docker compose up -d --no-deps gork
 ```
 
 ### 防封版升级（只更新 gork，不动防封组件）
 
 ```bash
-docker pull ghcr.io/dslzl/gork:latest
+GORK_IMAGE=ghcr.io/dslzl/gork:<version-or-sha-tag>
+docker pull "$GORK_IMAGE"
 docker compose -f docker-compose.warp.yml up -d --no-deps gork
 ```
 
 > `--no-deps` 参数确保只重启 gork 容器，WARP、Privoxy、FlareSolverr 不受影响，继续运行。
 
 > `./data/` 目录中的配置文件（`config.toml`）和账号数据库（`accounts.db`）挂载在 volume 中，升级不会覆盖。
+
+若使用 digest pinning，升级时先更新 `.env` 中的 `GORK_IMAGE` 或第三方镜像变量，再执行对应 compose up 命令。第三方镜像默认固定 digest，不会因为上游 `latest` 移动而自动变化。
 
 ### 回滚到指定版本
 
@@ -258,7 +276,7 @@ server {
 | 范围 | 配置项 | 规则 |
 | :-- | :-- | :-- |
 | `/v1/*` | `app.api_key` | 为空则不额外鉴权 |
-| `/admin/*` | `app.app_key` | 默认值 `gork` |
+| `/admin/*` | `app.app_key` | 为空时首次启动自动生成随机初始值 |
 | `/webui/*` | `app.webui_enabled`, `app.webui_key` | 默认关闭；`webui_key` 为空则不额外校验 |
 
 <br>
@@ -351,6 +369,18 @@ docker compose --profile redis up -d
 ```
 
 若账号仍使用 SQLite/MySQL/PostgreSQL，但只想启用运行时协调，可保持 `ACCOUNT_STORAGE` 不变，仅设置 `RUNTIME_REDIS_URL`。
+
+Compose 样例为 gork、Redis、WARP、Privoxy、FlareSolverr 和 demo reset 设置了基础 `mem_limit` / `cpus`，可通过 `GORK_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`WARP_MEM_LIMIT` 等环境变量覆盖。资源限制只作为单机部署默认保护，生产环境应按账号数量、并发和代理负载调高。
+
+### Demo reset 保护
+
+`docker-compose.demo.yml` 的 `demo-reset` 容器默认不会清理数据库、Redis 或本地 volume。只有显式设置以下变量才会执行重置：
+
+```bash
+DEMO_RESET_CONFIRM=reset-demo-data
+```
+
+该保护用于避免 demo/reset 容器误连到真实 PostgreSQL 或 Redis 后执行清理。
 
 <br>
 

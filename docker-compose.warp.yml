@@ -1,9 +1,11 @@
 services:
   # ── WARP: Cloudflare 出口代理 ─────────────────────────────────────────────
   warp-proxy:
-    image: caomingjun/warp:latest
+    image: ${WARP_IMAGE:-caomingjun/warp@sha256:905b91c3fe197a625611064ef0664f27e9ecdd0a30a91c4ae7046e06a2bf2643}
     container_name: warp-proxy
     restart: unless-stopped
+    mem_limit: ${WARP_MEM_LIMIT:-256m}
+    cpus: ${WARP_CPUS:-0.5}
     environment:
       - WARP_SLEEP=2
     cap_add:
@@ -15,9 +17,11 @@ services:
 
   # ── Privoxy: HTTP 代理，转发到 WARP SOCKS5 ───────────────────────────────
   privoxy:
-    image: ghcr.io/jiujiu532/privoxy-warp:latest
+    image: ${PRIVOXY_WARP_IMAGE:-ghcr.io/jiujiu532/privoxy-warp@sha256:6aa1ede69f2a9f34d01eae59b5fd951ae88a17d5fb1d459fafb5c00653caae19}
     container_name: privoxy
     restart: unless-stopped
+    mem_limit: ${PRIVOXY_MEM_LIMIT:-128m}
+    cpus: ${PRIVOXY_CPUS:-0.25}
     ports:
       - "127.0.0.1:40080:8118"
     depends_on:
@@ -25,18 +29,22 @@ services:
 
   # ── FlareSolverr: 自动解 Cloudflare 挑战 ────────────────────────────────
   flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
+    image: ${FLARESOLVERR_IMAGE:-ghcr.io/flaresolverr/flaresolverr@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47}
     container_name: flaresolverr
     restart: unless-stopped
+    mem_limit: ${FLARESOLVERR_MEM_LIMIT:-512m}
+    cpus: ${FLARESOLVERR_CPUS:-1.0}
     environment:
       TZ: Asia/Shanghai
       LOG_LEVEL: info
 
   # ── gork ──────────────────────────────────────────────────────────────
   gork:
-    image: ghcr.io/dslzl/gork:latest
+    image: ${GORK_IMAGE:-ghcr.io/dslzl/gork:latest}
     container_name: gork
     restart: unless-stopped
+    mem_limit: ${GORK_MEM_LIMIT:-768m}
+    cpus: ${GORK_CPUS:-1.0}
     ports:
       - "${HOST_PORT:-8000}:${PORT:-${SERVER_PORT:-8000}}"
     environment:
@@ -48,6 +56,7 @@ services:
       SERVER_PORT: ${SERVER_PORT:-8000}
       DATA_DIR: ${DATA_DIR:-/app/data}
       LOG_DIR: ${LOG_DIR:-/app/logs}
+      TMPDIR: ${TMPDIR:-/app/data/tmp}
       ACCOUNT_STORAGE: ${ACCOUNT_STORAGE:-local}
       ACCOUNT_LOCAL_PATH: ${ACCOUNT_LOCAL_PATH:-data/accounts.db}
       ACCOUNT_REDIS_URL: ${ACCOUNT_REDIS_URL:-}
@@ -58,8 +67,11 @@ services:
       - ./config.defaults.toml:/app/config.defaults.toml:ro
       - ./data:/app/data
       - ./logs:/app/logs
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:$${PORT:-8000}/health || exit 1"]
+      test: ["CMD", "/app/gork", "healthcheck"]
       interval: 30s
       timeout: 5s
       start_period: 15s

@@ -31,9 +31,9 @@ This repository is a fork based on [chenyme/grok2api](https://github.com/chenyme
 
 | Field | Value |
 | :-- | :-- |
-| Image | `ghcr.io/dslzl/gork:latest` |
-| Architecture | `linux/amd64` |
-| Base image | `python:3.13-alpine` |
+| Default image | `ghcr.io/dslzl/gork:latest` (use a version, sha, or digest in production) |
+| Architecture | `linux/amd64`, `linux/arm64` |
+| Base image | Go static binary runtime image |
 | Default port | `8000` |
 | Data dir | `/app/data` |
 | Logs dir | `/app/logs` |
@@ -57,7 +57,7 @@ Tail logs:
 docker compose logs -f gork
 ```
 
-> The included `docker-compose.yml` already pulls `ghcr.io/dslzl/gork:latest`. No local build is required.
+> The included `docker-compose.yml` uses `GORK_IMAGE`, defaulting to `ghcr.io/dslzl/gork:latest`. For production, set `GORK_IMAGE=ghcr.io/dslzl/gork:<version-or-sha-tag>` or pin a digest.
 
 ### Option 2: Plain Docker
 
@@ -71,7 +71,7 @@ docker run -d \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/logs:/app/logs \
   --restart unless-stopped \
-  ghcr.io/dslzl/gork:latest
+  ghcr.io/dslzl/gork:<version-or-sha-tag>
 ```
 
 Windows PowerShell:
@@ -86,7 +86,7 @@ docker run -d `
   -v ${PWD}/data:/app/data `
   -v ${PWD}/logs:/app/logs `
   --restart unless-stopped `
-  ghcr.io/dslzl/gork:latest
+  ghcr.io/dslzl/gork:<version-or-sha-tag>
 ```
 
 ### Option 3: From source
@@ -106,7 +106,7 @@ go build -o gork ./cmd/gork
 
 ### First-time setup
 
-After the service is up, open `http://localhost:8000/admin/login`. Default password is `gork`. Then:
+On first startup, the service generates a random initial Admin key for `app.app_key` and prints it to the logs. Open `http://localhost:8000/admin/login`, sign in with that initial key, then:
 
 1. Change `app.app_key` (Admin console password)
 2. Set `app.api_key` (API auth key; leave empty to disable auth)
@@ -119,12 +119,10 @@ After the service is up, open `http://localhost:8000/admin/login`. Default passw
 ## Upgrade and Rollback
 
 ```bash
-# Upgrade to latest
-docker compose pull
+# Upgrade to a specific published tag
+GORK_IMAGE=ghcr.io/dslzl/gork:<version-or-sha-tag>
+docker pull "$GORK_IMAGE"
 docker compose up -d
-
-# Pull a specific tag (see GHCR for available versions)
-docker pull ghcr.io/dslzl/gork:latest
 
 # Rollback
 docker run -d ... ghcr.io/dslzl/gork:<tag>
@@ -178,7 +176,7 @@ After enabling the reverse proxy, set `app.app_url` to `https://your.domain.com`
 | Scope | Config | Rule |
 | :-- | :-- | :-- |
 | `/v1/*` | `app.api_key` | No auth when empty |
-| `/admin/*` | `app.app_key` | Default `gork` |
+| `/admin/*` | `app.app_key` | Generates a random initial value on first startup when empty |
 | `/webui/*` | `app.webui_enabled`, `app.webui_key` | Disabled by default; no extra check when `webui_key` is empty |
 
 <br>

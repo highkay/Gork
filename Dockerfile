@@ -30,13 +30,18 @@ ENV TZ=Asia/Shanghai \
     SERVER_PORT=8000 \
     SERVER_WORKERS=1 \
     DATA_DIR=/app/data \
-    LOG_DIR=/app/logs
+    LOG_DIR=/app/logs \
+    TMPDIR=/app/data/tmp \
+    GORK_USER=gork \
+    GORK_GROUP=gork
 
 RUN apk add --no-cache \
     tzdata \
     ca-certificates \
-    wget \
-    && update-ca-certificates
+    su-exec \
+    && update-ca-certificates \
+    && addgroup -S -g 10001 gork \
+    && adduser -S -D -H -u 10001 -G gork gork
 
 WORKDIR /app
 
@@ -46,12 +51,13 @@ COPY app/statics ./app/statics
 COPY scripts/entrypoint.sh scripts/init_storage.sh ./scripts/
 
 RUN mkdir -p /app/data /app/logs \
+    && chown -R gork:gork /app/data /app/logs \
     && chmod +x /app/gork /app/scripts/entrypoint.sh /app/scripts/init_storage.sh
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD ["sh", "-c", "wget -qO /dev/null http://127.0.0.1:${PORT:-${SERVER_PORT:-8000}}/health || exit 1"]
+    CMD ["/app/gork", "healthcheck"]
 
 ENTRYPOINT ["/app/scripts/entrypoint.sh"]
 CMD ["sh", "-c", "HOST=${HOST:-${SERVER_HOST:-0.0.0.0}} PORT=${PORT:-${SERVER_PORT:-8000}} exec /app/gork"]
