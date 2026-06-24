@@ -22,11 +22,13 @@ import (
 
 var dynamicConsoleListModelsEndpoint = reverseruntime.DefaultEndpointTable().Resolve("console_list_models")
 
-var defaultDynamicConsoleModels = newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
-	Endpoint:   dynamicConsoleListModelsEndpoint,
-	TTL:        10 * time.Minute,
-	FailureTTL: 30 * time.Second,
-})
+var defaultDynamicConsoleModels = newDynamicConsoleModelRegistry(
+	newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
+		Endpoint:   dynamicConsoleListModelsEndpoint,
+		TTL:        10 * time.Minute,
+		FailureTTL: 30 * time.Second,
+	}),
+)
 
 func init() {
 	model.SetDynamicProviderContext(defaultDynamicConsoleModels.ListContext)
@@ -34,6 +36,12 @@ func init() {
 
 type dynamicConsoleHTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
+}
+
+type dynamicConsoleModelProvider interface {
+	ListContext(context.Context) []model.ModelSpec
+	Status() DynamicConsoleModelStatus
+	ProbeListModels(context.Context, string) error
 }
 
 type dynamicConsoleModelSourceOptions struct {
@@ -78,6 +86,35 @@ type DynamicConsoleModelStatus struct {
 	LastSuccessAt    time.Time `json:"last_success_at,omitempty"`
 	LastFailureAt    time.Time `json:"last_failure_at,omitempty"`
 	LastError        string    `json:"last_error,omitempty"`
+}
+
+type dynamicConsoleModelRegistry struct {
+	provider dynamicConsoleModelProvider
+}
+
+func newDynamicConsoleModelRegistry(provider dynamicConsoleModelProvider) *dynamicConsoleModelRegistry {
+	return &dynamicConsoleModelRegistry{provider: provider}
+}
+
+func (r *dynamicConsoleModelRegistry) ListContext(ctx context.Context) []model.ModelSpec {
+	if r.provider == nil {
+		return []model.ModelSpec{}
+	}
+	return r.provider.ListContext(ctx)
+}
+
+func (r *dynamicConsoleModelRegistry) Status() DynamicConsoleModelStatus {
+	if r.provider == nil {
+		return DynamicConsoleModelStatus{}
+	}
+	return r.provider.Status()
+}
+
+func (r *dynamicConsoleModelRegistry) ProbeListModels(ctx context.Context, token string) error {
+	if r.provider == nil {
+		return errors.New("dynamic console model provider is not configured")
+	}
+	return r.provider.ProbeListModels(ctx, token)
 }
 
 func newDynamicConsoleModelSource(options dynamicConsoleModelSourceOptions) *dynamicConsoleModelSource {

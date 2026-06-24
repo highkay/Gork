@@ -670,6 +670,35 @@ func TestChatCompletionsDelegatesConsoleModels(t *testing.T) {
 	}
 }
 
+func TestChatRuntimeDependenciesDelegatesConsoleModels(t *testing.T) {
+	resetChatDepsForTest(t)
+	called := false
+	deps := chatRuntimeDependencies{
+		directory: func() chatDirectory {
+			t.Fatalf("console completion should not use chat directory")
+			return nil
+		},
+		consoleCompletions: func(_ context.Context, options chatCompletionOptions) (chatCompletionResult, error) {
+			called = true
+			if options.Model != "grok-4.3-console" || options.Stream == nil || options.EmitThink == nil {
+				t.Fatalf("console options=%#v", options)
+			}
+			return chatCompletionResult{Response: map[string]any{"console": true}}, nil
+		},
+	}
+
+	result, err := deps.Completions(context.Background(), chatCompletionOptions{
+		Model:    "grok-4.3-console",
+		Messages: []map[string]any{{"role": "user", "content": "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("console err=%v", err)
+	}
+	if !called || result.Response["console"] != true {
+		t.Fatalf("console result called=%t result=%#v", called, result)
+	}
+}
+
 func TestChatLogTaskExceptionIgnoresNil(t *testing.T) {
 	logTaskException(nil)
 }

@@ -121,6 +121,9 @@ func TestAdaptErrorResponseMapsStatusPayloadAndRetryHeaders(t *testing.T) {
 	if adapted.Status != 503 {
 		t.Fatalf("status=%d", adapted.Status)
 	}
+	if adapted.Class != ErrorClassUpstream {
+		t.Fatalf("class=%s", adapted.Class)
+	}
 	errBody := adapted.Payload["error"].(map[string]any)
 	if errBody["type"] != ErrorKindUpstream || errBody["code"] != "upstream_error" || errBody["message"] != "busy" {
 		t.Fatalf("payload=%#v", adapted.Payload)
@@ -135,6 +138,9 @@ func TestAdaptErrorResponseMapsStatusPayloadAndRetryHeaders(t *testing.T) {
 	fallback := AdaptErrorResponse(assertionError("plain"))
 	if fallback.Status != 500 || fallback.Payload["error"].(map[string]any)["code"] != "internal_error" {
 		t.Fatalf("fallback=%#v", fallback)
+	}
+	if fallback.Class != ErrorClassInternal {
+		t.Fatalf("fallback class=%s", fallback.Class)
 	}
 }
 

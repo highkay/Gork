@@ -24,29 +24,7 @@ func BindAccountRuntime(
 	directory *accountdataplane.AccountDirectory,
 	refreshService *accountcontrol.AccountRefreshService,
 ) func() {
-	previousAssetsRepo := adminAssetsRepoProvider
-	previousDirectory := adminAccountDirectory
-	previousBatchRefresh := adminBatchRefreshServiceProvider
-	previousTokensRefresh := adminTokensRefreshServiceProvider
-
-	if repo != nil {
-		adapter := accountRuntimeRepository{repo: repo}
-		adminAssetsRepoProvider = func() adminAssetsRepository { return adapter }
-	}
-	if directory != nil {
-		adminAccountDirectory = func() adminDirectory { return directory }
-	}
-	if refreshService != nil {
-		adapter := accountRuntimeRefreshService{service: refreshService}
-		adminBatchRefreshServiceProvider = func() adminBatchRefreshService { return adapter }
-		adminTokensRefreshServiceProvider = func() adminTokensRefreshService { return adapter }
-	}
-	return func() {
-		adminAssetsRepoProvider = previousAssetsRepo
-		adminAccountDirectory = previousDirectory
-		adminBatchRefreshServiceProvider = previousBatchRefresh
-		adminTokensRefreshServiceProvider = previousTokensRefresh
-	}
+	return NewAccountRuntimeBinding(repo, directory, refreshService).Bind()
 }
 
 func (r accountRuntimeRepository) ListAccounts(ctx context.Context, query adminAssetsListQuery) (adminAssetsListResult, error) {

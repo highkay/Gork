@@ -33,6 +33,18 @@ type appMainSchedulerLease interface {
 
 type appMainLifecycleStep func(context.Context, *appMainLifecycleState) (Hook, error)
 
+type appMainLifecycleBuilderOptions struct {
+	ensureConfig func(context.Context) error
+	setupLogging func() error
+	steps        []appMainLifecycleStep
+}
+
+type appMainLifecycleBuilder struct {
+	options  appMainLifecycleBuilderOptions
+	state    *appMainLifecycleState
+	cleanups []Hook
+}
+
 var (
 	appMainRuntimeClientFactory       platformruntime.RedisRuntimeClientFactory
 	appMainStartRuntimeStore          appMainLifecycleStep                = defaultAppMainStartRuntimeStore
@@ -48,46 +60,65 @@ var (
 )
 
 func defaultLifecycleHooks() ([]Hook, []Hook) {
-	state := &appMainLifecycleState{}
-	cleanups := []Hook{}
-	stepHook := func(step appMainLifecycleStep) Hook {
-		return func(ctx context.Context) error {
-			cleanup, err := step(ctx, state)
-			if err != nil {
+	return newAppMainLifecycleBuilder(appMainLifecycleBuilderOptions{
+		ensureConfig: appMainEnsureConfig,
+		setupLogging: appMainSetupLogging,
+		steps: []appMainLifecycleStep{
+			appMainStartRuntimeStore,
+			appMainConfigureTaskSnapshotStore,
+			appMainInitializeRepository,
+			appMainRunStartupMigrations,
+			appMainReconcileLocalMediaCache,
+			appMainStartAccountDirectory,
+			appMainStartRefreshRuntime,
+			appMainStartProxyScheduler,
+		},
+	}).build()
+}
+
+func newAppMainLifecycleBuilder(options appMainLifecycleBuilderOptions) *appMainLifecycleBuilder {
+	return &appMainLifecycleBuilder{
+		options: options,
+		state:   &appMainLifecycleState{},
+	}
+}
+
+func (b *appMainLifecycleBuilder) build() ([]Hook, []Hook) {
+	startupHooks := []Hook{
+		func(ctx context.Context) error { return b.options.ensureConfig(ctx) },
+		func(context.Context) error { return b.options.setupLogging() },
+	}
+	for _, step := range b.options.steps {
+		startupHooks = append(startupHooks, b.stepHook(step))
+	}
+	return startupHooks, []Hook{b.shutdownHook()}
+}
+
+func (b *appMainLifecycleBuilder) stepHook(step appMainLifecycleStep) Hook {
+	return func(ctx context.Context) error {
+		cleanup, err := step(ctx, b.state)
+		if err != nil {
+			return err
+		}
+		if cleanup != nil {
+			b.cleanups = append(b.cleanups, cleanup)
+		}
+		return nil
+	}
+}
+
+func (b *appMainLifecycleBuilder) shutdownHook() Hook {
+	return func(ctx context.Context) error {
+		defer func() {
+			b.cleanups = nil
+		}()
+		for i := len(b.cleanups) - 1; i >= 0; i-- {
+			if err := b.cleanups[i](ctx); err != nil {
 				return err
 			}
-			if cleanup != nil {
-				cleanups = append(cleanups, cleanup)
-			}
-			return nil
 		}
+		return nil
 	}
-	startupHooks := []Hook{
-		func(ctx context.Context) error { return appMainEnsureConfig(ctx) },
-		func(context.Context) error { return appMainSetupLogging() },
-		stepHook(appMainStartRuntimeStore),
-		stepHook(appMainConfigureTaskSnapshotStore),
-		stepHook(appMainInitializeRepository),
-		stepHook(appMainRunStartupMigrations),
-		stepHook(appMainReconcileLocalMediaCache),
-		stepHook(appMainStartAccountDirectory),
-		stepHook(appMainStartRefreshRuntime),
-		stepHook(appMainStartProxyScheduler),
-	}
-	shutdownHooks := []Hook{
-		func(ctx context.Context) error {
-			defer func() {
-				cleanups = nil
-			}()
-			for i := len(cleanups) - 1; i >= 0; i-- {
-				if err := cleanups[i](ctx); err != nil {
-					return err
-				}
-			}
-			return nil
-		},
-	}
-	return startupHooks, shutdownHooks
 }
 
 func defaultAppMainStartRuntimeStore(ctx context.Context, state *appMainLifecycleState) (Hook, error) {

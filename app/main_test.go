@@ -260,6 +260,40 @@ func TestDefaultLifecycleMirrorsPythonLifespanStartupAndShutdown(t *testing.T) {
 	}
 }
 
+func TestAppMainLifecycleBuilderComposesInjectedSteps(t *testing.T) {
+	events := []string{}
+	builder := newAppMainLifecycleBuilder(appMainLifecycleBuilderOptions{
+		ensureConfig: func(context.Context) error {
+			events = append(events, "config")
+			return nil
+		},
+		setupLogging: func() error {
+			events = append(events, "logging")
+			return nil
+		},
+		steps: []appMainLifecycleStep{
+			recordLifecycleStep("one", "one-stop", &events),
+			recordLifecycleStep("two", "two-stop", &events),
+		},
+	})
+
+	startup, shutdown := builder.build()
+	for _, hook := range startup {
+		if err := hook(context.Background()); err != nil {
+			t.Fatalf("startup hook error: %v", err)
+		}
+	}
+	for _, hook := range shutdown {
+		if err := hook(context.Background()); err != nil {
+			t.Fatalf("shutdown hook error: %v", err)
+		}
+	}
+	want := "config,logging,one,two,two-stop,one-stop"
+	if got := strings.Join(events, ","); got != want {
+		t.Fatalf("builder events=%s, want %s", got, want)
+	}
+}
+
 func resetAppMainDeps(t *testing.T) {
 	t.Helper()
 	oldEnsureConfig := appMainEnsureConfig

@@ -161,29 +161,32 @@ func NewStreamIdleTimeout(timeoutSeconds float64) *StreamIdleTimeout {
 // ErrorResponse is the HTTP-ready shape shared by product routers.
 type ErrorResponse struct {
 	Status  int
+	Class   ErrorClass
 	Payload map[string]any
 	Headers map[string]string
 }
 
 // AdaptErrorResponse maps internal errors to OpenAI-compatible HTTP errors.
 func AdaptErrorResponse(err error) ErrorResponse {
+	class := ClassifyError(err)
 	var validation *ValidationError
 	if errors.As(err, &validation) && validation.AppError != nil {
-		return ErrorResponse{Status: validation.Status, Payload: validation.ToDict()}
+		return ErrorResponse{Status: validation.Status, Class: class, Payload: validation.ToDict()}
 	}
 	var upstream *UpstreamError
 	if errors.As(err, &upstream) && upstream.AppError != nil {
 		return ErrorResponse{
 			Status:  upstream.Status,
+			Class:   class,
 			Payload: upstream.ToDict(),
 			Headers: retryHeaderAllowlist(upstream.Headers),
 		}
 	}
 	var appErr *AppError
 	if errors.As(err, &appErr) && appErr != nil {
-		return ErrorResponse{Status: appErr.Status, Payload: appErr.ToDict()}
+		return ErrorResponse{Status: appErr.Status, Class: class, Payload: appErr.ToDict()}
 	}
-	return ErrorResponse{Status: 500, Payload: map[string]any{
+	return ErrorResponse{Status: 500, Class: class, Payload: map[string]any{
 		"error": map[string]any{
 			"message": err.Error(),
 			"type":    ErrorKindServer,

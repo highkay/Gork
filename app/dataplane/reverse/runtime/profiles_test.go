@@ -22,6 +22,8 @@ func TestOperationProfilesMatchPythonPrebuiltProfiles(t *testing.T) {
 		"voice":      VoiceProfile,
 		"asset":      AssetProfile,
 		"grpc":       GRPCProfile,
+		"nsfw":       NSFWProfile,
+		"livekit":    LiveKitProfile,
 	}
 	want := map[string]OperationProfile{
 		"chat":       {TimeoutS: 120.0, MaxRetries: 1, RetryCodes: []int{502, 503}, RetryDelayS: 2.0, IdleTimeoutS: 30.0},
@@ -31,6 +33,8 @@ func TestOperationProfilesMatchPythonPrebuiltProfiles(t *testing.T) {
 		"voice":      {TimeoutS: 120.0, MaxRetries: 0, RetryDelayS: 1.0, IdleTimeoutS: 15.0},
 		"asset":      {TimeoutS: 60.0, MaxRetries: 2, RetryCodes: []int{502, 503}, RetryDelayS: 1.0},
 		"grpc":       {TimeoutS: 15.0, MaxRetries: 1, RetryCodes: []int{503}, RetryDelayS: 0.5},
+		"nsfw":       {TimeoutS: 120.0, MaxRetries: 1, RetryCodes: []int{502, 503}, RetryDelayS: 1.0, IdleTimeoutS: 30.0},
+		"livekit":    {TimeoutS: 15.0, MaxRetries: 1, RetryCodes: []int{502, 503}, RetryDelayS: 1.0},
 	}
 
 	for name, expected := range want {

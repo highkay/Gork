@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -14,6 +15,30 @@ import (
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
+
+func TestDynamicConsoleModelRegistryDelegatesSource(t *testing.T) {
+	source := &fakeDynamicConsoleModelProvider{
+		specs:  []model.ModelSpec{{ModelName: "grok-dynamic"}},
+		status: DynamicConsoleModelStatus{CachedModels: 1},
+		err:    errors.New("probe failed"),
+	}
+	registry := newDynamicConsoleModelRegistry(source)
+
+	got := registry.ListContext(context.Background())
+	if !reflect.DeepEqual(got, source.specs) {
+		t.Fatalf("ListContext = %#v, want %#v", got, source.specs)
+	}
+	if status := registry.Status(); status.CachedModels != 1 {
+		t.Fatalf("Status = %#v", status)
+	}
+	err := registry.ProbeListModels(context.Background(), "probe-token")
+	if err == nil || err.Error() != "probe failed" {
+		t.Fatalf("ProbeListModels error = %v", err)
+	}
+	if source.probedToken != "probe-token" {
+		t.Fatalf("probed token = %q", source.probedToken)
+	}
+}
 
 func TestDynamicConsoleModelSourceFetchesAndCachesListModels(t *testing.T) {
 	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
@@ -352,6 +377,29 @@ type fakeDynamicModelHTTPClient struct {
 	calls    int
 	block    <-chan struct{}
 	requests []*http.Request
+}
+
+type fakeDynamicConsoleModelProvider struct {
+	specs       []model.ModelSpec
+	status      DynamicConsoleModelStatus
+	err         error
+	probedToken string
+}
+
+func (p *fakeDynamicConsoleModelProvider) ListContext(context.Context) []model.ModelSpec {
+	return p.specs
+}
+
+func (p *fakeDynamicConsoleModelProvider) Status() DynamicConsoleModelStatus {
+	return p.status
+}
+
+func (p *fakeDynamicConsoleModelProvider) ProbeListModels(_ context.Context, token string) error {
+	p.probedToken = token
+	if p.err != nil {
+		return fmt.Errorf("%w", p.err)
+	}
+	return nil
 }
 
 func (c *fakeDynamicModelHTTPClient) Do(request *http.Request) (*http.Response, error) {

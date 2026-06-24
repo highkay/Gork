@@ -2,10 +2,28 @@ package openai
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/dslzl/gork/app/platform"
 )
 
+type chatRuntimeDependencies struct {
+	directory          func() chatDirectory
+	consoleCompletions func(context.Context, chatCompletionOptions) (chatCompletionResult, error)
+}
+
+func defaultChatRuntimeDependencies() chatRuntimeDependencies {
+	return chatRuntimeDependencies{
+		directory:          chatDirectoryProvider,
+		consoleCompletions: consoleCompletions,
+	}
+}
+
 func Completions(ctx context.Context, options chatCompletionOptions) (chatCompletionResult, error) {
+	return defaultChatRuntimeDependencies().Completions(ctx, options)
+}
+
+func (deps chatRuntimeDependencies) Completions(ctx context.Context, options chatCompletionOptions) (chatCompletionResult, error) {
 	plan, err := prepareChatCompletion(options)
 	if err != nil {
 		return chatCompletionResult{}, err
@@ -15,10 +33,16 @@ func Completions(ctx context.Context, options chatCompletionOptions) (chatComple
 		emitThink := plan.EmitThink
 		options.Stream = &stream
 		options.EmitThink = &emitThink
-		return consoleCompletions(ctx, options)
+		if deps.consoleCompletions == nil {
+			return chatCompletionResult{}, fmt.Errorf("console chat completions are not configured")
+		}
+		return deps.consoleCompletions(ctx, options)
 	}
 
-	directory := chatDirectoryProvider()
+	if deps.directory == nil {
+		return chatCompletionResult{}, platform.NewRateLimitError("Account directory not initialised")
+	}
+	directory := deps.directory()
 	if directory == nil {
 		return chatCompletionResult{}, platform.NewRateLimitError("Account directory not initialised")
 	}

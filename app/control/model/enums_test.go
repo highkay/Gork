@@ -41,6 +41,41 @@ func TestTierAndCapabilityValuesMatchPython(t *testing.T) {
 	}
 }
 
+func TestCapabilitiesRemainUniquePowerOfTwoBitmasks(t *testing.T) {
+	values := []Capability{
+		CapabilityChat,
+		CapabilityImage,
+		CapabilityImageEdit,
+		CapabilityVideo,
+		CapabilityVoice,
+		CapabilityAsset,
+		CapabilityConsoleChat,
+	}
+	seen := map[Capability]bool{}
+	for _, capability := range values {
+		if capability <= 0 {
+			t.Fatalf("capability %v must be positive", capability)
+		}
+		if capability&(capability-1) != 0 {
+			t.Fatalf("capability %v is not a power of two", capability)
+		}
+		if seen[capability] {
+			t.Fatalf("capability %v is duplicated", capability)
+		}
+		seen[capability] = true
+	}
+}
+
+func TestModelSpecCapabilityPredicatesMatchBitmask(t *testing.T) {
+	spec := ModelSpec{Capability: CapabilityChat | CapabilityImage | CapabilityVideo | CapabilityVoice | CapabilityConsoleChat}
+	if !spec.IsChat() || !spec.IsImage() || !spec.IsVideo() || !spec.IsVoice() || !spec.IsConsoleChat() {
+		t.Fatalf("combined model spec should expose enabled capabilities: %#v", spec)
+	}
+	if spec.IsImageEdit() {
+		t.Fatalf("image edit predicate should be false when bit is not present")
+	}
+}
+
 func TestModeCollectionsMatchPythonOrder(t *testing.T) {
 	if !reflect.DeepEqual(AllModes, []ModeID{ModeAuto, ModeFast, ModeExpert}) {
 		t.Fatalf("AllModes = %#v", AllModes)
