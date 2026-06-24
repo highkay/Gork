@@ -22,6 +22,22 @@ Gork is a **Go**-based Grok gateway that exposes Grok's web capabilities through
 - Text-to-image, image edit, text-to-video, image-to-video
 - Built-in Admin console, Web Chat, Masonry image gallery, ChatKit voice page
 - `console.x.ai` free account support with a dedicated `*-console` model family
+- Optional Redis runtime coordination, Redis/SQL account storage, WARP/Privoxy/FlareSolverr anti-blocking stack
+
+<br>
+
+## Documentation
+
+| Document | Contents |
+| :-- | :-- |
+| [Architecture](architecture.md) | Module boundaries, request flow, and dependency rules |
+| [Configuration](configuration.md) | Generated TOML / `GROK_` environment variable reference |
+| [API Compatibility](api-compatibility.md) | OpenAI, Anthropic, and private Admin/WebUI compatibility notes |
+| [Security](security.md) | Secrets, auth, CORS, media URLs, redaction, TLS, and container hardening |
+| [Operations](operations.md) | Docker, Compose, anti-blocking stack, Redis, SQL, logs, upgrade, backup, restore |
+| [Troubleshooting](troubleshooting.md) | 401, 403, 429, 5xx, Cloudflare, LiveKit/WebSocket, asset upload |
+| [Demo Compose](demo-compose.md) | Demo-only compose stack and reset behavior |
+| [中文 README](../README.md) | Chinese quick start |
 
 <br>
 
@@ -42,6 +58,13 @@ This repository is a fork based on [chenyme/grok2api](https://github.com/chenyme
 
 ## Quick Start
 
+Choose the simplest stack that works:
+
+1. Start with the standard compose stack and run `/health`, `/v1/models`, and one minimal chat smoke test.
+2. Stay on the standard stack if it works; it has fewer moving parts and lower upgrade risk.
+3. Switch to the WARP stack only when you see recurring 403, Cloudflare challenge, or unstable clearance/proxy behavior.
+4. If you only need Redis, use the standard compose Redis profile instead of the WARP stack.
+
 ### Option 1: Docker Compose (recommended)
 
 ```bash
@@ -59,7 +82,26 @@ docker compose logs -f gork
 
 > The included `docker-compose.yml` uses `GORK_IMAGE`, defaulting to `ghcr.io/dslzl/gork:latest`. For production, set `GORK_IMAGE=ghcr.io/dslzl/gork:<version-or-sha-tag>` or pin a digest.
 
-### Option 2: Plain Docker
+### Option 2: WARP + FlareSolverr stack
+
+Use this only when the standard stack is blocked by Cloudflare or proxy quality problems.
+
+```bash
+git clone https://github.com/dslzl/gork
+cd gork
+docker compose -f docker-compose.warp.yml up -d
+```
+
+The stack starts:
+
+| Service | Purpose |
+| :-- | :-- |
+| `warp-proxy` | Cloudflare WARP egress proxy |
+| `privoxy` | HTTP proxy forwarding to WARP |
+| `flaresolverr` | Cloudflare challenge solver |
+| `gork` | Main service |
+
+### Option 3: Plain Docker
 
 ```bash
 docker run -d \
@@ -89,7 +131,7 @@ docker run -d `
   ghcr.io/dslzl/gork:<version-or-sha-tag>
 ```
 
-### Option 3: From source
+### Option 4: From source
 
 Prerequisites: Go 1.25+. Python 3.13+ and `uv` are only needed for migration-period regression tests.
 
@@ -203,6 +245,18 @@ To use free accounts you need both an SSO Token and a CF Clearance:
 
 > SSO Token and CF Clearance are sensitive credentials. Never commit them to source control.
 
+### Account pool strategy
+
+| Strategy / state | Meaning |
+| :-- | :-- |
+| Quota mode | `account.refresh.enabled=true`; background jobs refresh quota and selection uses mode/tier, quota, cooldown, and inflight limits. |
+| Random mode | `account.refresh.enabled=false`; less probing, with account switching driven by request failures and cooldowns. |
+| `account.selection.max_inflight` | Maximum concurrent requests leased to one account. Lower it when 429 or timeout frequency rises. |
+| Refresh intervals | `basic_interval_sec`, `super_interval_sec`, and `heavy_interval_sec` control refresh cadence per pool. |
+| Invalid credentials | Accounts are expired after `account.invalid_credentials.max_failures` consecutive invalid-credential failures. |
+| Rate limited | 429 responses push accounts into cooldown or lower selection priority, depending on quota/random mode. |
+| SSO validation | `account.sso_validation.*` schedules validation for console.x.ai free-account SSO credentials. |
+
 <br>
 
 ## Environment Variables
@@ -231,6 +285,9 @@ Bootstrap-time variables (`.env` / Compose / `docker run -e`):
 | `ACCOUNT_SQL_MAX_OVERFLOW` | SQL pool max overflow | `10` |
 | `ACCOUNT_SQL_POOL_TIMEOUT` | Pool checkout timeout (s) | `30` |
 | `ACCOUNT_SQL_POOL_RECYCLE` | Connection recycle time (s) | `1800` |
+| `RUNTIME_REDIS_URL` | Optional Redis DSN for task snapshots and scheduler lock | `""` |
+| `RUNTIME_TASK_TTL_S` | Redis task snapshot retention (s) | `300` |
+| `RUNTIME_REDIS_LOCK_TTL_MS` | Redis scheduler leader lock TTL (ms) | `300000` |
 | `CONFIG_LOCAL_PATH` | Runtime config file path | `${DATA_DIR}/config.toml` |
 
 Runtime config can also be overridden via `GROK_`-prefixed env vars. The schema maps a config key by uppercasing it and replacing `.` with `_`, e.g. `GROK_APP_API_KEY` overrides `app.api_key`, `GROK_FEATURES_STREAM` overrides `features.stream`, and `GROK_REVERSE_ENDPOINTS_BASE` overrides `reverse.endpoints.base`.
@@ -245,6 +302,22 @@ Export the full config schema table:
 
 ```bash
 gork config docs --defaults config.defaults.toml
+```
+
+The generated full reference is committed at [configuration.md](configuration.md). Keep startup-only variables in this README and runtime TOML keys in the generated reference.
+
+Redis account storage and Redis runtime are separate:
+
+| Feature | Variable | Purpose |
+| :-- | :-- | :-- |
+| Account storage | `ACCOUNT_STORAGE=redis` + `ACCOUNT_REDIS_URL` | Stores accounts, quotas, status, and Admin list indexes. |
+| Runtime coordination | `RUNTIME_REDIS_URL` | Stores task snapshots and scheduler leader locks; does not store accounts. |
+
+SQL DSNs may include cloud-database TLS/SSL parameters:
+
+```env
+ACCOUNT_MYSQL_URL=user:password@tcp(db.example.com:3306)/gork?parseTime=true&tls=true
+ACCOUNT_POSTGRESQL_URL=postgres://user:password@db.example.com:5432/gork?sslmode=require
 ```
 
 <br>
@@ -379,6 +452,17 @@ curl http://localhost:8000/v1/videos \
 ```
 
 For full field references see the upstream [API docs](https://github.com/chenyme/grok2api#api-%E4%B8%80%E8%A7%88).
+
+<br>
+
+## Version, Updates, and Contributions
+
+- `/meta` exposes current runtime metadata.
+- `/meta/update` checks GitHub releases and caches the result; failures do not affect the main API.
+- To disable public update checks, block `/meta/update` at the reverse proxy or expose it only internally.
+- Production deployments should pin `GORK_IMAGE` to a version tag, `sha-<commit>` tag, or digest.
+- `main` is the Go branch; `python` mirrors upstream Python work. Use `.codex/skills/port-python-upstream/SKILL.md` before porting Python upstream changes.
+- PRs should include verification commands and call out risk areas for config, storage, proxy, Admin/WebUI, or compatibility API changes.
 
 <br>
 

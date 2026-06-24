@@ -159,6 +159,13 @@ func TestDefaultSchemaCoversDefaultsExampleAndDeepEnv(t *testing.T) {
 	if validation := ValidateConfigData(defaults, defaults); validation != nil {
 		t.Fatalf("defaults validation issues = %#v", validation.Issues)
 	}
+	schemaDescriptions := map[string]string{}
+	for _, entry := range DefaultSchema(defaults) {
+		schemaDescriptions[entry.Key] = entry.Desc
+	}
+	if got := schemaDescriptions["account.sso_validation.enabled"]; got != "Enables scheduled validation for console.x.ai SSO accounts." {
+		t.Fatalf("sso validation description = %q", got)
+	}
 	loaded, err := LoadConfig(defaultsPath, LoadConfigOptions{Env: map[string]string{
 		"GROK_REVERSE_ENDPOINTS_BASE": "https://example.test",
 	}})

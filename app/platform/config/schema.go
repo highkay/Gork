@@ -279,14 +279,90 @@ func hotReloadConfigKey(key string) bool {
 }
 
 func configDescription(key string) string {
-	switch key {
-	case "cache.local.image_max_mb", "cache.local.video_max_mb":
-		return "0 means save files without size limit, index, reconcile, or eviction; values > 0 enable LRU eviction."
-	case "startup.migration.account_batch_size":
-		return "Account startup migration batch size."
-	default:
-		return strings.ReplaceAll(key, ".", " ")
+	if desc, ok := configDescriptions[key]; ok {
+		return desc
 	}
+	return strings.ReplaceAll(key, ".", " ")
+}
+
+var configDescriptions = map[string]string{
+	"app.api_key":       "API bearer token for /v1/* routes; empty disables API authentication.",
+	"app.app_key":       "Admin console password; generated at first startup when empty.",
+	"app.app_url":       "Public base URL used to build local media links.",
+	"app.webui_enabled": "Enables the built-in WebUI pages.",
+	"app.webui_key":     "Optional WebUI password; empty allows WebUI access once enabled.",
+	"account.invalid_credentials.max_failures":   "Consecutive invalid-credential failures before an account is expired.",
+	"account.refresh.basic_interval_sec":         "Basic pool quota refresh interval in seconds.",
+	"account.refresh.batch_timeout_sec":          "Total timeout in seconds for a quota refresh batch.",
+	"account.refresh.enabled":                    "Enables quota refresh mode; false uses random selection with retry feedback.",
+	"account.refresh.heavy_interval_sec":         "Heavy pool quota refresh interval in seconds.",
+	"account.refresh.on_demand_min_interval_sec": "Minimum interval before an on-demand quota refresh can repeat.",
+	"account.refresh.per_token_timeout_sec":      "Timeout in seconds for refreshing one token.",
+	"account.refresh.super_interval_sec":         "Super pool quota refresh interval in seconds.",
+	"account.refresh.usage_concurrency":          "Concurrency for background usage refresh workers.",
+	"account.selection.max_inflight":             "Maximum concurrent requests leased to one account.",
+	"account.sso_validation.batch_size":          "Number of SSO accounts validated per scheduled batch.",
+	"account.sso_validation.concurrency":         "Concurrency for scheduled SSO validation.",
+	"account.sso_validation.enabled":             "Enables scheduled validation for console.x.ai SSO accounts.",
+	"account.sso_validation.interval_sec":        "Scheduled SSO validation interval in seconds.",
+	"account.sso_validation.max_failures":        "Consecutive SSO validation failures before an account is marked invalid.",
+	"asset.delete_timeout":                       "Timeout in seconds for upstream asset delete operations.",
+	"asset.download_timeout":                     "Timeout in seconds for upstream asset download operations.",
+	"asset.list_timeout":                         "Timeout in seconds for upstream asset list operations.",
+	"asset.upload_timeout":                       "Timeout in seconds for upstream asset upload operations.",
+	"batch.asset_delete_concurrency":             "Global asset delete concurrency, also used by admin batch cleanup defaults.",
+	"batch.asset_list_concurrency":               "Global asset list concurrency shared by concurrent requests.",
+	"batch.asset_upload_concurrency":             "Global asset upload concurrency shared by attachment requests.",
+	"batch.nsfw_concurrency":                     "Per-token concurrency for admin NSFW enablement jobs.",
+	"batch.refresh_concurrency":                  "Per-token concurrency for admin usage refresh jobs.",
+	"cache.local.image_max_mb":                   "0 stores images without indexing or eviction; values > 0 enable indexed LRU eviction.",
+	"cache.local.video_max_mb":                   "0 stores videos without indexing or eviction; values > 0 enable indexed LRU eviction.",
+	"chat.timeout":                               "Timeout in seconds for chat and responses requests.",
+	"features.auto_chat_mode_fallback":           "Falls back from auto quota to fast/expert chat modes when possible.",
+	"features.custom_instruction":                "Global instruction appended to chat requests.",
+	"features.dynamic_statsig":                   "Generates dynamic Statsig identifiers for Grok web compatibility.",
+	"features.enable_nsfw":                       "Allows NSFW image generation paths.",
+	"features.image_format":                      "Image response format: grok_url, local_url, markdown, HTML-compatible, or base64.",
+	"features.imagine_public_image_proxy":        "Downloads imagine-public images locally before returning URLs.",
+	"features.memory":                            "Enables conversation memory when supported by the upstream flow.",
+	"features.show_search_sources":               "Appends a plaintext Sources section in addition to structured search_sources.",
+	"features.stream":                            "Enables streaming responses where the requested endpoint supports them.",
+	"features.temporary":                         "Uses temporary conversations where supported.",
+	"features.thinking":                          "Includes thinking or reasoning output when available.",
+	"features.thinking_summary":                  "Returns a compact reasoning summary instead of full raw thinking text.",
+	"features.video_format":                      "Video response format: grok_url, local_url, grok_html, or local_html.",
+	"image.stream_timeout":                       "Timeout in seconds for streaming image generation.",
+	"image.timeout":                              "Timeout in seconds for image generation and edit requests.",
+	"logging.file_level":                         "Minimum level written to rotating local log files.",
+	"logging.max_files":                          "Maximum number of daily log files retained.",
+	"nsfw.timeout":                               "Timeout in seconds for NSFW enablement requests.",
+	"observability.metrics_enabled":              "Exposes Prometheus metrics at /metrics.",
+	"observability.pprof_enabled":                "Exposes Go pprof endpoints under /debug/pprof.",
+	"proxy.clearance.browser":                    "curl_cffi browser fingerprint used for manual Cloudflare clearance.",
+	"proxy.clearance.cf_cookies":                 "Manual Cloudflare Cookie header value.",
+	"proxy.clearance.flaresolverr_url":           "FlareSolverr service URL used to refresh Cloudflare clearance.",
+	"proxy.clearance.mode":                       "Cloudflare clearance mode: none, manual, or flaresolverr.",
+	"proxy.clearance.refresh_interval":           "Cloudflare clearance refresh interval in seconds.",
+	"proxy.clearance.timeout_sec":                "Cloudflare challenge wait timeout in seconds.",
+	"proxy.clearance.user_agent":                 "User-Agent that must match the clearance cookie source browser.",
+	"proxy.egress.mode":                          "Outbound proxy mode: direct, single_proxy, or proxy_pool.",
+	"proxy.egress.proxy_pool":                    "Proxy pool for API traffic when proxy_pool mode is enabled.",
+	"proxy.egress.proxy_url":                     "Single proxy URL for API traffic.",
+	"proxy.egress.resource_proxy_pool":           "Proxy pool for image/video downloads; falls back to proxy_pool.",
+	"proxy.egress.resource_proxy_url":            "Proxy URL for image/video downloads; falls back to proxy_url.",
+	"proxy.egress.skip_ssl_verify":               "Skips proxy TLS certificate validation for self-signed proxy endpoints.",
+	"retry.max_retries":                          "Maximum application-level account-switch retries; 0 disables retries.",
+	"retry.on_codes":                             "Comma-separated HTTP status codes that trigger account-switch retries.",
+	"retry.reset_session_status_codes":           "HTTP status codes that rebuild transport proxy sessions.",
+	"reverse.endpoints.accounts_base":            "Base URL for x.ai account and SSO endpoints.",
+	"reverse.endpoints.assets_cdn":               "Base URL for Grok asset CDN requests.",
+	"reverse.endpoints.base":                     "Base URL for Grok web API requests.",
+	"reverse.endpoints.console_base":             "Base URL for console.x.ai free-account flows.",
+	"reverse.endpoints.console_cluster":          "Console API cluster URL used by free-account model calls.",
+	"reverse.endpoints.ws_livekit":               "LiveKit WebSocket URL used by realtime and voice flows.",
+	"startup.migration.account_batch_size":       "Batch size for startup account storage migrations.",
+	"video.timeout":                              "Timeout in seconds for video generation and polling.",
+	"voice.timeout":                              "Timeout in seconds for voice and realtime requests.",
 }
 
 func configLooksLikeDSN(key string) bool {
