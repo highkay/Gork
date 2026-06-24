@@ -58,6 +58,10 @@ htmlcov/
 .uv-cache/
 .tmp/
 tmp/
+node_modules/
+test-results/
+playwright-report/
+.playwright/
 
 # Go build/test artifacts
 /gork

@@ -33,7 +33,8 @@
     "versionUnavailable": "查询更新失败。",
     "versionNotesEmpty": "暂无更新说明。",
     "versionOpenRelease": "发布详情",
-    "versionClose": "关闭"
+    "versionClose": "关闭",
+    "assetVersionChanged": "前端资源已更新，请刷新页面以加载最新界面。"
   },
   "webui": {
     "header": {

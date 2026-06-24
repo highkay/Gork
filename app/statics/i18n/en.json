@@ -33,7 +33,8 @@
     "versionUnavailable": "Failed to check for updates.",
     "versionNotesEmpty": "No release notes available.",
     "versionOpenRelease": "Open Release",
-    "versionClose": "Close"
+    "versionClose": "Close",
+    "assetVersionChanged": "Static assets changed. Refresh this page to load the latest UI."
   },
   "webui": {
     "header": {

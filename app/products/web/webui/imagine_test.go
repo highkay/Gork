@@ -137,6 +137,52 @@ func TestWebUIImagineWebSocketRejectsInvalidToken(t *testing.T) {
 	}
 }
 
+func TestWebUIImagineWebSocketAcceptsOneTimeTicket(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	server := httptest.NewServer(NewRouter())
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/webui/api/imagine/ws-ticket", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer web")
+	resp, err := server.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ticket status = %d", resp.StatusCode)
+	}
+	var body map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	ticket, _ := body["ticket"].(string)
+	if ticket == "" {
+		t.Fatalf("ticket body = %#v", body)
+	}
+
+	target := "/webui/api/imagine/ws?ticket=" + url.QueryEscape(ticket)
+	conn, _, status := webUIWSDial(t, server.URL, target, "")
+	if conn != nil {
+		_ = conn.Close()
+	}
+	if status != http.StatusSwitchingProtocols {
+		t.Fatalf("ticket websocket status = %d", status)
+	}
+
+	conn, _, status = webUIWSDial(t, server.URL, target, "")
+	if conn != nil {
+		_ = conn.Close()
+	}
+	if status != http.StatusForbidden {
+		t.Fatalf("reused ticket websocket status = %d", status)
+	}
+}
+
 func assertWebUIWSError(t *testing.T, payload map[string]any, message, code string) {
 	t.Helper()
 	if payload["type"] != "error" || payload["message"] != message || payload["code"] != code {

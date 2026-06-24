@@ -1,0 +1,16 @@
+{
+  "name": "gork-frontend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint:frontend": "node tests/frontend/run-biome.mjs",
+    "format:frontend": "node tests/frontend/run-biome.mjs --write",
+    "test:frontend:unit": "node --test tests/frontend/*.test.mjs",
+    "test:frontend:e2e": "playwright test",
+    "test:frontend": "npm run test:frontend:unit && npm run test:frontend:e2e"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.8",
+    "@playwright/test": "^1.57.0"
+  }
+}

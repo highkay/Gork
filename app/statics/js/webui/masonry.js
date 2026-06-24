@@ -1,10 +1,12 @@
 (() => {
   const VERIFY_ENDPOINT = '/webui/api/verify';
   const IMAGINE_WS_ENDPOINT = '/webui/api/imagine/ws';
+  const IMAGINE_WS_TICKET_ENDPOINT = '/webui/api/imagine/ws-ticket';
   const IMAGE_COUNT = 6;
   const PROMPT_MIN_HEIGHT = 52;
   const PROMPT_MAX_HEIGHT = 160;
   const RECONNECT_DELAY_MS = 250;
+  const RECONNECT_MAX_DELAY_MS = 5000;
 
   const promptInput = document.getElementById('promptInput');
   const sendBtn = document.getElementById('sendBtn');
@@ -83,9 +85,13 @@
   function resizePromptInput() {
     if (!promptInput) return;
     promptInput.style.height = `${PROMPT_MIN_HEIGHT}px`;
-    const nextHeight = Math.min(Math.max(promptInput.scrollHeight, PROMPT_MIN_HEIGHT), PROMPT_MAX_HEIGHT);
+    const nextHeight = Math.min(
+      Math.max(promptInput.scrollHeight, PROMPT_MIN_HEIGHT),
+      PROMPT_MAX_HEIGHT,
+    );
     promptInput.style.height = `${nextHeight}px`;
-    promptInput.style.overflowY = promptInput.scrollHeight > PROMPT_MAX_HEIGHT ? 'auto' : 'hidden';
+    promptInput.style.overflowY =
+      promptInput.scrollHeight > PROMPT_MAX_HEIGHT ? 'auto' : 'hidden';
   }
 
   function setEmptyState() {
@@ -118,12 +124,16 @@
     sending = next;
     if (promptInput) promptInput.disabled = next;
     if (aspectRatioSelect) aspectRatioSelect.disabled = next;
-    qualityToggle?.querySelectorAll('.webui-masonry-toggle-btn').forEach((button) => {
-      button.disabled = next;
-    });
-    modeToggle?.querySelectorAll('.webui-masonry-toggle-btn').forEach((button) => {
-      button.disabled = next;
-    });
+    qualityToggle
+      ?.querySelectorAll('.webui-masonry-toggle-btn')
+      .forEach((button) => {
+        button.disabled = next;
+      });
+    modeToggle
+      ?.querySelectorAll('.webui-masonry-toggle-btn')
+      .forEach((button) => {
+        button.disabled = next;
+      });
     renderSendButton(next);
   }
 
@@ -170,7 +180,10 @@
     link.className = 'webui-masonry-tile-link';
     link.target = '_blank';
     link.rel = 'noopener';
-    link.setAttribute('aria-label', text('webui.masonry.openImage', '打开图片'));
+    link.setAttribute(
+      'aria-label',
+      text('webui.masonry.openImage', '打开图片'),
+    );
     link.title = text('webui.masonry.openImage', '打开图片');
 
     const img = document.createElement('img');
@@ -267,7 +280,9 @@
     grid.className = 'webui-masonry-grid';
     grid.style.setProperty('--tile-aspect', aspectRatioCss(aspectRatio));
 
-    const slots = Array.from({ length: IMAGE_COUNT }, (_, index) => createSlot(index + 1));
+    const slots = Array.from({ length: IMAGE_COUNT }, (_, index) =>
+      createSlot(index + 1),
+    );
     slots.forEach((slot) => {
       renderSlot(slot);
       grid.appendChild(slot.tile);
@@ -303,7 +318,10 @@
 
     if (!batch.finalized) {
       batch.state.dataset.state = 'generating';
-      batch.state.textContent = text('webui.masonry.statusGenerating', '正在生成');
+      batch.state.textContent = text(
+        'webui.masonry.statusGenerating',
+        '正在生成',
+      );
       return;
     }
 
@@ -313,14 +331,23 @@
       return;
     }
 
-    if (completed > 0 || (completed === 0 && filtered > 0 && filtered < IMAGE_COUNT)) {
+    if (
+      completed > 0 ||
+      (completed === 0 && filtered > 0 && filtered < IMAGE_COUNT)
+    ) {
       batch.state.dataset.state = 'partial';
-      batch.state.textContent = text('webui.masonry.statusPartialFailure', '部分失败');
+      batch.state.textContent = text(
+        'webui.masonry.statusPartialFailure',
+        '部分失败',
+      );
       return;
     }
 
     batch.state.dataset.state = 'failed';
-    batch.state.textContent = text('webui.masonry.statusBatchFailed', '生成失败');
+    batch.state.textContent = text(
+      'webui.masonry.statusBatchFailed',
+      '生成失败',
+    );
   }
 
   function markBatchFailed(batch) {
@@ -337,7 +364,11 @@
   }
 
   function renderSlot(slot) {
-    const nextState = slot.url ? 'ready' : (slot.moderated ? 'filtered' : 'pending');
+    const nextState = slot.url
+      ? 'ready'
+      : slot.moderated
+        ? 'filtered'
+        : 'pending';
     slot.tile.classList.toggle('is-pending', nextState === 'pending');
     slot.tile.classList.toggle('is-ready', nextState === 'ready');
     slot.tile.classList.toggle('is-filtered', nextState === 'filtered');
@@ -348,7 +379,8 @@
         slot.img.src = slot.url;
         slot.renderedUrl = slot.url;
       }
-      if (slot.renderedState !== nextState) slot.body.replaceChildren(slot.link);
+      if (slot.renderedState !== nextState)
+        slot.body.replaceChildren(slot.link);
       slot.renderedState = nextState;
       return;
     }
@@ -356,7 +388,8 @@
     slot.renderedUrl = '';
     if (nextState === 'filtered') {
       slot.label.textContent = text('webui.masonry.batchFiltered', '已过滤');
-      if (slot.renderedState !== nextState) slot.body.replaceChildren(slot.label);
+      if (slot.renderedState !== nextState)
+        slot.body.replaceChildren(slot.label);
       slot.renderedState = nextState;
       return;
     }
@@ -367,7 +400,8 @@
       slot.progressFill.style.width = `${progress}%`;
       slot.renderedProgress = progress;
     }
-    if (slot.renderedState !== nextState) slot.body.replaceChildren(slot.progressShell);
+    if (slot.renderedState !== nextState)
+      slot.body.replaceChildren(slot.progressShell);
     slot.renderedState = nextState;
   }
 
@@ -379,8 +413,10 @@
 
   function updateBatchCounts(batch, previousOutcome, nextOutcome) {
     if (previousOutcome === nextOutcome) return false;
-    if (previousOutcome === 'ready') batch.readyCount = Math.max(0, batch.readyCount - 1);
-    if (previousOutcome === 'filtered') batch.filteredCount = Math.max(0, batch.filteredCount - 1);
+    if (previousOutcome === 'ready')
+      batch.readyCount = Math.max(0, batch.readyCount - 1);
+    if (previousOutcome === 'filtered')
+      batch.filteredCount = Math.max(0, batch.filteredCount - 1);
     if (nextOutcome === 'ready') batch.readyCount += 1;
     if (nextOutcome === 'filtered') batch.filteredCount += 1;
     return true;
@@ -392,7 +428,12 @@
     let slot = null;
 
     if (imageId) slot = batch.slots.find((item) => item.id === imageId) || null;
-    if (!slot && Number.isInteger(order) && order >= 0 && order < batch.slots.length) {
+    if (
+      !slot &&
+      Number.isInteger(order) &&
+      order >= 0 &&
+      order < batch.slots.length
+    ) {
       const orderedSlot = batch.slots[order] || null;
       if (orderedSlot && !orderedSlot.url && !orderedSlot.moderated) {
         slot = orderedSlot;
@@ -402,7 +443,9 @@
       slot = batch.slots.find((item) => !item.url && !item.moderated) || null;
     }
     if (!slot) {
-      slot = batch.slots.find((item) => !item.id && !item.url && !item.moderated) || batch.slots[0];
+      slot =
+        batch.slots.find((item) => !item.id && !item.url && !item.moderated) ||
+        batch.slots[0];
     }
     if (slot && imageId) slot.id = imageId;
     return slot;
@@ -426,7 +469,11 @@
     }
 
     const nextOutcome = slotOutcome(slot);
-    const countsChanged = updateBatchCounts(batch, previousOutcome, nextOutcome);
+    const countsChanged = updateBatchCounts(
+      batch,
+      previousOutcome,
+      nextOutcome,
+    );
     renderSlot(slot);
     if (countsChanged || payload.type !== 'progress') updateBatchMeta(batch);
   }
@@ -444,31 +491,65 @@
       currentRunId: '',
       currentBatch: null,
       nextBatchQueued: false,
+      reconnectAttempts: 0,
     };
   }
 
   async function ensureAccess() {
     const stored = await webuiKey.get();
-    if (stored && await verifyKey(VERIFY_ENDPOINT, stored)) return true;
+    if (stored && (await verifyKey(VERIFY_ENDPOINT, stored))) return true;
     if (stored) webuiKey.clear();
     if (await verifyKey(VERIFY_ENDPOINT, '')) return true;
     location.href = '/webui/login';
     return false;
   }
 
+  async function fetchImagineSocketTicket() {
+    const token = await webuiKey.get();
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const response = await fetch(IMAGINE_WS_TICKET_ENDPOINT, {
+      method: 'POST',
+      headers,
+    });
+    if (!response.ok)
+      throw new Error(`ticket request failed: ${response.status}`);
+    const data = await response.json();
+    return String(data?.ticket || '');
+  }
+
   async function connectSocket() {
-    if (!streamState?.keepRunning) return;
-    if (activeSocket && (activeSocket.readyState === WebSocket.OPEN || activeSocket.readyState === WebSocket.CONNECTING)) {
+    const state = streamState;
+    if (!state?.keepRunning) return;
+    if (
+      activeSocket &&
+      (activeSocket.readyState === WebSocket.OPEN ||
+        activeSocket.readyState === WebSocket.CONNECTING)
+    ) {
       return;
     }
 
-    const token = await webuiKey.get();
-    const wsUrl = buildWebSocketUrl(IMAGINE_WS_ENDPOINT, token ? { access_token: token } : {});
+    let ticket = '';
+    try {
+      ticket = await fetchImagineSocketTicket();
+    } catch {
+      state.failed = true;
+      state.keepRunning = false;
+      setSending(false);
+      setStatus(text('webui.masonry.statusFailed', '失败'), 'failed');
+      toast(text('webui.masonry.errors.requestFailed', '请求失败'), 'error');
+      return;
+    }
+    if (streamState !== state || !state.keepRunning) return;
+    const wsUrl = buildWebSocketUrl(
+      IMAGINE_WS_ENDPOINT,
+      ticket ? { ticket } : {},
+    );
     const socket = new WebSocket(wsUrl);
     activeSocket = socket;
 
     socket.addEventListener('open', () => {
       if (activeSocket !== socket || !streamState?.keepRunning) return;
+      streamState.reconnectAttempts = 0;
       scheduleNextBatch();
     });
 
@@ -484,13 +565,22 @@
       }
       if (!payload || typeof payload !== 'object') return;
 
-      if (payload.run_id && !state.currentRunId) state.currentRunId = String(payload.run_id);
-      if (state.currentRunId && payload.run_id && String(payload.run_id) !== state.currentRunId) return;
+      if (payload.run_id && !state.currentRunId)
+        state.currentRunId = String(payload.run_id);
+      if (
+        state.currentRunId &&
+        payload.run_id &&
+        String(payload.run_id) !== state.currentRunId
+      )
+        return;
 
       const batch = state.currentBatch;
       if (payload.type === 'status') {
         if (payload.status === 'running') {
-          setStatus(`${text('webui.masonry.statusGenerating', '生成中…')} · ${formatRoundLabel(state.batchIndex)}`, 'running');
+          setStatus(
+            `${text('webui.masonry.statusGenerating', '生成中…')} · ${formatRoundLabel(state.batchIndex)}`,
+            'running',
+          );
         } else if (payload.status === 'completed') {
           if (batch) {
             batch.completed = true;
@@ -498,11 +588,18 @@
             updateBatchMeta(batch);
           }
           state.currentRunId = '';
-          if (state.keepRunning && !state.userStopped && state.mode === 'continuous') {
+          if (
+            state.keepRunning &&
+            !state.userStopped &&
+            state.mode === 'continuous'
+          ) {
             scheduleNextBatch();
           } else {
             state.keepRunning = false;
-            setStatus(text('webui.masonry.statusCompleted', '完成'), 'completed');
+            setStatus(
+              text('webui.masonry.statusCompleted', '完成'),
+              'completed',
+            );
             try {
               socket.close(1000, 'completed');
             } catch {}
@@ -518,9 +615,16 @@
 
       if (!batch) return;
 
-      if (payload.type === 'progress' || payload.type === 'image' || payload.type === 'moderated') {
+      if (
+        payload.type === 'progress' ||
+        payload.type === 'image' ||
+        payload.type === 'moderated'
+      ) {
         syncBatch(batch, payload);
-        setStatus(`${text('webui.masonry.statusGenerating', '生成中…')} ${batch.readyCount}/${IMAGE_COUNT} · ${formatRoundLabel(batch.round)}`, 'running');
+        setStatus(
+          `${text('webui.masonry.statusGenerating', '生成中…')} ${batch.readyCount}/${IMAGE_COUNT} · ${formatRoundLabel(batch.round)}`,
+          'running',
+        );
         return;
       }
 
@@ -529,7 +633,11 @@
         state.keepRunning = false;
         markBatchFailed(batch);
         setStatus(text('webui.masonry.statusFailed', '失败'), 'failed');
-        toast(payload.message || text('webui.masonry.errors.requestFailed', '请求失败'), 'error');
+        toast(
+          payload.message ||
+            text('webui.masonry.errors.requestFailed', '请求失败'),
+          'error',
+        );
         try {
           socket.close(1011, 'error');
         } catch {}
@@ -538,7 +646,10 @@
 
     socket.addEventListener('error', () => {
       if (streamState?.keepRunning && !streamState.userStopped) {
-        setStatus(text('webui.masonry.statusConnecting', '连接中…'), 'connecting');
+        setStatus(
+          text('webui.masonry.statusConnecting', '连接中…'),
+          'connecting',
+        );
       }
     });
 
@@ -572,12 +683,20 @@
         if (state.currentBatch && !state.currentBatch.completed) {
           markBatchFailed(state.currentBatch);
         }
-        setStatus(text('webui.masonry.statusConnecting', '连接中…'), 'connecting');
+        setStatus(
+          text('webui.masonry.statusConnecting', '连接中…'),
+          'connecting',
+        );
+        const delay = Math.min(
+          RECONNECT_MAX_DELAY_MS,
+          RECONNECT_DELAY_MS * 2 ** state.reconnectAttempts,
+        );
+        state.reconnectAttempts += 1;
         window.setTimeout(() => {
           if (streamState === state && state.keepRunning) {
             void connectSocket();
           }
-        }, RECONNECT_DELAY_MS);
+        }, delay);
         return;
       }
 
@@ -589,7 +708,13 @@
 
   function scheduleNextBatch() {
     const state = streamState;
-    if (!state?.keepRunning || state.userStopped || state.failed || state.nextBatchQueued) return;
+    if (
+      !state?.keepRunning ||
+      state.userStopped ||
+      state.failed ||
+      state.nextBatchQueued
+    )
+      return;
     state.nextBatchQueued = true;
 
     window.setTimeout(() => {
@@ -604,17 +729,27 @@
 
       state.batchIndex += 1;
       state.currentRunId = '';
-      state.currentBatch = createBatch(state.prompt, state.aspectRatio, state.quality, state.batchIndex);
-      setStatus(`${text('webui.masonry.statusGenerating', '生成中…')} · ${formatRoundLabel(state.batchIndex)}`, 'running');
+      state.currentBatch = createBatch(
+        state.prompt,
+        state.aspectRatio,
+        state.quality,
+        state.batchIndex,
+      );
+      setStatus(
+        `${text('webui.masonry.statusGenerating', '生成中…')} · ${formatRoundLabel(state.batchIndex)}`,
+        'running',
+      );
 
       try {
-        activeSocket.send(JSON.stringify({
-          type: 'start',
-          prompt: state.prompt,
-          aspect_ratio: state.aspectRatio,
-          quality: state.quality,
-          count: IMAGE_COUNT,
-        }));
+        activeSocket.send(
+          JSON.stringify({
+            type: 'start',
+            prompt: state.prompt,
+            aspect_ratio: state.aspectRatio,
+            quality: state.quality,
+            count: IMAGE_COUNT,
+          }),
+        );
       } catch {
         void connectSocket();
       }
@@ -658,8 +793,14 @@
     }
 
     const aspectRatio = aspectRatioSelect?.value || '2:3';
-    const quality = readToggleValue(qualityToggle, 'speed') === 'quality' ? 'quality' : 'speed';
-    const mode = readToggleValue(modeToggle, 'single') === 'continuous' ? 'continuous' : 'single';
+    const quality =
+      readToggleValue(qualityToggle, 'speed') === 'quality'
+        ? 'quality'
+        : 'speed';
+    const mode =
+      readToggleValue(modeToggle, 'single') === 'continuous'
+        ? 'continuous'
+        : 'single';
     streamState = createStreamState(prompt, aspectRatio, quality, mode);
     setSending(true);
     setStatus(text('webui.masonry.statusConnecting', '连接中…'), 'connecting');
@@ -672,7 +813,7 @@
     await renderWebuiHeader?.();
     await renderSiteFooter?.();
     window.I18n?.apply?.(document);
-    if (!await ensureAccess()) return;
+    if (!(await ensureAccess())) return;
     syncAspectRatioIndicator();
     setToggleValue(qualityToggle, 'speed');
     setToggleValue(modeToggle, 'single');
@@ -688,13 +829,19 @@
   });
 
   qualityToggle?.addEventListener('click', (event) => {
-    const button = event.target instanceof Element ? event.target.closest('.webui-masonry-toggle-btn') : null;
+    const button =
+      event.target instanceof Element
+        ? event.target.closest('.webui-masonry-toggle-btn')
+        : null;
     if (!(button instanceof HTMLButtonElement) || button.disabled) return;
     setToggleValue(qualityToggle, button.dataset.value || 'speed');
   });
 
   modeToggle?.addEventListener('click', (event) => {
-    const button = event.target instanceof Element ? event.target.closest('.webui-masonry-toggle-btn') : null;
+    const button =
+      event.target instanceof Element
+        ? event.target.closest('.webui-masonry-toggle-btn')
+        : null;
     if (!(button instanceof HTMLButtonElement) || button.disabled) return;
     setToggleValue(modeToggle, button.dataset.value || 'single');
   });
@@ -719,7 +866,10 @@
 
   boot().catch((error) => {
     console.error('webui masonry boot failed', error);
-    toast(text('webui.masonry.errors.initFailed', '瀑布流页面初始化失败'), 'error');
+    toast(
+      text('webui.masonry.errors.initFailed', '瀑布流页面初始化失败'),
+      'error',
+    );
     setStatus(text('webui.masonry.statusFailed', '失败'), 'failed');
   });
 })();

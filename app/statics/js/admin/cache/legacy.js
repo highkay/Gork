@@ -1,0 +1,813 @@
+const PAGE_SIZE_KEY = 'admin.cache.page_size';
+const PAGE_SIZE_OPTIONS = [50, 100, 200, 500, 1000, 2000];
+const REFRESH_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+const SPINNER_ICON = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="animation:spin .8s linear infinite"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+
+let _type = 'image';
+let _view = 'image';
+let _page = 1;
+let _pageSize = loadSavedPageSize();
+let _total = 0;
+let _localItems = [];
+const _localSel = new Set();
+let _assetData = [];
+let _assetTotal = 0;
+let _expanded = {};
+const _assetSel = new Set();
+let _assetTaskId = null;
+let _assetEs = null;
+let _assetLoaded = false;
+let _localViewVersion = 0;
+let _localViewCacheVersion = -1;
+let _localViewCache = null;
+let _assetViewVersion = 0;
+let _assetViewCacheVersion = -1;
+let _assetViewCache = null;
+
+function tr(key, params, fallback) {
+  const value = t(key, params);
+  return value === key ? (fallback ?? key) : value;
+}
+
+function waitI18n() {
+  return new Promise((resolve) => I18n.onReady(resolve));
+}
+
+function getLocale() {
+  return I18n.getLang() === 'en' ? 'en-US' : 'zh-CN';
+}
+
+function getTypeNoun(type = _type) {
+  return tr(type === 'image' ? 'cache.typeImageNoun' : 'cache.typeVideoNoun', null, type === 'image' ? '图片' : '视频');
+}
+
+function loadSavedPageSize() {
+  const raw = Number(localStorage.getItem(PAGE_SIZE_KEY));
+  return PAGE_SIZE_OPTIONS.includes(raw) ? raw : 100;
+}
+
+function _fmtRatio(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return tr('cache.na', null, '—');
+  return `${num.toFixed(1)}%`;
+}
+
+function _usageSummary(stats) {
+  const used = _fmtBytes(stats.size_bytes ?? 0);
+  if (!stats?.limited || !stats?.limit_bytes) {
+    return tr('cache.usageSummaryUnlimited', { used }, `${used} · 未限制`);
+  }
+  const limit = _fmtBytes(stats.limit_bytes);
+  const percent = _fmtRatio(stats.usage_percent);
+  return tr(
+    'cache.usageSummaryLimited',
+    { used, limit, percent },
+    `${used} / ${limit} · ${percent}`
+  );
+}
+
+function _applyUsageBar(id, type, stats) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const limited = !!stats?.limited && Number(stats.limit_bytes) > 0;
+  const percent = limited ? Number(stats.usage_percent ?? 0) : 0;
+  const safe = Number.isFinite(percent) ? percent : 0;
+  el.style.width = `${Math.max(0, Math.min(safe, 100))}%`;
+  el.classList.toggle('over', limited && safe > 100);
+  el.classList.toggle('image', type === 'image');
+  el.classList.toggle('video', type === 'video');
+}
+
+function invalidateLocalView() {
+  _localViewVersion += 1;
+}
+
+function invalidateAssetView() {
+  _assetViewVersion += 1;
+}
+
+function getLocalView() {
+  if (_localViewCache && _localViewCacheVersion === _localViewVersion) return _localViewCache;
+
+  const selectedNames = [];
+  for (const item of _localItems) {
+    if (_localSel.has(item.name)) selectedNames.push(item.name);
+  }
+  const selectedCount = selectedNames.length;
+
+  _localViewCacheVersion = _localViewVersion;
+  _localViewCache = {
+    items: _localItems,
+    selectedNames,
+    totalItems: _localItems.length,
+    selectedCount,
+    hasSelection: selectedCount > 0,
+    allSelected: _localItems.length > 0 && selectedCount === _localItems.length,
+    someSelected: selectedCount > 0 && selectedCount < _localItems.length,
+  };
+  return _localViewCache;
+}
+
+function getAssetView() {
+  if (_assetViewCache && _assetViewCacheVersion === _assetViewVersion) return _assetViewCache;
+
+  const rows = [];
+  const clearableTokens = [];
+  const selectedClearableTokens = [];
+  let countedAssets = 0;
+  let selectedCount = 0;
+
+  for (const row of _assetData) {
+    const masked = row.masked || _maskToken(row.token || '');
+    const count = row.count || 0;
+    const hasItems = count > 0;
+    const isSelected = _assetSel.has(row.token);
+    const assets = Array.isArray(row.assets) ? row.assets : [];
+
+    countedAssets += count;
+    if (isSelected) selectedCount += 1;
+    if (hasItems) clearableTokens.push(row.token);
+    if (isSelected && hasItems) selectedClearableTokens.push(row.token);
+
+    rows.push({
+      row,
+      masked,
+      assets,
+      hasItems,
+      isOpen: !!_expanded[masked],
+      isSelected,
+    });
+  }
+
+  const totalRows = rows.length;
+  const selectedClearableCount = selectedClearableTokens.length;
+
+  _assetViewCacheVersion = _assetViewVersion;
+  _assetViewCache = {
+    loaded: _assetLoaded,
+    rows,
+    totalRows,
+    totalAccounts: totalRows,
+    totalAssets: _assetTotal || countedAssets,
+    selectedCount,
+    hasSelection: selectedCount > 0,
+    allSelected: totalRows > 0 && selectedCount === totalRows,
+    someSelected: selectedCount > 0 && selectedCount < totalRows,
+    clearableTokens,
+    hasClearable: clearableTokens.length > 0,
+    selectedClearableTokens,
+    selectedClearableCount,
+  };
+  return _assetViewCache;
+}
+
+function setLoadAssetsButton(labelKey, fallback, spinning = false) {
+  const btn = document.getElementById('btn-load-assets');
+  if (!btn) return;
+  btn.innerHTML = spinning ? SPINNER_ICON : REFRESH_ICON;
+  const label = tr(labelKey, null, fallback);
+  btn.setAttribute('data-tip', label);
+  btn.setAttribute('aria-label', label);
+  btn.setAttribute('title', label);
+}
+
+function applyToolbarI18n() {
+  const tips = [
+    ['btn-clear', 'cache.clearCurrent', '清空当前缓存'],
+    ['btn-local-delete-selected', 'cache.deleteSelected', '删除选中'],
+    ['btn-load-assets', 'cache.loadAssets', '加载资产列表'],
+    ['btn-clear-all-assets', 'cache.clearAll', '清理全部'],
+    ['btn-clear-selected-assets', 'cache.clearSelected', '清理选中'],
+    ['btn-asset-cancel', 'cache.cancel', '取消'],
+  ];
+  tips.forEach(([id, key, fallback]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const label = tr(key, null, fallback);
+    el.setAttribute('data-tip', label);
+    el.setAttribute('aria-label', label);
+    el.setAttribute('title', label);
+  });
+}
+
+function updateAssetSummary(view = getAssetView()) {
+  if (!view.loaded) {
+    document.getElementById('asset-summary').textContent = tr('cache.assetSummaryIdle', null, '点击右侧获取在线资产');
+    updateAssetBatchButtons(view);
+    return;
+  }
+  document.getElementById('asset-summary').textContent = tr(
+    'cache.assetSummary',
+    { accounts: view.totalAccounts, files: view.totalAssets },
+    `共 ${view.totalAccounts} 个账户 · ${view.totalAssets} 个文件`
+  );
+  updateAssetBatchButtons(view);
+}
+
+function applyCacheI18n() {
+  document.title = tr('cache.pageTitle', null, 'Gork - 缓存管理');
+  document.querySelectorAll('#page-size-sel option').forEach((opt) => {
+    opt.textContent = tr('cache.pageSizeOption', { n: opt.value }, `${opt.value} / 页`);
+  });
+  const pageSizeSel = document.getElementById('page-size-sel');
+  if (pageSizeSel) pageSizeSel.value = String(_pageSize);
+  applyToolbarI18n();
+  setLoadAssetsButton('cache.loadAssets', '加载资产列表');
+  _renderPagi();
+  if (_assetLoaded) {
+    _renderAssets();
+  }
+  updateAssetSummary();
+}
+
+async function _api(method, path, body) {
+  const key = await adminKey.get();
+  const r = await fetch(ADMIN_API + path, {
+    method,
+    headers: { ...(body != null && { 'Content-Type': 'application/json' }), Authorization: `Bearer ${key}` },
+    ...(body != null && { body: JSON.stringify(body) }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail || r.status);
+  }
+  return r.json();
+}
+
+async function loadStats() {
+  try {
+    const d = await _api('GET', '/cache');
+    const img = d.local_image || {};
+    const vid = d.local_video || {};
+    document.getElementById('s-img-count').textContent = img.count ?? 0;
+    document.getElementById('s-img-size').textContent = _fmtMb(img.size_mb);
+    document.getElementById('s-img-usage').textContent = _usageSummary(img);
+    _applyUsageBar('s-img-progress', 'image', img);
+    document.getElementById('s-vid-count').textContent = vid.count ?? 0;
+    document.getElementById('s-vid-size').textContent = _fmtMb(vid.size_mb);
+    document.getElementById('s-vid-usage').textContent = _usageSummary(vid);
+    _applyUsageBar('s-vid-progress', 'video', vid);
+  } catch (e) {
+    console.warn('stats error', e);
+  }
+}
+
+async function loadList() {
+  try {
+    const d = await _api('GET', `/cache/list?type=${_type}&page=${_page}&page_size=${_pageSize}`);
+    _total = d.total ?? 0;
+    _localItems = d.items || [];
+    invalidateLocalView();
+    _reconcileLocalSelection();
+    _renderTable();
+    _renderPagi();
+    updateLocalBatchButtons();
+  } catch (e) {
+    showToast(tr('cache.loadFailed', { message: e.message }, `加载失败: ${e.message}`), 'error');
+  }
+}
+
+function _renderTable(view = getLocalView()) {
+  const tbody = document.getElementById('cache-tbody');
+  const items = view.items;
+  syncLocalSelectAll(view);
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="table-empty">${_esc(tr('cache.emptyLocal', null, '暂无缓存文件'))}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = items.map((f) => `
+    <tr>
+      <td><input type="checkbox" class="cb local-row-cb" data-name="${_esc(f.name)}" ${_localSel.has(f.name) ? 'checked' : ''} onchange="toggleLocalRow(this)"></td>
+      <td>
+        <div class="row-name">
+          <span class="row-icon" aria-hidden="true">
+            ${_type === 'image'
+              ? `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="M21 15l-4.5-4.5L7 20"/></svg>`
+              : `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><polygon points="16 12 10 8.5 10 15.5 16 12"/><rect x="4" y="5" width="16" height="14" rx="2"/></svg>`
+            }
+          </span>
+          <span class="row-value">${_esc(f.name)}</span>
+        </div>
+      </td>
+      <td>${_fmtBytes(f.size_bytes)}</td>
+      <td>${_fmtTime(f.modified_at)}</td>
+      <td><div class="row-actions"><button class="row-action" onclick="viewFile('${_esc(f.name)}')" title="${_esc(tr('cache.actionView', null, '查看'))}" aria-label="${_esc(tr('cache.actionView', null, '查看'))}"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="3"/></svg></button><button class="row-action row-action-danger" onclick="deleteFile('${_esc(f.name)}')" title="${_esc(tr('cache.actionDelete', null, '删除'))}" aria-label="${_esc(tr('cache.actionDelete', null, '删除'))}"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V4h6v3"/><path d="M8 10v7"/><path d="M12 10v7"/><path d="M16 10v7"/><path d="M7 7l1 13h8l1-13"/></svg></button></div></td>
+    </tr>`).join('');
+  syncLocalSelectAll(view);
+}
+
+function _renderPagi() {
+  const pages = Math.max(1, Math.ceil(_total / _pageSize));
+  document.getElementById('pagi-page').textContent = tr('cache.pageIndicator', { current: _page, total: pages }, `第 ${_page} / ${pages} 页`);
+  document.getElementById('btn-prev').disabled = _page <= 1;
+  document.getElementById('btn-next').disabled = _page >= pages;
+}
+
+function prevPage() {
+  if (_page > 1) {
+    _page -= 1;
+    loadList();
+  }
+}
+
+function nextPage() {
+  const pages = Math.max(1, Math.ceil(_total / _pageSize));
+  if (_page < pages) {
+    _page += 1;
+    loadList();
+  }
+}
+
+function changePageSize(value) {
+  const next = Number(value);
+  _pageSize = PAGE_SIZE_OPTIONS.includes(next) ? next : 100;
+  localStorage.setItem(PAGE_SIZE_KEY, String(_pageSize));
+  _page = 1;
+  loadList();
+}
+
+function switchView(view) {
+  _view = view;
+  const isOnline = view === 'online';
+  document.querySelectorAll('[data-cache-view]').forEach((el) => {
+    el.classList.toggle('active', el.dataset.cacheView === view);
+  });
+  document.getElementById('panel-local').classList.toggle('active', !isOnline);
+  document.getElementById('panel-online').classList.toggle('active', isOnline);
+  if (isOnline) {
+    clearLocalSelection(false);
+    return;
+  }
+  clearAssetSelection(false);
+  _type = view;
+  _page = 1;
+  loadList();
+}
+
+async function clearLocal() {
+  if (!confirm(tr('cache.clearLocalConfirm', { type: getTypeNoun() }, `确定要清空所有本地${getTypeNoun()}缓存吗？`))) return;
+  try {
+    const d = await _api('POST', '/cache/clear', { type: _type });
+    const removed = d.result?.removed ?? 0;
+    showToast(tr('cache.clearLocalDone', { count: removed, type: getTypeNoun() }, `已清除 ${removed} 个${getTypeNoun()}文件`));
+    _page = 1;
+    loadStats();
+    loadList();
+  } catch (e) {
+    showToast(tr('cache.clearFailed', { message: e.message }, `清除失败: ${e.message}`), 'error');
+  }
+}
+
+async function deleteFile(name) {
+  try {
+    await _api('POST', '/cache/item/delete', { type: _type, name });
+    _localSel.delete(name);
+    showToast(tr('cache.deleted', null, '已删除'));
+    loadStats();
+    loadList();
+  } catch (e) {
+    showToast(tr('cache.deleteFailed', { message: e.message }, `删除失败: ${e.message}`), 'error');
+  }
+}
+
+function viewFile(name) {
+  const url = localFileUrl(name);
+  if (!url) {
+    showToast(tr('cache.viewUnavailable', null, '当前文件暂不支持查看'), 'error');
+    return;
+  }
+  window.open(url, '_blank', 'noopener');
+}
+
+function localFileUrl(name) {
+  const raw = String(name || '');
+  const dot = raw.lastIndexOf('.');
+  if (dot <= 0) return '';
+  const id = raw.slice(0, dot);
+  return _type === 'video'
+    ? `/v1/files/video?id=${encodeURIComponent(id)}`
+    : `/v1/files/image?id=${encodeURIComponent(id)}`;
+}
+
+async function loadAssets() {
+  const btn = document.getElementById('btn-load-assets');
+  btn.disabled = true;
+  setLoadAssetsButton('cache.loading', '加载中…', true);
+  try {
+    const d = await _api('GET', '/assets');
+    _assetLoaded = true;
+    _assetData = d.tokens || [];
+    _assetTotal = d.total_assets ?? _assetData.reduce((sum, row) => sum + (row.count || 0), 0);
+    _expanded = {};
+    invalidateAssetView();
+    _reconcileAssetSelection();
+    _renderAssets();
+    updateAssetSummary();
+  } catch (e) {
+    _assetLoaded = false;
+    _assetData = [];
+    _assetTotal = 0;
+    _expanded = {};
+    _assetSel.clear();
+    invalidateAssetView();
+    _renderAssets();
+    updateAssetSummary();
+    showToast(tr('cache.loadFailed', { message: e.message }, `加载失败: ${e.message}`), 'error');
+  } finally {
+    btn.disabled = false;
+    setLoadAssetsButton('cache.refreshList', '刷新列表');
+  }
+}
+
+function _renderAssets(view = getAssetView()) {
+  const tbody = document.getElementById('assets-tbody');
+  syncAssetSelectAll(view);
+  if (!view.loaded) {
+    tbody.innerHTML = `<tr><td colspan="5" class="table-empty">${_esc(tr('cache.emptyAssetsIdle', null, '点击右上角获取在线资产列表'))}</td></tr>`;
+    return;
+  }
+  if (!view.totalRows) {
+    tbody.innerHTML = `<tr><td colspan="5" class="table-empty">${_esc(tr('cache.emptyAccounts', null, '暂无账户数据'))}</td></tr>`;
+    return;
+  }
+
+  const expandLabel = tr('cache.expand', null, '展开');
+  const collapseLabel = tr('cache.collapse', null, '收起');
+  const clearLabel = tr('cache.actionClear', null, '清理');
+  const deleteLabel = tr('cache.actionDelete', null, '删除');
+  const naLabel = tr('cache.na', null, '—');
+
+  const rows = [];
+  for (const { row, masked, assets, hasItems, isOpen, isSelected } of view.rows) {
+    rows.push(`
+      <tr>
+        <td><input type="checkbox" class="cb asset-row-cb" data-token="${_esc(row.token)}" ${isSelected ? 'checked' : ''} onchange="toggleAssetRow(this)"></td>
+        <td style="padding:10px 8px 10px 14px">
+          ${hasItems ? `<button class="expand-btn${isOpen ? ' open' : ''}" onclick="toggleExpand('${_esc(masked)}')" title="${_esc(isOpen ? collapseLabel : expandLabel)}">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>` : '<span style="width:22px;display:inline-block"></span>'}
+        </td>
+        <td>
+          <div class="row-name">
+            <span class="row-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M7 10V8a5 5 0 0 1 10 0v2"/><rect x="4" y="10" width="16" height="10" rx="2"/><circle cx="12" cy="15" r="1"/></svg>
+            </span>
+            <span class="row-value">${_esc(masked)}</span>
+          </div>
+          ${row.error ? `<span class="asset-err" title="${_esc(row.error)}">⚠ ${_esc(row.error)}</span>` : ''}
+        </td>
+        <td>
+          <span class="asset-count-badge${hasItems ? ' has-items' : ''}">${row.count}</span>
+        </td>
+        <td>
+          ${hasItems ? `<div class="row-actions"><button class="row-action row-action-danger" onclick="clearTokenAssets('${_esc(row.token)}','${_esc(masked)}')" title="${_esc(clearLabel)}" aria-label="${_esc(clearLabel)}"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V4h6v3"/><path d="M8 10v7"/><path d="M12 10v7"/><path d="M16 10v7"/><path d="M7 7l1 13h8l1-13"/></svg></button></div>` : ''}
+        </td>
+      </tr>`);
+
+    if (isOpen && hasItems) {
+      for (const asset of assets) {
+        rows.push(`
+          <tr class="sub-row">
+            <td></td>
+            <td></td>
+            <td>
+              <div class="row-name">
+                <span class="row-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8"><path d="M8 3h6l5 5v13H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M14 3v5h5"/></svg>
+                </span>
+                <span class="row-value" style="font-size:11px">${_esc(asset.name || asset.id)}</span>
+                ${asset.content_type ? `<span style="color:#aaa;font-size:11px">${_esc(asset.content_type)}</span>` : ''}
+              </div>
+            </td>
+            <td style="color:#aaa;font-size:11px">${asset.size ? _fmtBytes(asset.size) : _esc(naLabel)}</td>
+            <td>
+              <div class="row-actions"><button class="row-action row-action-danger" onclick="deleteAssetItem('${_esc(row.token)}','${_esc(masked)}','${_esc(asset.id)}')" title="${_esc(deleteLabel)}" aria-label="${_esc(deleteLabel)}"><svg viewBox="0 0 24 24" stroke-width="1.8"><path d="M5 7h14"/><path d="M9 7V4h6v3"/><path d="M8 10v7"/><path d="M12 10v7"/><path d="M16 10v7"/><path d="M7 7l1 13h8l1-13"/></svg></button></div>
+            </td>
+          </tr>`);
+      }
+    }
+  }
+  tbody.innerHTML = rows.join('');
+  syncAssetSelectAll(view);
+  updateAssetBatchButtons(view);
+}
+
+function toggleExpand(masked) {
+  _expanded[masked] = !_expanded[masked];
+  invalidateAssetView();
+  _renderAssets();
+}
+
+async function clearTokenAssets(token, masked) {
+  if (!confirm(tr('cache.clearTokenConfirm', { token: masked }, `确定要清理 ${masked} 的全部在线资产吗？`))) return;
+  try {
+    const d = await _api('POST', '/assets/clear-token', { token });
+    showToast(tr('cache.clearTokenDone', { count: d.deleted ?? 0 }, `已删除 ${d.deleted ?? 0} 个文件`));
+    await loadAssets();
+  } catch (e) {
+    showToast(tr('cache.clearFailed', { message: e.message }, `清理失败: ${e.message}`), 'error');
+  }
+}
+
+async function deleteAssetItem(token, masked, assetId) {
+  try {
+    await _api('POST', '/assets/delete-item', { token, asset_id: assetId });
+    showToast(tr('cache.deleted', null, '已删除'));
+    const row = _assetData.find((item) => item.token === token);
+    if (row) {
+      row.assets = row.assets.filter((asset) => asset.id !== assetId);
+      row.count = row.assets.length;
+    }
+    _assetTotal = _assetData.reduce((sum, item) => sum + (item.count || 0), 0);
+    invalidateAssetView();
+    _renderAssets();
+    updateAssetSummary();
+  } catch (e) {
+    showToast(tr('cache.deleteFailed', { message: e.message }, `删除失败: ${e.message}`), 'error');
+  }
+}
+
+function _reconcileLocalSelection() {
+  const names = new Set(_localItems.map((item) => item.name));
+  let changed = false;
+  [..._localSel].forEach((name) => {
+    if (!names.has(name)) {
+      _localSel.delete(name);
+      changed = true;
+    }
+  });
+  if (changed) invalidateLocalView();
+}
+
+function syncLocalSelectAll(view = getLocalView()) {
+  const cbAll = document.getElementById('cb-local-all');
+  if (!cbAll) return;
+  if (!view.totalItems) {
+    cbAll.checked = false;
+    cbAll.indeterminate = false;
+    return;
+  }
+  cbAll.checked = view.allSelected;
+  cbAll.indeterminate = view.someSelected;
+}
+
+function toggleAllLocal(checked) {
+  const view = getLocalView();
+  view.items.forEach((item) => {
+    if (checked) _localSel.add(item.name);
+    else _localSel.delete(item.name);
+  });
+  invalidateLocalView();
+  document.querySelectorAll('.local-row-cb').forEach((el) => { el.checked = checked; });
+  syncLocalSelectAll();
+  updateLocalBatchButtons();
+}
+
+function toggleLocalRow(el) {
+  const name = el.dataset.name;
+  if (!name) return;
+  if (el.checked) _localSel.add(name);
+  else _localSel.delete(name);
+  invalidateLocalView();
+  syncLocalSelectAll();
+  updateLocalBatchButtons();
+}
+
+function clearLocalSelection(render = true) {
+  _localSel.clear();
+  invalidateLocalView();
+  syncLocalSelectAll();
+  updateLocalBatchButtons();
+  if (render) {
+    document.querySelectorAll('.local-row-cb').forEach((el) => { el.checked = false; });
+  }
+}
+
+function updateLocalBatchButtons(view = getLocalView()) {
+  const show = view.hasSelection;
+  const btnDelete = document.getElementById('btn-local-delete-selected');
+  const btnClear = document.getElementById('btn-clear');
+  if (btnDelete) btnDelete.style.display = show ? '' : 'none';
+  if (btnClear) btnClear.style.display = show ? 'none' : '';
+}
+
+async function deleteSelectedLocal() {
+  const names = getLocalView().selectedNames;
+  if (!names.length) return;
+  if (!confirm(tr('cache.deleteSelectedConfirm', { n: names.length }, `确定要删除选中的 ${names.length} 个文件吗？`))) return;
+  try {
+    const d = await _api('POST', '/cache/items/delete', { type: _type, names });
+    const deleted = d.result?.deleted ?? names.length;
+    showToast(tr('cache.deleteSelectedDone', { count: deleted }, `已删除 ${deleted} 个文件`), 'success');
+    clearLocalSelection();
+    loadStats();
+    loadList();
+  } catch (e) {
+    showToast(tr('cache.deleteFailed', { message: e.message }, `删除失败: ${e.message}`), 'error');
+  }
+}
+
+function _reconcileAssetSelection() {
+  const tokens = new Set(_assetData.map((row) => row.token));
+  let changed = false;
+  [..._assetSel].forEach((token) => {
+    if (!tokens.has(token)) {
+      _assetSel.delete(token);
+      changed = true;
+    }
+  });
+  if (changed) invalidateAssetView();
+}
+
+function syncAssetSelectAll(view = getAssetView()) {
+  const cbAll = document.getElementById('cb-asset-all');
+  if (!cbAll) return;
+  if (!view.totalRows) {
+    cbAll.checked = false;
+    cbAll.indeterminate = false;
+    return;
+  }
+  cbAll.checked = view.allSelected;
+  cbAll.indeterminate = view.someSelected;
+}
+
+function toggleAllAssets(checked) {
+  const view = getAssetView();
+  view.rows.forEach(({ row }) => {
+    if (checked) _assetSel.add(row.token);
+    else _assetSel.delete(row.token);
+  });
+  invalidateAssetView();
+  document.querySelectorAll('.asset-row-cb').forEach((el) => { el.checked = checked; });
+  syncAssetSelectAll();
+  updateAssetBatchButtons();
+}
+
+function toggleAssetRow(el) {
+  const token = el.dataset.token;
+  if (!token) return;
+  if (el.checked) _assetSel.add(token);
+  else _assetSel.delete(token);
+  invalidateAssetView();
+  syncAssetSelectAll();
+  updateAssetBatchButtons();
+}
+
+function clearAssetSelection(render = true) {
+  _assetSel.clear();
+  invalidateAssetView();
+  syncAssetSelectAll();
+  updateAssetBatchButtons();
+  if (render) {
+    document.querySelectorAll('.asset-row-cb').forEach((el) => { el.checked = false; });
+  }
+}
+
+function updateAssetBatchButtons(view = getAssetView()) {
+  const btnClearAll = document.getElementById('btn-clear-all-assets');
+  const btnClearSelected = document.getElementById('btn-clear-selected-assets');
+  if (btnClearSelected) btnClearSelected.style.display = view.selectedClearableCount > 0 ? '' : 'none';
+  if (btnClearAll) btnClearAll.style.display = !view.hasSelection && view.hasClearable ? '' : 'none';
+}
+
+async function clearSelectedAssets() {
+  const tokens = getAssetView().selectedClearableTokens;
+  if (!tokens.length) return;
+  await runAssetClear(tokens);
+}
+
+async function clearAllAssets() {
+  const tokens = getAssetView().clearableTokens;
+  if (!tokens.length) return;
+  await runAssetClear(tokens);
+}
+
+async function runAssetClear(tokens) {
+  const allTokens = getAssetView().clearableTokens;
+  const isAll = tokens.length === allTokens.length;
+  if (isAll) {
+    if (!confirm(tr('cache.clearAllConfirm', { n: tokens.length }, `确定要清理全部 ${tokens.length} 个账户的在线资产吗？此操作不可撤销。`))) return;
+  } else {
+    if (!confirm(tr('cache.clearSelectedConfirm', { n: tokens.length }, `确定要清理选中的 ${tokens.length} 个账户在线资产吗？`))) return;
+  }
+
+  const btnClearAll = document.getElementById('btn-clear-all-assets');
+  const btnClearSelected = document.getElementById('btn-clear-selected-assets');
+  const btnCancel = document.getElementById('btn-asset-cancel');
+
+  if (btnClearAll) btnClearAll.style.display = 'none';
+  if (btnClearSelected) btnClearSelected.style.display = 'none';
+  if (btnCancel) btnCancel.style.display = '';
+  const progress = showProgressToast(tr('cache.clearingAssets', null, '正在清理在线资产…'));
+  let finalReceived = false;
+
+  function cleanup() {
+    if (btnCancel) btnCancel.style.display = 'none';
+    updateAssetBatchButtons();
+  }
+
+  function done(es) {
+    finalReceived = true;
+    es.close();
+    _assetEs = null;
+    cleanup();
+  }
+
+  try {
+    const d = await _api('POST', '/batch/cache-clear?async=true', { tokens });
+    _assetTaskId = d.task_id;
+    const total = d.total || tokens.length;
+    const key = await adminKey.get();
+    const es = new EventSource(`${ADMIN_API}/batch/${_assetTaskId}/stream?app_key=${encodeURIComponent(key)}`);
+    _assetEs = es;
+
+    es.onmessage = (event) => {
+      const ev = JSON.parse(event.data);
+      if (ev.type === 'snapshot' || ev.type === 'progress') {
+        progress.update(ev.processed || 0, total);
+      }
+      if (['done', 'error', 'cancelled'].includes(ev.type)) {
+        done(es);
+        if (ev.type === 'done') {
+          const summary = ev.result?.summary || {};
+          progress.finish(
+            tr('cache.clearAllDone', { ok: summary.ok ?? 0, fail: summary.fail ?? 0 }, `清理完成：成功 ${summary.ok ?? 0}，失败 ${summary.fail ?? 0}`),
+            (summary.fail ?? 0) > 0 ? 'error' : 'success'
+          );
+          clearAssetSelection(false);
+          loadAssets();
+        } else if (ev.type === 'cancelled') {
+          progress.finish(tr('cache.cancelled', null, '已取消'), 'error');
+          updateAssetBatchButtons();
+        } else {
+          progress.finish(ev.error || tr('cache.clearFailedPlain', null, '清理失败'), 'error');
+          updateAssetBatchButtons();
+        }
+      }
+    };
+
+    es.onerror = function() {
+      if (finalReceived) {
+        _assetEs = null;
+        return;
+      }
+      if (this.readyState === EventSource.CLOSED) {
+        _assetEs = null;
+        cleanup();
+        progress.finish(tr('cache.connectionInterrupted', null, '连接中断'), 'error');
+      }
+    };
+  } catch (e) {
+    cleanup();
+    progress.finish(tr('cache.startFailed', { message: e.message }, `启动失败: ${e.message}`), 'error');
+  }
+}
+
+async function cancelAssetClear() {
+  if (!_assetTaskId) return;
+  showToast(tr('cache.cancelInProgress', null, '已暂停，请耐心等待本批次完成…'), 'info');
+  try {
+    await _api('POST', `/batch/${_assetTaskId}/cancel`);
+  } catch {}
+}
+
+function _fmtMb(mb) {
+  if (mb == null) return tr('cache.na', null, '—');
+  if (mb < 1) return `${Math.round(mb * 1024)} KB`;
+  return `${mb.toFixed(1)} MB`;
+}
+
+function _fmtBytes(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(1)} MB`;
+}
+
+function _fmtTime(ts) {
+  if (!ts) return tr('cache.na', null, '—');
+  return new Date(ts * 1000).toLocaleString(getLocale(), { hour12: false });
+}
+
+function _maskToken(token) {
+  return token.length > 16 ? `${token.slice(0, 8)}…${token.slice(-4)}` : token;
+}
+
+function _esc(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+(async () => {
+  await waitI18n();
+  applyCacheI18n();
+  await renderAdminHeader?.();
+  await renderSiteFooter?.();
+  const key = await adminKey.get();
+  if (!key || !await verifyKey(ADMIN_API + '/verify', key).catch(() => false)) {
+    location.href = '/admin/login';
+    return;
+  }
+  loadStats();
+  loadList();
+  _renderAssets();
+})();

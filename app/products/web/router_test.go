@@ -30,7 +30,7 @@ func TestWebRouterRedirectsAndMeta(t *testing.T) {
 		t.Fatalf("admin status/location=%d/%q", rec.Code, rec.Header().Get("Location"))
 	}
 	rec = getWeb("/meta", "")
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"version":"1.2.3"`) {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"version":"1.2.3"`) || !strings.Contains(rec.Body.String(), `"asset_version":"1.2.3"`) {
 		t.Fatalf("meta status/body=%d/%s", rec.Code, rec.Body.String())
 	}
 	rec = getWeb("/meta/update?force=true", "")
@@ -142,7 +142,7 @@ func TestWebRouterRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		{name: "webui chatkit page", path: "/webui/chatkit", status: http.StatusOK, contentType: "text/html", body: "page:webui/chatkit.html"},
 		{name: "webui masonry page", path: "/webui/masonry", status: http.StatusOK, contentType: "text/html", body: "page:webui/masonry.html"},
 		{name: "webui verify", path: "/webui/api/verify", auth: "Bearer web", status: http.StatusOK, contentType: "application/json", json: map[string]any{"status": "ok"}},
-		{name: "meta", path: "/meta", status: http.StatusOK, contentType: "application/json", json: map[string]any{"version": "2.0.4"}},
+		{name: "meta", path: "/meta", status: http.StatusOK, contentType: "application/json", json: map[string]any{"version": "2.0.4", "asset_version": "2.0.4"}},
 		{name: "meta update", path: "/meta/update", status: http.StatusOK, contentType: "application/json", json: map[string]any{"current_version": "2.0.4", "latest_version": "2.0.5", "status": "current"}},
 		{name: "meta update", path: "/meta/update?force=true", status: http.StatusOK, contentType: "application/json", json: map[string]any{"current_version": "2.0.4", "latest_version": "2.0.5", "status": "forced"}},
 	} {

@@ -3,9 +3,13 @@ window.renderAdminHeader = async function renderAdminHeader() {
   if (!mount || mount.children.length) return;
   const scriptVersion = (() => {
     try {
-      const script = document.querySelector('script[src*="/static/js/admin-header.js"]');
+      const script = document.querySelector(
+        'script[src*="/static/js/admin-header.js"]',
+      );
       if (!script) return 'v1';
-      return new URL(script.src, window.location.href).searchParams.get('v') || 'v1';
+      return (
+        new URL(script.src, window.location.href).searchParams.get('v') || 'v1'
+      );
     } catch {
       return 'v1';
     }
@@ -13,6 +17,7 @@ window.renderAdminHeader = async function renderAdminHeader() {
   const HEADER_HTML_CACHE_KEY = `gork.admin_header_html.${scriptVersion}`;
   const META_VERSION_CACHE_KEY = `gork.meta_version.${scriptVersion}`;
   let appVersion = '';
+  let assetVersion = '';
   let updateInfo = null;
   let updateStatus = 'idle';
   let updatePromise = null;
@@ -54,7 +59,8 @@ window.renderAdminHeader = async function renderAdminHeader() {
     };
 
     const sync = () => {
-      const current = window.I18n?.getLang?.() || localStorage.getItem('gork_lang') || 'zh';
+      const current =
+        window.I18n?.getLang?.() || localStorage.getItem('gork_lang') || 'zh';
       code.textContent = languageCodes[current] || current.toUpperCase();
       options.forEach((option) => {
         option.classList.toggle('active', option.dataset.lang === current);
@@ -111,7 +117,8 @@ window.renderAdminHeader = async function renderAdminHeader() {
   };
 
   const loadVersion = async () => {
-    const cachedVersion = window.__gorkMetaVersion || readSessionCache(META_VERSION_CACHE_KEY);
+    const cachedVersion =
+      window.__gorkMetaVersion || readSessionCache(META_VERSION_CACHE_KEY);
     if (cachedVersion) {
       appVersion = String(cachedVersion).trim();
       window.__gorkMetaVersion = appVersion;
@@ -122,8 +129,23 @@ window.renderAdminHeader = async function renderAdminHeader() {
       if (!res.ok) throw new Error('meta unavailable');
       const data = await res.json();
       appVersion = String(data?.version || '').trim();
+      assetVersion = String(data?.asset_version || appVersion || '').trim();
       window.__gorkMetaVersion = appVersion;
       writeSessionCache(META_VERSION_CACHE_KEY, appVersion);
+      if (
+        assetVersion &&
+        scriptVersion &&
+        assetVersion !== scriptVersion &&
+        typeof showToast === 'function'
+      ) {
+        showToast(
+          text(
+            'header.assetVersionChanged',
+            'Static assets changed. Refresh this page to load the latest UI.',
+          ),
+          'warning',
+        );
+      }
     } catch {
       appVersion = '';
     }
@@ -164,17 +186,20 @@ window.renderAdminHeader = async function renderAdminHeader() {
     return date.toLocaleString();
   };
 
-  const escapeHtml = (value) => String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  const escapeHtml = (value) =>
+    String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
 
   const sanitizeUrl = (value) => {
     try {
       const url = new URL(value, window.location.origin);
-      return ['http:', 'https:', 'mailto:'].includes(url.protocol) ? url.href : '';
+      return ['http:', 'https:', 'mailto:'].includes(url.protocol)
+        ? url.href
+        : '';
     } catch {
       return '';
     }
@@ -183,7 +208,15 @@ window.renderAdminHeader = async function renderAdminHeader() {
   const sanitizeRenderedHtml = (html) => {
     const template = document.createElement('template');
     template.innerHTML = html;
-    const blockedTags = new Set(['script', 'style', 'iframe', 'object', 'embed', 'link', 'meta']);
+    const blockedTags = new Set([
+      'script',
+      'style',
+      'iframe',
+      'object',
+      'embed',
+      'link',
+      'meta',
+    ]);
 
     const walk = (node) => {
       if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -228,18 +261,23 @@ window.renderAdminHeader = async function renderAdminHeader() {
         ? `<a href="${escapeHtml(safeHref)}" target="_blank" rel="noreferrer">${safeLabel}</a>`
         : safeLabel;
     });
-    html = html.replace(/(^|[\s(>])((https?:\/\/|mailto:)[^\s<]+)/g, (_, prefix, rawUrl) => {
-      const safeHref = sanitizeUrl(rawUrl.trim());
-      if (!safeHref) return `${prefix}${rawUrl}`;
-      return `${prefix}<a href="${escapeHtml(safeHref)}" target="_blank" rel="noreferrer">${escapeHtml(rawUrl)}</a>`;
-    });
+    html = html.replace(
+      /(^|[\s(>])((https?:\/\/|mailto:)[^\s<]+)/g,
+      (_, prefix, rawUrl) => {
+        const safeHref = sanitizeUrl(rawUrl.trim());
+        if (!safeHref) return `${prefix}${rawUrl}`;
+        return `${prefix}<a href="${escapeHtml(safeHref)}" target="_blank" rel="noreferrer">${escapeHtml(rawUrl)}</a>`;
+      },
+    );
     html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/(^|[^\*])\*([^*]+)\*/g, '$1<em>$2</em>');
+    html = html.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
     return html;
   };
 
   const renderMarkdown = (source) => {
-    const lines = String(source || '').replace(/\r\n?/g, '\n').split('\n');
+    const lines = String(source || '')
+      .replace(/\r\n?/g, '\n')
+      .split('\n');
     const html = [];
     const paragraph = [];
     let listType = '';
@@ -250,13 +288,17 @@ window.renderAdminHeader = async function renderAdminHeader() {
 
     const flushParagraph = () => {
       if (!paragraph.length) return;
-      html.push(`<p>${renderInlineMarkdown(paragraph.map((line) => line.trim()).join(' '))}</p>`);
+      html.push(
+        `<p>${renderInlineMarkdown(paragraph.map((line) => line.trim()).join(' '))}</p>`,
+      );
       paragraph.length = 0;
     };
 
     const flushList = () => {
       if (!listItems.length) return;
-      html.push(`<${listType}>${listItems.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</${listType}>`);
+      html.push(
+        `<${listType}>${listItems.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join('')}</${listType}>`,
+      );
       listItems = [];
       listType = '';
     };
@@ -270,7 +312,9 @@ window.renderAdminHeader = async function renderAdminHeader() {
 
     const flushQuote = () => {
       if (!quoteLines.length) return;
-      html.push(`<blockquote>${renderInlineMarkdown(quoteLines.map((line) => line.trim()).join(' '))}</blockquote>`);
+      html.push(
+        `<blockquote>${renderInlineMarkdown(quoteLines.map((line) => line.trim()).join(' '))}</blockquote>`,
+      );
       quoteLines = [];
     };
 
@@ -311,7 +355,9 @@ window.renderAdminHeader = async function renderAdminHeader() {
         flushList();
         flushQuote();
         const level = headingMatch[1].length;
-        html.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+        html.push(
+          `<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`,
+        );
         continue;
       }
 
@@ -354,13 +400,16 @@ window.renderAdminHeader = async function renderAdminHeader() {
   };
 
   const renderReleaseNotes = (source) => {
-    if (!source.trim()) return `<p>${escapeHtml(text('header.versionNotesEmpty', 'No release notes available.'))}</p>`;
+    if (!source.trim())
+      return `<p>${escapeHtml(text('header.versionNotesEmpty', 'No release notes available.'))}</p>`;
     if (window.marked && typeof window.marked.parse === 'function') {
-      return sanitizeRenderedHtml(window.marked.parse(source, {
-        async: false,
-        breaks: false,
-        gfm: true,
-      }));
+      return sanitizeRenderedHtml(
+        window.marked.parse(source, {
+          async: false,
+          breaks: false,
+          gfm: true,
+        }),
+      );
     }
     return renderMarkdown(source);
   };
@@ -412,7 +461,9 @@ window.renderAdminHeader = async function renderAdminHeader() {
       if (event.target === overlay) close();
     });
 
-    overlay.querySelector('#admin-version-modal-close')?.addEventListener('click', close);
+    overlay
+      .querySelector('#admin-version-modal-close')
+      ?.addEventListener('click', close);
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && overlay.classList.contains('open')) close();
     });
@@ -424,28 +475,46 @@ window.renderAdminHeader = async function renderAdminHeader() {
     const title = overlay.querySelector('#admin-version-modal-title');
     const badge = overlay.querySelector('#admin-version-modal-badge');
     const status = overlay.querySelector('#admin-version-modal-status');
-    const currentLabel = overlay.querySelector('#admin-version-modal-current-label');
+    const currentLabel = overlay.querySelector(
+      '#admin-version-modal-current-label',
+    );
     const currentValue = overlay.querySelector('#admin-version-modal-current');
-    const latestLabel = overlay.querySelector('#admin-version-modal-latest-label');
+    const latestLabel = overlay.querySelector(
+      '#admin-version-modal-latest-label',
+    );
     const latestValue = overlay.querySelector('#admin-version-modal-latest');
-    const publishedLabel = overlay.querySelector('#admin-version-modal-published-label');
-    const publishedValue = overlay.querySelector('#admin-version-modal-published');
+    const publishedLabel = overlay.querySelector(
+      '#admin-version-modal-published-label',
+    );
+    const publishedValue = overlay.querySelector(
+      '#admin-version-modal-published',
+    );
     const notes = overlay.querySelector('#admin-version-modal-notes');
     const link = overlay.querySelector('#admin-version-modal-link');
     const refresh = overlay.querySelector('#admin-version-modal-refresh');
     const close = overlay.querySelector('#admin-version-modal-close');
-    const latestVersion = String(updateInfo?.latest_version || appVersion || '').trim();
-    const currentVersion = String(appVersion || updateInfo?.current_version || '').trim();
+    const latestVersion = String(
+      updateInfo?.latest_version || appVersion || '',
+    ).trim();
+    const currentVersion = String(
+      appVersion || updateInfo?.current_version || '',
+    ).trim();
     const releaseUrl = String(updateInfo?.release_url || '').trim();
     const releaseNotes = String(updateInfo?.release_notes || '').trim();
 
     if (title) title.textContent = text('header.versionDialogTitle', 'Version');
-    if (currentLabel) currentLabel.textContent = `${text('header.versionCurrent', 'Current')}:`;
-    if (currentValue) currentValue.textContent = currentVersion ? `v${currentVersion}` : '-';
-    if (latestLabel) latestLabel.textContent = `${text('header.versionLatest', 'Latest')}:`;
-    if (latestValue) latestValue.textContent = latestVersion ? `v${latestVersion}` : '-';
-    if (publishedLabel) publishedLabel.textContent = `${text('header.versionPublishedAt', 'Published')}:`;
-    if (publishedValue) publishedValue.textContent = formatDateTime(updateInfo?.published_at);
+    if (currentLabel)
+      currentLabel.textContent = `${text('header.versionCurrent', 'Current')}:`;
+    if (currentValue)
+      currentValue.textContent = currentVersion ? `v${currentVersion}` : '-';
+    if (latestLabel)
+      latestLabel.textContent = `${text('header.versionLatest', 'Latest')}:`;
+    if (latestValue)
+      latestValue.textContent = latestVersion ? `v${latestVersion}` : '-';
+    if (publishedLabel)
+      publishedLabel.textContent = `${text('header.versionPublishedAt', 'Published')}:`;
+    if (publishedValue)
+      publishedValue.textContent = formatDateTime(updateInfo?.published_at);
 
     if (badge) {
       badge.hidden = true;
@@ -461,25 +530,46 @@ window.renderAdminHeader = async function renderAdminHeader() {
     if (badge) {
       if (updateStatus === 'loading') {
         badge.hidden = false;
-        badge.textContent = text('header.versionChecking', 'Checking for updates...');
+        badge.textContent = text(
+          'header.versionChecking',
+          'Checking for updates...',
+        );
         badge.className = 'admin-version-modal-badge is-muted';
-      } else if (updateStatus === 'error' || !updateInfo || updateInfo.status === 'error') {
+      } else if (
+        updateStatus === 'error' ||
+        !updateInfo ||
+        updateInfo.status === 'error'
+      ) {
         badge.hidden = false;
-        badge.textContent = text('header.versionUnavailable', 'Unable to check for updates right now.');
+        badge.textContent = text(
+          'header.versionUnavailable',
+          'Unable to check for updates right now.',
+        );
         badge.className = 'admin-version-modal-badge is-muted';
       } else if (updateInfo.update_available) {
         badge.hidden = false;
-        badge.textContent = text('header.versionUpdateAvailable', 'A new version is available.');
+        badge.textContent = text(
+          'header.versionUpdateAvailable',
+          'A new version is available.',
+        );
         badge.className = 'admin-version-modal-badge is-update';
       } else {
         badge.hidden = false;
-        badge.textContent = text('header.versionUpToDate', 'You are already on the latest version.');
+        badge.textContent = text(
+          'header.versionUpToDate',
+          'You are already on the latest version.',
+        );
         badge.className = 'admin-version-modal-badge is-current';
       }
     }
 
     if (notes) {
-      if (updateStatus === 'loading' || updateStatus === 'error' || !updateInfo || updateInfo.status === 'error') {
+      if (
+        updateStatus === 'loading' ||
+        updateStatus === 'error' ||
+        !updateInfo ||
+        updateInfo.status === 'error'
+      ) {
         notes.hidden = true;
         notes.innerHTML = '';
       } else {
@@ -538,7 +628,8 @@ window.renderAdminHeader = async function renderAdminHeader() {
   await loadVersion();
 
   try {
-    const cachedHtml = window.__gorkAdminHeaderHtml || readSessionCache(HEADER_HTML_CACHE_KEY);
+    const cachedHtml =
+      window.__gorkAdminHeaderHtml || readSessionCache(HEADER_HTML_CACHE_KEY);
     if (cachedHtml) {
       mount.innerHTML = cachedHtml;
     } else {
@@ -624,15 +715,17 @@ window.renderAdminHeader = async function renderAdminHeader() {
   syncLanguageMenu?.();
 
   const versionModal = ensureVersionModal();
-  versionModal.querySelector('#admin-version-modal-refresh')?.addEventListener('click', async () => {
-    renderVersionModal(versionModal);
-    try {
-      await refreshUpdate(true);
-    } finally {
-      applyVersion();
-      if (versionModal.classList.contains('open')) {
-        renderVersionModal(versionModal);
+  versionModal
+    .querySelector('#admin-version-modal-refresh')
+    ?.addEventListener('click', async () => {
+      renderVersionModal(versionModal);
+      try {
+        await refreshUpdate(true);
+      } finally {
+        applyVersion();
+        if (versionModal.classList.contains('open')) {
+          renderVersionModal(versionModal);
+        }
       }
-    }
-  });
+    });
 };

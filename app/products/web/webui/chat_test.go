@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	controlmodel "github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform/auth"
@@ -219,6 +220,8 @@ func resetWebUITestDeps(t *testing.T) {
 	oldImagine := webUIImagineEvents
 	oldImagineRunID := webUIImagineRunID
 	oldImagineNSFW := webUIImagineDefaultNSFW
+	oldImagineNow := webUIImagineNow
+	oldImagineTickets := webUIImagineTickets
 	oldVoiceDirectory := webUIVoiceDirectory
 	oldVoiceFetch := webUIVoiceFetchToken
 	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{} }
@@ -228,6 +231,8 @@ func resetWebUITestDeps(t *testing.T) {
 	webUIImagineEvents = defaultWebUIImagineEvents
 	webUIImagineRunID = defaultWebUIImagineRunID
 	webUIImagineDefaultNSFW = defaultWebUIImagineDefaultNSFW
+	webUIImagineNow = time.Now
+	webUIImagineTickets = newWebUIImagineTicketStore()
 	webUIVoiceDirectory = defaultWebUIVoiceDirectory
 	webUIVoiceFetchToken = defaultWebUIVoiceFetchToken
 	t.Cleanup(func() {
@@ -238,6 +243,8 @@ func resetWebUITestDeps(t *testing.T) {
 		webUIImagineEvents = oldImagine
 		webUIImagineRunID = oldImagineRunID
 		webUIImagineDefaultNSFW = oldImagineNSFW
+		webUIImagineNow = oldImagineNow
+		webUIImagineTickets = oldImagineTickets
 		webUIVoiceDirectory = oldVoiceDirectory
 		webUIVoiceFetchToken = oldVoiceFetch
 	})

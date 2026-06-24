@@ -13,20 +13,27 @@ func TestAdminAccountStaticPortsAutoNSFWAndBatchUI(t *testing.T) {
 	for _, want := range []string{
 		`id="import-auto-nsfw"`,
 		`id="import-file-auto-nsfw"`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("account.html missing %q", want)
+		}
+	}
+	script := readAdminStaticFile(t, "js", "admin", "account", "legacy.js")
+	for _, want := range []string{
 		`auto_nsfw`,
 		`appendQuery(endpoint, 'async=true')`,
 		`rowActionNotSupported`,
 		`summary?.expired`,
 		`summary?.transient`,
 	} {
-		if !strings.Contains(html, want) {
-			t.Fatalf("account.html missing %q", want)
+		if !strings.Contains(script, want) {
+			t.Fatalf("account legacy script missing %q", want)
 		}
 	}
 }
 
 func TestAdminConfigStaticPortsNumberBounds(t *testing.T) {
-	html := readAdminStaticFile(t, "admin", "config.html")
+	script := readAdminStaticFile(t, "js", "admin", "config", "legacy.js")
 	for _, want := range []string{
 		`function _getValue(section, key, field)`,
 		`function _getCurrentValue(section, key, field)`,
@@ -36,8 +43,8 @@ func TestAdminConfigStaticPortsNumberBounds(t *testing.T) {
 		`if (field.min != null && n < field.min) n = field.min`,
 		`if (field.max != null && n > field.max) n = field.max`,
 	} {
-		if !strings.Contains(html, want) {
-			t.Fatalf("config.html missing %q", want)
+		if !strings.Contains(script, want) {
+			t.Fatalf("config legacy script missing %q", want)
 		}
 	}
 }

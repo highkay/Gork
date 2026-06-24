@@ -106,7 +106,8 @@ func handleWebUIVerify(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleWebMeta(w http.ResponseWriter, r *http.Request) {
-	writeWebJSON(w, http.StatusOK, map[string]any{"version": webRouterProjectVersion()})
+	version := webRouterProjectVersion()
+	writeWebJSON(w, http.StatusOK, map[string]any{"version": version, "asset_version": version})
 }
 
 func handleWebUpdateMeta(w http.ResponseWriter, r *http.Request) {

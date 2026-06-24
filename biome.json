@@ -1,0 +1,43 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+  "files": {
+    "includes": [
+      "app/statics/js/admin/**/*.js",
+      "!app/statics/js/admin/**/legacy.js",
+      "app/statics/js/shared/**/*.js",
+      "app/statics/js/webui/api.js",
+      "app/statics/js/webui/attachments.js",
+      "app/statics/js/webui/index.js",
+      "app/statics/js/webui/masonry.js",
+      "app/statics/js/webui/render.js",
+      "app/statics/js/webui/storage.js",
+      "app/statics/js/webui/stream-parser.js",
+      "tests/frontend/**/*.mjs",
+      "tests/e2e/**/*.js",
+      "playwright.config.js"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true,
+      "suspicious": {
+        "noExplicitAny": "off"
+      },
+      "style": {
+        "useTemplate": "off"
+      }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "semicolons": "always"
+    }
+  }
+}
