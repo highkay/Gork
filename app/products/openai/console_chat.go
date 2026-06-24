@@ -2,6 +2,7 @@ package openai
 
 import (
 	"context"
+	"log/slog"
 	"math/rand"
 	"time"
 
@@ -56,6 +57,8 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 		if !ok {
 			return chatCompletionResult{}, platform.NewRateLimitError("No available accounts for this model tier")
 		}
+
+		slog.Info("console attempt", "attempt", attempt, "excluded_count", len(excluded), "token_prefix", account.Token[:8]+"...")
 
 		result, err := runConsoleCompletionAttempt(ctx, options, account, responseID, isStream, timeoutS)
 		finishChatAttempt(ctx, directory, account, err == nil, err)
