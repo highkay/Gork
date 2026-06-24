@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dslzl/gork/app/platform"
 )
 
 // consoleTeamCircuitBreaker tracks 429 state for logging/monitoring only.
@@ -60,6 +62,14 @@ func isConsoleRateLimitError(err error) bool {
 	}
 	msg := err.Error()
 	return strings.Contains(msg, "429") || strings.Contains(msg, "rate_limit") || strings.Contains(msg, "resource-exhausted")
+}
+
+// extract429Body extracts the response body from an UpstreamError for 429 parsing.
+func extract429Body(err error) string {
+	if upstreamErr, ok := err.(*platform.UpstreamError); ok {
+		return upstreamErr.Body
+	}
+	return err.Error()
 }
 
 // Console429Info holds parsed information from a 429 response body.

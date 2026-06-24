@@ -73,7 +73,7 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 
 		// On 429: parse response to determine rate limit type, then retry with appropriate delay
 		if isConsoleRateLimitError(err) {
-			errBody := err.Error()
+			errBody := extract429Body(err)
 			info := parseConsole429Info(errBody)
 			slog.Info("console 429 parsed", "per_second_hit", info.IsPerSecondHit, "per_minute_hit", info.IsPerMinuteHit, "ps_actual", info.PerSecondActual, "pm_actual", info.PerMinuteActual)
 			consoleCircuitBreaker.trip()
