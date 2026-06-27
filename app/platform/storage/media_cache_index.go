@@ -124,6 +124,7 @@ func (s *LocalMediaCacheStore) reconcileIndexed(mediaType MediaType) (MediaCache
 				report.RemovedBytes += info.Size()
 				report.RemovedNames = appendLimitedName(report.RemovedNames, entry.Name())
 			}
+			_ = os.Remove(filepath.Join(dir, entry.Name()))
 			continue
 		}
 		seen[entry.Name()] = true

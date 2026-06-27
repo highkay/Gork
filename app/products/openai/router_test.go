@@ -153,17 +153,8 @@ func TestRouterServesLocalImageAndVideoFiles(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/files/image?id="+imageID, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("image status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if rec.Body.String() != "png-body" {
-		t.Fatalf("image body=%q", rec.Body.String())
-	}
-	if got := rec.Header().Get("Content-Type"); got != "image/png" {
-		t.Fatalf("image content-type=%q", got)
-	}
-	if rec.Header().Get("Deprecation") != "true" || rec.Header().Get("Warning") == "" {
-		t.Fatalf("unsigned image missing deprecation headers: %#v", rec.Header())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unsigned image status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	rec = httptest.NewRecorder()
@@ -173,6 +164,16 @@ func TestRouterServesLocalImageAndVideoFiles(t *testing.T) {
 	}
 	if rec.Header().Get("Deprecation") != "" {
 		t.Fatalf("signed image should not warn: %#v", rec.Header())
+	}
+
+	generatedID := "generated-image_1"
+	if err := os.WriteFile(filepath.Join(imageDir, generatedID+".png"), []byte("generated-body"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec = httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, signedRouterFileURL("/v1/files/image", generatedID), nil))
+	if rec.Code != http.StatusOK || rec.Body.String() != "generated-body" {
+		t.Fatalf("generated signed image status/body=%d/%q", rec.Code, rec.Body.String())
 	}
 
 	rec = httptest.NewRecorder()
@@ -192,17 +193,8 @@ func TestRouterServesLocalImageAndVideoFiles(t *testing.T) {
 
 	rec = httptest.NewRecorder()
 	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/v1/files/video?id="+videoID, nil))
-	if rec.Code != http.StatusOK {
-		t.Fatalf("video status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if rec.Body.String() != "mp4-body" {
-		t.Fatalf("video body=%q", rec.Body.String())
-	}
-	if got := rec.Header().Get("Content-Type"); got != "video/mp4" {
-		t.Fatalf("video content-type=%q", got)
-	}
-	if rec.Header().Get("Deprecation") != "true" || rec.Header().Get("Warning") == "" {
-		t.Fatalf("unsigned video missing deprecation headers: %#v", rec.Header())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("unsigned video status=%d body=%s", rec.Code, rec.Body.String())
 	}
 
 	rec = httptest.NewRecorder()
@@ -308,6 +300,26 @@ func TestRouterChatCompletionsRejectsOversizedJSONBody(t *testing.T) {
 	})
 	if called {
 		t.Fatal("oversized request reached chat completion dispatcher")
+	}
+}
+
+func TestRouterImageGenerationsRejectsOversizedJSONBody(t *testing.T) {
+	resetRouterDepsForTest(t)
+	called := false
+	routerGenerateImages = func(context.Context, imageGenerationOptions) (imageResult, error) {
+		called = true
+		return imageResult{}, nil
+	}
+
+	body := strings.NewReader(`{"model":"grok-imagine-image-lite","prompt":"` + strings.Repeat("x", int(httpbody.DefaultJSONLimitBytes)) + `"}`)
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/images/generations", body))
+
+	assertRouterGoldenJSON(t, rec, http.StatusBadRequest, map[string]any{
+		"error.type": "invalid_request_error",
+	})
+	if called {
+		t.Fatal("oversized request reached image generation dispatcher")
 	}
 }
 
@@ -714,8 +726,8 @@ func TestRouterRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 		{name: "video create", method: http.MethodPost, path: "/v1/videos", body: "model=grok-imagine-video&prompt=golden&seconds=6&size=720x1280", requestType: "application/x-www-form-urlencoded", status: http.StatusOK, json: map[string]any{"id": videoID, "object": "video", "status": "queued"}},
 		{name: "video retrieve", method: http.MethodGet, path: "/v1/videos/" + videoID, status: http.StatusOK, json: map[string]any{"id": videoID, "object": "video", "status": "queued"}},
 		{name: "video content conflict", method: http.MethodGet, path: "/v1/videos/" + videoID + "/content", status: http.StatusConflict, json: map[string]any{"error.type": "invalid_request_error"}},
-		{name: "serve image", routePath: "/v1/files/image", method: http.MethodGet, path: "/v1/files/image?id=" + imageID, status: http.StatusOK, contentType: "image/png", bodyText: "png-body"},
-		{name: "serve video", routePath: "/v1/files/video", method: http.MethodGet, path: "/v1/files/video?id=" + videoFileID, status: http.StatusOK, contentType: "video/mp4", bodyText: "mp4-body"},
+		{name: "serve image", routePath: "/v1/files/image", method: http.MethodGet, path: signedRouterFileURL("/v1/files/image", imageID), status: http.StatusOK, contentType: "image/png", bodyText: "png-body"},
+		{name: "serve video", routePath: "/v1/files/video", method: http.MethodGet, path: signedRouterFileURL("/v1/files/video", videoFileID), status: http.StatusOK, contentType: "video/mp4", bodyText: "mp4-body"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.routePath != "" && !strings.HasPrefix(tt.path, tt.routePath) {

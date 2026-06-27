@@ -13,10 +13,13 @@ import (
 	"github.com/dslzl/gork/app/platform/storage"
 )
 
-var routerFileIDRE = regexp.MustCompile(`^[0-9a-f\-]{16,36}$`)
+var (
+	routerFileIDRE     = regexp.MustCompile(`^[0-9a-f\-]{16,36}$`)
+	routerSafeFileIDRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+)
 
 func validRouterFileID(fileID string) bool {
-	return routerFileIDRE.MatchString(fileID)
+	return routerFileIDRE.MatchString(fileID) || routerSafeFileIDRE.MatchString(fileID)
 }
 
 func handleServeVideo(w http.ResponseWriter, r *http.Request) {
@@ -66,9 +69,8 @@ func verifyRouterFileRequest(w http.ResponseWriter, r *http.Request, fileID stri
 	expRaw := strings.TrimSpace(r.URL.Query().Get("exp"))
 	sig := strings.TrimSpace(r.URL.Query().Get("sig"))
 	if expRaw == "" && sig == "" {
-		w.Header().Set("Deprecation", "true")
-		w.Header().Set("Warning", `299 - "unsigned media URLs are deprecated; use exp and sig"`)
-		return true
+		writeRouterError(w, platform.NewValidationError("Invalid media signature", "sig", ""))
+		return false
 	}
 	if expRaw == "" || sig == "" {
 		writeRouterError(w, platform.NewValidationError("Invalid media signature", "sig", ""))

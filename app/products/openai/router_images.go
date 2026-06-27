@@ -7,9 +7,11 @@ import (
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/httpbody"
 )
 
 func handleImageGenerations(w http.ResponseWriter, r *http.Request) {
+	httpbody.LimitJSON(w, r)
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeRouterError(w, platform.NewValidationError("Invalid JSON body", "body", ""))

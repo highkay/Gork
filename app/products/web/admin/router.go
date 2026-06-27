@@ -100,13 +100,7 @@ var (
 	adminDynamicModelStatus = func() any {
 		return openai.DynamicModelStatus()
 	}
-	adminMediaCacheStatus = func() any {
-		status, err := storage.NewLocalMediaCacheStore(storage.LocalMediaCacheOptions{}).Status()
-		if err != nil {
-			return map[string]any{"error": err.Error()}
-		}
-		return status
-	}
+	adminMediaCacheStatus = defaultAdminMediaCacheStatus
 	adminAccountDirectory = func() adminDirectory { return nil }
 	adminSchedulerStatus  = defaultAdminSchedulerStatus
 	adminSelectionStatus  = defaultAdminSelectionStatus
@@ -128,6 +122,14 @@ type adminRoute struct {
 
 func adminRouteOne(method, path string, handler http.HandlerFunc) adminRoute {
 	return adminRoute{Path: path, Methods: []string{method}, Handlers: map[string]http.HandlerFunc{method: handler}}
+}
+
+func defaultAdminMediaCacheStatus() any {
+	status, err := storage.LocalMediaCache.Status()
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	return status
 }
 
 func adminRouteMany(path string, handlers map[string]http.HandlerFunc) adminRoute {

@@ -268,6 +268,9 @@ func TestLocalMediaCacheReconcileRebuildsIndex(t *testing.T) {
 	if got := countRows(t, db, MediaTypeImage); got != 1 {
 		t.Fatalf("indexed rows = %d", got)
 	}
+	if _, err := os.Stat(filepath.Join(imagesDir, "skip.txt")); !os.IsNotExist(err) {
+		t.Fatalf("unsupported file should be removed, err=%v", err)
+	}
 	var size int
 	if err := db.QueryRow(`SELECT size_bytes FROM local_media_files WHERE name = ?`, "one.jpg").Scan(&size); err != nil {
 		t.Fatalf("query one.jpg: %v", err)

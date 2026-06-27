@@ -3,7 +3,6 @@ package openai
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 
 	"github.com/dslzl/gork/app/control/model"
@@ -53,7 +52,7 @@ var (
 			return nil, "", err
 		}
 		defer result.Stream.Close()
-		raw, err := io.ReadAll(result.Stream)
+		raw, err := readLocalMediaAsset(result.Stream, maxLocalVideoAssetBytes)
 		if err != nil {
 			return nil, "", err
 		}

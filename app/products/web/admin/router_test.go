@@ -69,6 +69,31 @@ func TestDefaultAdminReconcileRefreshRuntimeSyncsDataplaneSelector(t *testing.T)
 	}
 }
 
+func TestDefaultAdminMediaCacheStatusUsesGlobalStoreCounters(t *testing.T) {
+	oldCache := storage.LocalMediaCache
+	t.Cleanup(func() { storage.LocalMediaCache = oldCache })
+	t.Setenv("DATA_DIR", t.TempDir())
+	storage.LocalMediaCache = storage.NewLocalMediaCacheStore(storage.LocalMediaCacheOptions{Config: &fakeAdminConfig{
+		ints: map[string]int{"cache.local.image_max_mb": 1},
+	}})
+
+	if _, err := storage.SaveLocalImage([]byte("image"), "image/png", "admin-cache"); err != nil {
+		t.Fatalf("SaveLocalImage returned error: %v", err)
+	}
+	if err := storage.ReconcileLocalMediaCache(storage.MediaTypeImage); err != nil {
+		t.Fatalf("ReconcileLocalMediaCache returned error: %v", err)
+	}
+
+	status, ok := defaultAdminMediaCacheStatus().(storage.LocalMediaCacheStatus)
+	if !ok {
+		t.Fatalf("status type=%T", defaultAdminMediaCacheStatus())
+	}
+	image := status.Media[storage.MediaTypeImage]
+	if image.SaveCount != 1 || image.ReconcileCount != 1 || image.Count != 1 {
+		t.Fatalf("image media status=%#v", image)
+	}
+}
+
 func TestAdminRouterRateLimitsFailedAuth(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{AdminKey: "secret"} }

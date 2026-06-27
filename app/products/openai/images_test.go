@@ -32,6 +32,18 @@ func TestImagesResolveAspectRatioAndResponseFormat(t *testing.T) {
 	}
 }
 
+func TestReadLocalMediaAssetRejectsOversizedSuccessfulStream(t *testing.T) {
+	raw, err := readLocalMediaAsset(strings.NewReader("1234"), 4)
+	if err != nil || string(raw) != "1234" {
+		t.Fatalf("readLocalMediaAsset within limit raw=%q err=%v", raw, err)
+	}
+	_, err = readLocalMediaAsset(strings.NewReader("12345"), 4)
+	var upstream *platform.UpstreamError
+	if !errors.As(err, &upstream) || upstream.Status != 502 {
+		t.Fatalf("oversized err=%#v", err)
+	}
+}
+
 func TestImagesProgressHelpersMatchPythonBehavior(t *testing.T) {
 	if clampProgress(-5) != 0 || clampProgress(120) != 100 || clampProgress(42) != 42 {
 		t.Fatalf("clamp mismatch")
