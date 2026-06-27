@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"fmt"
+	"strings"
 )
 
 type AccountConsistencyIssue struct {
@@ -71,7 +72,18 @@ func listAllAccountsForCheck(ctx context.Context, repo AccountRepository) ([]Acc
 }
 
 func (r *AccountConsistencyReport) addIssue(code string, token string, message string) {
-	r.Issues = append(r.Issues, AccountConsistencyIssue{Code: code, Token: token, Message: message})
+	r.Issues = append(r.Issues, AccountConsistencyIssue{Code: code, Token: MaskAccountToken(token), Message: message})
+}
+
+func MaskAccountToken(token string) string {
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return ""
+	}
+	if len(token) <= 8 {
+		return "<redacted>"
+	}
+	return token[:4] + "..." + token[len(token)-4:]
 }
 
 func (r *AccountConsistencyReport) addRevisionIssue(code string, got int, want int) {

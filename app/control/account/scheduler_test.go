@@ -12,6 +12,11 @@ type fakeScheduledRefresher struct {
 	err   error
 }
 
+type blockingScheduledRefresher struct {
+	started chan string
+	done    chan string
+}
+
 func resetAccountRefreshSchedulerSingletonForTest(t *testing.T) {
 	t.Helper()
 	previous := accountRefreshSchedulerSingleton
@@ -35,6 +40,17 @@ func (f *fakeScheduledRefresher) RefreshScheduled(_ context.Context, pool *strin
 		}
 	}
 	return RefreshResult{Checked: 1, Failed: 2}, f.err
+}
+
+func (f *blockingScheduledRefresher) RefreshScheduled(ctx context.Context, pool *string) (RefreshResult, error) {
+	name := ""
+	if pool != nil {
+		name = *pool
+	}
+	f.started <- name
+	<-ctx.Done()
+	f.done <- name
+	return RefreshResult{}, ctx.Err()
 }
 
 func TestAccountRefreshIntervalDefaults(t *testing.T) {
@@ -109,6 +125,37 @@ func TestAccountRefreshSchedulerLifecycleAndSingleton(t *testing.T) {
 		t.Fatal("singleton should be reused and rebound to latest service")
 	}
 	second.Stop()
+}
+
+func TestAccountRefreshSchedulerStopWaitsForInFlightRefresh(t *testing.T) {
+	oldRunOnStart := accountRefreshRunOnStart
+	accountRefreshRunOnStart = func() bool { return true }
+	t.Cleanup(func() { accountRefreshRunOnStart = oldRunOnStart })
+
+	service := &blockingScheduledRefresher{
+		started: make(chan string, len(accountRefreshPoolOrder)),
+		done:    make(chan string, len(accountRefreshPoolOrder)),
+	}
+	scheduler := NewAccountRefreshScheduler(service)
+	scheduler.intervals = map[string]time.Duration{"basic": time.Hour, "super": time.Hour, "heavy": time.Hour}
+	scheduler.Start()
+	for i := 0; i < len(accountRefreshPoolOrder); i++ {
+		select {
+		case <-service.started:
+		case <-time.After(time.Second):
+			t.Fatal("refresh did not start")
+		}
+	}
+
+	scheduler.Stop()
+
+	for i := 0; i < len(accountRefreshPoolOrder); i++ {
+		select {
+		case <-service.done:
+		default:
+			t.Fatal("Stop returned before in-flight refresh finished")
+		}
+	}
 }
 
 func TestAccountRefreshSchedulerRunsPoolLoop(t *testing.T) {

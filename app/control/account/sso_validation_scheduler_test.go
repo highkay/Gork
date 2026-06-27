@@ -14,6 +14,11 @@ type fakeSSOValidationRunner struct {
 	results []SSOValidationResult
 }
 
+type blockingSSOValidationRunner struct {
+	started chan struct{}
+	done    chan struct{}
+}
+
 func (r *fakeSSOValidationRunner) ValidateSSOBatch(_ context.Context, page int, pageSize int) (SSOValidationResult, error) {
 	r.calls = append(r.calls, struct {
 		page     int
@@ -25,6 +30,13 @@ func (r *fakeSSOValidationRunner) ValidateSSOBatch(_ context.Context, page int, 
 	result := r.results[0]
 	r.results = r.results[1:]
 	return result, nil
+}
+
+func (r *blockingSSOValidationRunner) ValidateSSOBatch(ctx context.Context, _ int, _ int) (SSOValidationResult, error) {
+	r.started <- struct{}{}
+	<-ctx.Done()
+	r.done <- struct{}{}
+	return SSOValidationResult{}, ctx.Err()
 }
 
 func TestSSOValidationSchedulerRunOnceAdvancesCursor(t *testing.T) {
@@ -52,5 +64,30 @@ func TestSSOValidationSchedulerRunOnceAdvancesCursor(t *testing.T) {
 	}
 	if len(runner.calls) != 2 || runner.calls[1].page != 3 {
 		t.Fatalf("second runner calls = %#v", runner.calls)
+	}
+}
+
+func TestSSOValidationSchedulerStopWaitsForInFlightRun(t *testing.T) {
+	runner := &blockingSSOValidationRunner{
+		started: make(chan struct{}, 1),
+		done:    make(chan struct{}, 1),
+	}
+	scheduler := NewSSOValidationScheduler(runner, SSOValidationSchedulerOptions{
+		Interval:  time.Millisecond,
+		BatchSize: 25,
+	})
+	scheduler.Start()
+	select {
+	case <-runner.started:
+	case <-time.After(time.Second):
+		t.Fatal("SSO validation did not start")
+	}
+
+	scheduler.Stop()
+
+	select {
+	case <-runner.done:
+	default:
+		t.Fatal("Stop returned before in-flight SSO validation finished")
 	}
 }

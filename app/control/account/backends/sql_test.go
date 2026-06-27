@@ -219,6 +219,23 @@ func TestSQLDriverPostgreSQLSSLURLParity(t *testing.T) {
 	}
 }
 
+func TestPrepareMySQLDSNAddsDefaultPortForBracketedIPv6(t *testing.T) {
+	dsn, err := prepareMySQLDSN("mysql://u:p@[2001:db8::1]/name")
+	if err != nil {
+		t.Fatalf("prepareMySQLDSN returned error: %v", err)
+	}
+	if !strings.Contains(dsn, "@tcp([2001:db8::1]:3306)/name") {
+		t.Fatalf("IPv6 DSN = %q, want default port", dsn)
+	}
+	withPort, err := prepareMySQLDSN("mysql://u:p@[2001:db8::1]:4406/name")
+	if err != nil {
+		t.Fatalf("prepareMySQLDSN with port returned error: %v", err)
+	}
+	if !strings.Contains(withPort, "@tcp([2001:db8::1]:4406)/name") {
+		t.Fatalf("IPv6 DSN with port = %q", withPort)
+	}
+}
+
 func TestSQLDriverMySQLSSLURLParity(t *testing.T) {
 	caPath, certPath, keyPath := writeSQLTestTLSFiles(t)
 	rawURL := "mysql://user:pass@db.example/name?ssl-mode=verify-identity" +

@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	accountcontrol "github.com/dslzl/gork/app/control/account"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	reverse "github.com/dslzl/gork/app/dataplane/reverse"
 	"github.com/dslzl/gork/app/platform/auth"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/storage"
 	"github.com/dslzl/gork/app/products/web/ratelimit"
 )
@@ -35,6 +37,35 @@ func TestAdminRouterVerifyRequiresAdminKey(t *testing.T) {
 	}
 	if rec.Header().Get("Deprecation") != "true" || rec.Header().Get("Warning") == "" {
 		t.Fatalf("query key response should include deprecation headers: %#v", rec.Header())
+	}
+}
+
+func TestDefaultAdminReconcileRefreshRuntimeSyncsDataplaneSelector(t *testing.T) {
+	oldReconcile := adminReconcileRefreshRuntime
+	oldGlobalConfig := platformconfig.GlobalConfig
+	oldControlStrategy := accountcontrol.CurrentAccountSelectionStrategy()
+	oldDataplaneStrategy := accountdataplane.CurrentStrategy()
+	data := map[string]any{"account": map[string]any{"refresh": map[string]any{"enabled": true}}}
+	platformconfig.GlobalConfig = platformconfig.NewConfigSnapshot(adminRefreshConfigBackend{data: &data}, platformconfig.ConfigSnapshotOptions{})
+	if err := platformconfig.GlobalConfig.Load(context.Background(), ""); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	accountcontrol.SetAccountSelectionStrategy("random")
+	if err := accountdataplane.SetStrategy("random"); err != nil {
+		t.Fatalf("reset dataplane strategy: %v", err)
+	}
+	t.Cleanup(func() {
+		adminReconcileRefreshRuntime = oldReconcile
+		platformconfig.GlobalConfig = oldGlobalConfig
+		accountcontrol.SetAccountSelectionStrategy(oldControlStrategy)
+		_ = accountdataplane.SetStrategy(oldDataplaneStrategy)
+	})
+
+	if got := oldReconcile(); got != "quota" {
+		t.Fatalf("admin reconcile strategy = %q, want quota", got)
+	}
+	if got := accountdataplane.CurrentStrategy(); got != "quota" {
+		t.Fatalf("dataplane strategy = %q, want quota", got)
 	}
 }
 
@@ -652,6 +683,28 @@ func (c *fakeAdminConfig) GetInt(key string, fallback int) int {
 	}
 	return fallback
 }
+
+type adminRefreshConfigBackend struct {
+	data *map[string]any
+}
+
+func (b adminRefreshConfigBackend) Load(context.Context) (map[string]any, error) {
+	if b.data == nil {
+		return map[string]any{}, nil
+	}
+	return *b.data, nil
+}
+
+func (b adminRefreshConfigBackend) ApplyPatch(_ context.Context, patch map[string]any) error {
+	if b.data != nil {
+		*b.data = patch
+	}
+	return nil
+}
+
+func (adminRefreshConfigBackend) Clear(context.Context) error          { return nil }
+func (adminRefreshConfigBackend) Version(context.Context) (any, error) { return 0, nil }
+func (adminRefreshConfigBackend) Close(context.Context) error          { return nil }
 
 type fakeAdminDirectory struct {
 	size            int

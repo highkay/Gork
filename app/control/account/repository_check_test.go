@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +62,31 @@ func TestCheckAccountRepositoryConsistencyReportsMismatches(t *testing.T) {
 	} {
 		if !checkReportHasIssue(report, code) {
 			t.Fatalf("report missing %s: %#v", code, report.Issues)
+		}
+	}
+}
+
+func TestCheckAccountRepositoryConsistencyMasksIssueTokens(t *testing.T) {
+	rawToken := "sso-sensitive-token-value"
+	record := checkRecord(rawToken)
+	record.Ext = nil
+	repo := &checkAccountRepository{
+		revision:   1,
+		snapshot:   RuntimeSnapshot{Revision: 1, Items: []AccountRecord{record}},
+		page:       AccountPage{Revision: 1, Items: []AccountRecord{record}, TotalPages: 1},
+		getRecords: map[string]AccountRecord{rawToken: record},
+	}
+
+	report, err := CheckAccountRepositoryConsistency(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("CheckAccountRepositoryConsistency returned error: %v", err)
+	}
+	if len(report.Issues) == 0 {
+		t.Fatal("expected issue")
+	}
+	for _, issue := range report.Issues {
+		if strings.Contains(issue.Token, "sensitive-token") || issue.Token == rawToken {
+			t.Fatalf("issue token was not masked: %#v", issue)
 		}
 	}
 }

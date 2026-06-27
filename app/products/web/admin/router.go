@@ -68,8 +68,12 @@ var (
 	adminReconcileLocalMediaCache = func(context.Context) error {
 		return storage.ReconcileLocalMediaCache()
 	}
-	adminReconcileRefreshRuntime = func() string { return "" }
-	adminRuntimeStatus           = func() map[string]any {
+	adminReconcileRefreshRuntime = func() string {
+		strategy := accountcontrol.ReconcileRefreshRuntime()
+		_ = accountdataplane.SetStrategy(strategy)
+		return strategy
+	}
+	adminRuntimeStatus = func() map[string]any {
 		return map[string]any{
 			"version":         platform.GetProjectVersion(),
 			"commit":          "",

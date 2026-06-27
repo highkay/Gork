@@ -631,6 +631,22 @@ func (r *lifecycleRuntimeRedis) Delete(_ context.Context, key string) error {
 	return nil
 }
 
+func (r *lifecycleRuntimeRedis) CompareExpire(_ context.Context, key string, owner string, _ int) (bool, error) {
+	if r.locks == nil || r.locks[key] != owner {
+		return false, nil
+	}
+	return true, nil
+}
+
+func (r *lifecycleRuntimeRedis) CompareDelete(_ context.Context, key string, owner string) (bool, error) {
+	if r.locks == nil || r.locks[key] != owner {
+		return false, nil
+	}
+	r.deletedKey = key
+	delete(r.locks, key)
+	return true, nil
+}
+
 func (f *fakeSchedulerLease) Renew(ctx context.Context) (bool, error) {
 	if f.renew != nil {
 		return f.renew(ctx)

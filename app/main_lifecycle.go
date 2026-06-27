@@ -303,7 +303,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 			time.Duration(appMainEnvInt("RUNTIME_REDIS_LOCK_TTL_MS", 300000))*time.Millisecond,
 		)
 	}
-	accountcontrol.ReconcileRefreshRuntime()
+	appMainReconcileRefreshRuntime()
 	return func(ctx context.Context) error {
 		if consoleResetCleanup != nil {
 			consoleResetCleanup(ctx)
@@ -361,7 +361,7 @@ func appMainStartSchedulerLeaderLeaseRenewal(ctx context.Context, lease appMainS
 				ok, err := lease.Renew(renewCtx)
 				if err != nil || !ok {
 					accountcontrol.SetRefreshSchedulerLeader(false)
-					accountcontrol.ReconcileRefreshRuntime()
+					appMainReconcileRefreshRuntime()
 					return
 				}
 				timer.Reset(interval)

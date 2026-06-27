@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	accountcontrol "github.com/dslzl/gork/app/control/account"
+	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 	configbackends "github.com/dslzl/gork/app/platform/config/backends"
 	"github.com/dslzl/gork/app/platform/observability"
@@ -153,6 +155,33 @@ func TestNewAppReloadsConfigAndReconcilesRefreshRuntimePerRequest(t *testing.T) 
 	assertAppResponse(t, app.Handler(), http.MethodGet, "/admin", "", http.StatusOK, "web")
 	if loadCalls != 1 || reconcileCalls != 1 {
 		t.Fatalf("middleware calls load=%d reconcile=%d", loadCalls, reconcileCalls)
+	}
+}
+
+func TestAppMainReconcileRefreshRuntimeSyncsDataplaneSelector(t *testing.T) {
+	oldGlobalConfig := platformconfig.GlobalConfig
+	oldControlStrategy := accountcontrol.CurrentAccountSelectionStrategy()
+	oldDataplaneStrategy := accountdataplane.CurrentStrategy()
+	data := map[string]any{"account": map[string]any{"refresh": map[string]any{"enabled": true}}}
+	platformconfig.GlobalConfig = platformconfig.NewConfigSnapshot(lifecycleConfigBackend{data: &data}, platformconfig.ConfigSnapshotOptions{})
+	if err := platformconfig.GlobalConfig.Load(context.Background(), ""); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	accountcontrol.SetAccountSelectionStrategy("random")
+	if err := accountdataplane.SetStrategy("random"); err != nil {
+		t.Fatalf("reset dataplane strategy: %v", err)
+	}
+	t.Cleanup(func() {
+		platformconfig.GlobalConfig = oldGlobalConfig
+		accountcontrol.SetAccountSelectionStrategy(oldControlStrategy)
+		_ = accountdataplane.SetStrategy(oldDataplaneStrategy)
+	})
+
+	if got := appMainReconcileRefreshRuntime(); got != "quota" {
+		t.Fatalf("reconcile strategy = %q, want quota", got)
+	}
+	if got := accountdataplane.CurrentStrategy(); got != "quota" {
+		t.Fatalf("dataplane strategy = %q, want quota", got)
 	}
 }
 

@@ -74,6 +74,7 @@ type AccountRefreshScheduler struct {
 	intervals    map[string]time.Duration
 	cancelByPool map[string]context.CancelFunc
 	statusByPool map[string]AccountRefreshPoolStatus
+	wg           sync.WaitGroup
 	mu           sync.Mutex
 }
 
@@ -111,7 +112,11 @@ func (s *AccountRefreshScheduler) Start() {
 		ctx, cancel := context.WithCancel(context.Background())
 		s.cancelByPool[pool] = cancel
 		s.recordNextRunLocked(pool, s.nextDelayLocked(pool))
-		go s.loop(ctx, pool, runOnStart)
+		s.wg.Add(1)
+		go func(pool string) {
+			defer s.wg.Done()
+			s.loop(ctx, pool, runOnStart)
+		}(pool)
 	}
 }
 
@@ -123,6 +128,7 @@ func (s *AccountRefreshScheduler) Stop() {
 	for _, cancel := range cancels {
 		cancel()
 	}
+	s.wg.Wait()
 }
 
 func (s *AccountRefreshScheduler) loop(ctx context.Context, pool string, runOnStart bool) {

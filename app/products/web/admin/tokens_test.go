@@ -108,6 +108,14 @@ func TestAdminTokensEditToggleAndReplacePool(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	repo := &fakeAdminTokensRepo{accounts: map[string]adminAssetsAccount{
 		"old": {Token: "old", Pool: "basic", Status: "active", Tags: []string{"keep"}, Ext: map[string]any{"a": "b"}},
+		"same": {
+			Token: "same", Pool: "basic", Status: "disabled", UsageUseCount: 7,
+			Quota: map[string]any{
+				"auto":   map[string]any{"remaining": 9, "total": 10},
+				"fast":   map[string]any{"remaining": 8, "total": 10},
+				"expert": map[string]any{"remaining": 7, "total": 10},
+			},
+		},
 		"one": {Token: "one", Status: "active"},
 		"two": {Token: "two", Status: "active"},
 	}}
@@ -121,6 +129,20 @@ func TestAdminTokensEditToggleAndReplacePool(t *testing.T) {
 	body := decodeAdminBody(t, rec)
 	if body["token"] != "new" || repo.deleted[0][0] != "old" || repo.upserts[0][0].Token != "new" {
 		t.Fatalf("edit body=%#v upserts=%#v deleted=%#v", body, repo.upserts, repo.deleted)
+	}
+	if repo.patches[len(repo.patches)-1][0].Pool != "super" || repo.patches[len(repo.patches)-1][0].QuotaAuto == nil {
+		t.Fatalf("rename state patch missing pool/quota: %#v", repo.patches)
+	}
+
+	upsertCount := len(repo.upserts)
+	rec = adminRequest(http.MethodPut, "/admin/api/tokens/edit", `{"old_token":"same","token":"same","pool":"super"}`, "Bearer gork")
+	body = decodeAdminBody(t, rec)
+	patch := repo.patches[len(repo.patches)-1][0]
+	if body["token"] != "same" || len(repo.upserts) != upsertCount || patch.Token != "same" || patch.Pool != "super" || patch.Status != "disabled" || patch.UsageUseDelta != 7 {
+		t.Fatalf("same-token edit body=%#v upserts=%#v patch=%#v", body, repo.upserts, patch)
+	}
+	if patch.QuotaAuto["remaining"] != 9 || patch.QuotaFast["remaining"] != 8 || patch.QuotaExpert["remaining"] != 7 {
+		t.Fatalf("same-token edit quota patch = %#v", patch)
 	}
 
 	rec = adminRequest(http.MethodPost, "/admin/api/tokens/disabled", `{"token":"one","disabled":true}`, "Bearer gork")

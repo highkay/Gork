@@ -57,9 +57,15 @@ func prepareMySQLDSN(rawURL string) (string, error) {
 	if password, ok := parsed.User.Password(); ok {
 		user += ":" + password
 	}
-	host := parsed.Host
-	if !strings.Contains(host, ":") {
-		host = net.JoinHostPort(host, "3306")
+	host := parsed.Hostname()
+	port := parsed.Port()
+	if port == "" {
+		port = "3306"
+	}
+	if host != "" {
+		host = net.JoinHostPort(host, port)
+	} else {
+		host = parsed.Host
 	}
 	database := strings.TrimPrefix(parsed.EscapedPath(), "/")
 	queryValues := parsed.Query()
