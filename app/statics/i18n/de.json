@@ -169,6 +169,8 @@
     "statFast": "Fast-Guthaben",
     "statExpert": "Expert-Guthaben",
     "statHeavy": "Heavy-Guthaben",
+    "statGrok43": "Grok 4.3 Beta-Guthaben",
+    "statConsole": "Console-Guthaben",
     "filterStatusLabel": "Status",
     "filterNsfwLabel": "NSFW",
     "filterTypeLabel": "Typ",
@@ -321,8 +323,7 @@
       "disabled": "Deaktiviert",
       "expired": "Abgelaufen",
       "invalid": "Fehlerhaft"
-    },
-    "statConsole": "Console Balance"
+    }
   },
   "config": {
     "pageTitle": "Gork - Konfigurationsverwaltung",

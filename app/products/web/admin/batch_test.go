@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dslzl/gork/app/platform"
 	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
@@ -354,7 +355,12 @@ func TestAdminBatchAsyncCreatesTaskAndSSEFinal(t *testing.T) {
 		t.Fatalf("async body = %#v", body)
 	}
 
-	stream := adminRequest(http.MethodGet, "/admin/api/batch/"+taskID+"/stream?app_key=gork", "", "")
+	queryStream := adminRequest(http.MethodGet, "/admin/api/batch/"+taskID+"/stream?app_key=gork", "", "")
+	if queryStream.Code != http.StatusUnauthorized {
+		t.Fatalf("query stream status/body=%d/%s", queryStream.Code, queryStream.Body.String())
+	}
+
+	stream := adminRequest(http.MethodGet, "/admin/api/batch/"+taskID+"/stream", "", "Bearer gork")
 	text := stream.Body.String()
 	if stream.Code != http.StatusOK {
 		t.Fatalf("stream status/body=%d/%s", stream.Code, text)
@@ -405,6 +411,59 @@ func TestAdminBatchCancelMarksTaskCancelled(t *testing.T) {
 	body := decodeAdminBody(t, rec)
 	if body["status"] != "success" || !task.Cancelled {
 		t.Fatalf("body=%#v cancelled=%v", body, task.Cancelled)
+	}
+}
+
+func TestAdminBatchDispatchSyncUsesRequestContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	observedCancelled := false
+	payload, err := adminBatchDispatchSync(ctx, []string{"tok"}, func(handlerCtx context.Context, _ string) (map[string]any, error) {
+		cancel()
+		observedCancelled = errors.Is(handlerCtx.Err(), context.Canceled)
+		return nil, handlerCtx.Err()
+	}, 1)
+	if err != nil {
+		t.Fatalf("adminBatchDispatchSync returned unexpected error: %v", err)
+	}
+	if !observedCancelled {
+		t.Fatal("handler did not receive cancelled request context")
+	}
+	summary := payload["summary"].(map[string]any)
+	if summary["fail"].(int) != 1 {
+		t.Fatalf("payload = %#v", payload)
+	}
+}
+
+func TestRunAdminBatchTaskCancelStopsQueuedItems(t *testing.T) {
+	task := runtimepkg.CreateTask(2)
+	started := make(chan string, 2)
+	done := make(chan struct{})
+	handler := func(ctx context.Context, token string) (map[string]any, error) {
+		started <- token
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	go func() {
+		runAdminBatchTask(task, []string{"tok-a", "tok-b"}, handler, 1)
+		close(done)
+	}()
+	if token := <-started; token != "tok-a" {
+		t.Fatalf("first started token = %q", token)
+	}
+	task.Cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("batch task did not stop after cancellation")
+	}
+	if task.Snapshot()["status"] != "cancelled" {
+		t.Fatalf("task snapshot = %#v", task.Snapshot())
+	}
+	select {
+	case token := <-started:
+		t.Fatalf("unexpected handler started after cancellation: %s", token)
+	default:
 	}
 }
 

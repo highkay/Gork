@@ -717,12 +717,11 @@ async function runAssetClear(tokens) {
     const d = await _api('POST', '/batch/cache-clear?async=true', { tokens });
     _assetTaskId = d.task_id;
     const total = d.total || tokens.length;
-    const key = await adminKey.get();
-    const es = new EventSource(`${ADMIN_API}/batch/${_assetTaskId}/stream?app_key=${encodeURIComponent(key)}`);
+    const controller = new AbortController();
+    const es = { close: () => controller.abort() };
     _assetEs = es;
 
-    es.onmessage = (event) => {
-      const ev = JSON.parse(event.data);
+    const onStreamEvent = (ev) => {
       if (ev.type === 'snapshot' || ev.type === 'progress') {
         progress.update(ev.processed || 0, total);
       }
@@ -746,17 +745,24 @@ async function runAssetClear(tokens) {
       }
     };
 
-    es.onerror = function() {
-      if (finalReceived) {
-        _assetEs = null;
-        return;
-      }
-      if (this.readyState === EventSource.CLOSED) {
+    window.AdminCacheModules.api.streamAdminSSE(`${ADMIN_API}/batch/${_assetTaskId}/stream`, {
+      signal: controller.signal,
+      onEvent: onStreamEvent,
+    }).then(() => {
+      if (!finalReceived) {
         _assetEs = null;
         cleanup();
         progress.finish(tr('cache.connectionInterrupted', null, '连接中断'), 'error');
       }
-    };
+    }).catch((error) => {
+      if (finalReceived || controller.signal.aborted) {
+        _assetEs = null;
+        return;
+      }
+      _assetEs = null;
+      cleanup();
+      progress.finish(error?.message || tr('cache.connectionInterrupted', null, '连接中断'), 'error');
+    });
   } catch (e) {
     cleanup();
     progress.finish(tr('cache.startFailed', { message: e.message }, `启动失败: ${e.message}`), 'error');

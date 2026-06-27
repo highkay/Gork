@@ -1,5 +1,7 @@
 import { createTranslatedError } from '../../shared/error-translator.js';
 
+export { streamAdminSSE } from '../shared/sse.js';
+
 export function buildTokenQuery(params = {}) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

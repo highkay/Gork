@@ -9,13 +9,13 @@ import (
 	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
-func adminBatchDispatch(w http.ResponseWriter, tokens []string, handler adminBatchHandler, options adminBatchOptions) {
+func adminBatchDispatch(ctx context.Context, w http.ResponseWriter, tokens []string, handler adminBatchHandler, options adminBatchOptions) {
 	if options.Async {
 		payload := adminBatchDispatchAsync(tokens, handler, options.Concurrency)
 		writeAdminJSON(w, http.StatusOK, payload)
 		return
 	}
-	payload, err := adminBatchDispatchSync(tokens, handler, options.Concurrency)
+	payload, err := adminBatchDispatchSync(ctx, tokens, handler, options.Concurrency)
 	if err != nil {
 		writeAdminError(w, err)
 		return
@@ -23,7 +23,7 @@ func adminBatchDispatch(w http.ResponseWriter, tokens []string, handler adminBat
 	writeAdminJSON(w, http.StatusOK, payload)
 }
 
-func adminBatchDispatchSync(tokens []string, handler adminBatchHandler, concurrency int) (map[string]any, error) {
+func adminBatchDispatchSync(ctx context.Context, tokens []string, handler adminBatchHandler, concurrency int) (map[string]any, error) {
 	wrapped := func(ctx context.Context, token string) (adminBatchItemResult, error) {
 		data, err := handler(ctx, token)
 		if err != nil {
@@ -31,7 +31,7 @@ func adminBatchDispatchSync(tokens []string, handler adminBatchHandler, concurre
 		}
 		return adminBatchItemResult{Token: token, Data: data}, nil
 	}
-	results, err := runtimepkg.RunBatch(context.Background(), tokens, wrapped, concurrency, 0, 0)
+	results, err := runtimepkg.RunBatch(ctx, tokens, wrapped, concurrency, 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -53,11 +53,17 @@ func runAdminBatchTask(task *runtimepkg.AsyncTask, tokens []string, handler admi
 	results := make([]adminBatchItemResult, len(tokens))
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, maxAdminBatchInt(1, concurrency))
+	ctx := task.Context()
+loop:
 	for i, token := range tokens {
-		if task.Cancelled {
+		if task.IsCancelled() {
 			break
 		}
-		sem <- struct{}{}
+		select {
+		case <-ctx.Done():
+			break loop
+		case sem <- struct{}{}:
+		}
 		wg.Add(1)
 		go runAdminBatchTaskItem(task, handler, token, &results[i], sem, &wg)
 	}
@@ -68,10 +74,10 @@ func runAdminBatchTask(task *runtimepkg.AsyncTask, tokens []string, handler admi
 func runAdminBatchTaskItem(task *runtimepkg.AsyncTask, handler adminBatchHandler, token string, out *adminBatchItemResult, sem chan struct{}, wg *sync.WaitGroup) {
 	defer wg.Done()
 	defer func() { <-sem }()
-	if task.Cancelled {
+	if task.IsCancelled() {
 		return
 	}
-	data, err := handler(context.Background(), token)
+	data, err := handler(task.Context(), token)
 	*out = adminBatchItemResult{Token: token, Data: data}
 	if err != nil {
 		out.Error = err.Error()
@@ -89,7 +95,7 @@ func adminBatchRecordTaskItem(task *runtimepkg.AsyncTask, item adminBatchItemRes
 }
 
 func finishAdminBatchTask(task *runtimepkg.AsyncTask, tokens []string, results []adminBatchItemResult) {
-	if task.Cancelled {
+	if task.IsCancelled() {
 		task.FinishCancelled()
 		return
 	}

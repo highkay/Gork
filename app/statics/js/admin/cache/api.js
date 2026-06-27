@@ -1,5 +1,7 @@
 import { createTranslatedError } from '../../shared/error-translator.js';
 
+export { streamAdminSSE } from '../shared/sse.js';
+
 export async function adminCacheFetch(path, options = {}) {
   const headers = { ...(options.headers || {}) };
   const key = await window.adminKey?.get?.();

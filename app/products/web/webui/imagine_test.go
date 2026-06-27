@@ -184,7 +184,7 @@ func TestWebUIImagineWebSocketAcceptsOneTimeTicket(t *testing.T) {
 	}
 }
 
-func TestWebUIImagineWebSocketLegacyAccessTokenWarns(t *testing.T) {
+func TestWebUIImagineWebSocketRejectsURLAccessToken(t *testing.T) {
 	resetWebUITestDeps(t)
 	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
 	server := httptest.NewServer(NewRouter())
@@ -194,11 +194,8 @@ func TestWebUIImagineWebSocketLegacyAccessTokenWarns(t *testing.T) {
 	if conn != nil {
 		_ = conn.Close()
 	}
-	if resp.StatusCode != http.StatusSwitchingProtocols {
-		t.Fatalf("legacy access_token websocket status = %d", resp.StatusCode)
-	}
-	if resp.Header.Get("Deprecation") != "true" || resp.Header.Get("Warning") == "" {
-		t.Fatalf("legacy access_token missing deprecation headers: %#v", resp.Header)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("access_token query websocket status = %d", resp.StatusCode)
 	}
 }
 

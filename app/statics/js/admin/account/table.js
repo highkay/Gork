@@ -4,6 +4,16 @@ export function maskToken(value) {
   return `${text.slice(0, 6)}...${text.slice(-4)}`;
 }
 
+export function escapeAdminCellValue(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;');
+}
+
 export function tokenRowView(token = {}) {
   return {
     id: token.id || token.token || '',

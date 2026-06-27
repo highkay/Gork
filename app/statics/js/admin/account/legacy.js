@@ -159,7 +159,7 @@ function getTokenView() {
 
   const fallbackStats = {
     active: 0, cooling: 0, invalid: 0, disabled: 0,
-    calls: 0, success: 0, fail: 0, qa: 0, qf: 0, qe: 0, qh: 0, qc: 0,
+    calls: 0, success: 0, fail: 0, qa: 0, qf: 0, qe: 0, qh: 0, qb: 0, qc: 0,
   };
   const fallbackStatusCounts = { all: 0, active: 0, cooling: 0, invalid: 0, disabled: 0 };
   const fallbackNsfwCounts = { all: 0, enabled: 0, disabled: 0 };
@@ -183,6 +183,7 @@ function getTokenView() {
     fallbackStats.qf += quota.fast?.remaining || 0;
     fallbackStats.qe += quota.expert?.remaining || 0;
     fallbackStats.qh += quota.heavy?.remaining || 0;
+    fallbackStats.qb += quota.grok_4_3?.remaining || 0;
     fallbackStats.qc += quota.console?.remaining || 0;
 
     fallbackStatusCounts.all += 1;
@@ -242,7 +243,7 @@ function renderStats(view = getTokenView()) {
   $('s-calls', fmt(stats.calls));
   $('s-success', fmt(stats.success));
   $('s-rate', fmtRate(stats.success, stats.fail));
-  $('s-qa', fmt(stats.qa)); $('s-qf', fmt(stats.qf)); $('s-qe', fmt(stats.qe)); $('s-qh', fmt(stats.qh)); $('s-qc', fmt(stats.qc));
+  $('s-qa', fmt(stats.qa)); $('s-qf', fmt(stats.qf)); $('s-qe', fmt(stats.qe)); $('s-qh', fmt(stats.qh)); $('s-qb', fmt(stats.qb)); $('s-qc', fmt(stats.qc));
 }
 
 function renderFilters(view = getTokenView()) {
@@ -527,7 +528,19 @@ function fmtRate(success, fail) {
   return `${Math.round(success / total * 100)}%`;
 }
 function mask(t) { return t.length > 20 ? t.slice(0,8) + '…' + t.slice(-8) : t; }
-function xe(s) { return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;'); }
+function xe(s) {
+  const helper = window.AdminAccountModules?.table?.escapeAdminCellValue;
+  return helper ? helper(s) : escapeAdminCellValue(s);
+}
+function escapeAdminCellValue(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;');
+}
 function fmtDate(d) {
   if (!d) return tr('account.na', null, '—');
   const dt = new Date(typeof d === 'number' ? d : d);
@@ -791,12 +804,11 @@ async function _runTask(starter, label, onDone, totalFallback = 0) {
     _batchTaskId = d.task_id;
     const total = d.total || totalFallback;
 
-    const key = await adminKey.get();
-    const es = new EventSource(`${ADMIN_API}/batch/${_batchTaskId}/stream?app_key=${encodeURIComponent(key)}`);
+    const controller = new AbortController();
+    const es = { close: () => controller.abort() };
     _batchEs = es;
 
-    es.onmessage = (e) => {
-      const ev = JSON.parse(e.data);
+    const onStreamEvent = (ev) => {
       if (ev.type === 'snapshot' || ev.type === 'progress') {
         progress.update(ev.processed || 0, total);
       }
@@ -815,16 +827,21 @@ async function _runTask(starter, label, onDone, totalFallback = 0) {
         }
       }
     };
-    es.onerror = function() {
-      if (_finalReceived) { _batchEs = null; return; }
-      // readyState CLOSED (2) = server rejected reconnect (e.g. 401/404), give up
-      if (this.readyState === EventSource.CLOSED) {
+    window.AdminAccountModules.api.streamAdminSSE(`${ADMIN_API}/batch/${_batchTaskId}/stream`, {
+      signal: controller.signal,
+      onEvent: onStreamEvent,
+    }).then(() => {
+      if (!_finalReceived) {
         _batchEs = null;
         _cleanup();
         progress.finish('连接中断', 'error');
       }
-      // readyState CONNECTING (0) = browser is auto-reconnecting, let it
-    };
+    }).catch((error) => {
+      if (_finalReceived || controller.signal.aborted) { _batchEs = null; return; }
+      _batchEs = null;
+      _cleanup();
+      progress.finish(error?.message || '连接中断', 'error');
+    });
   } catch (e) {
     _cleanup();
     progress.finish(`启动失败: ${e.message}`, 'error');

@@ -15,7 +15,7 @@ func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
 	repo := &fakeAdminTokensRepo{
 		listResults: []adminAssetsListResult{{Items: []adminAssetsAccount{{
 			Token: "test-api-key-admin-token", Pool: "basic", Status: "cooling", Tags: []string{"nsfw"},
-			Quota:          map[string]any{"auto": map[string]any{"remaining": 2, "total": 5}},
+			Quota:          map[string]any{"auto": map[string]any{"remaining": 2, "total": 5}, "grok_4_3": map[string]any{"remaining": 9, "total": 10}},
 			UsageUseCount:  3,
 			UsageFailCount: 2,
 			LastUseAt:      int64(123),
@@ -25,7 +25,7 @@ func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
 			Ext:            map[string]any{"cooldown_until": int64(789000), "cooldown_reason": "rate_limited"},
 		}}, Total: 1, Page: 2, PageSize: 10, TotalPages: 1, Revision: 7}},
 		facetSnapshot: adminTokensFacetSnapshotFromRecords([]adminAssetsAccount{
-			{Token: "tok-1", Pool: "basic", Status: "active", Tags: []string{"nsfw"}, UsageUseCount: 3, UsageFailCount: 1, Quota: map[string]any{"auto": map[string]any{"remaining": 2}}},
+			{Token: "tok-1", Pool: "basic", Status: "active", Tags: []string{"nsfw"}, UsageUseCount: 3, UsageFailCount: 1, Quota: map[string]any{"auto": map[string]any{"remaining": 2}, "grok_4_3": map[string]any{"remaining": 7}}},
 			{Token: "tok-2", Pool: "super", Status: "disabled"},
 			{Token: "tok-3", Pool: "heavy", Status: "expired"},
 		}),
@@ -51,9 +51,14 @@ func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
 	if row["cooldown_until"].(float64) != 789000 || row["cooldown_reason"] != "rate_limited" || row["state_reason"] != "cooldown" {
 		t.Fatalf("cooldown fields = %#v", row)
 	}
+	quota := row["quota"].(map[string]any)
+	grok43 := quota["grok_4_3"].(map[string]any)
+	if int(grok43["remaining"].(float64)) != 9 || int(grok43["total"].(float64)) != 10 {
+		t.Fatalf("grok 4.3 quota = %#v", quota)
+	}
 	facets := body["facets"].(map[string]any)
 	stats := facets["stats"].(map[string]any)
-	if int(stats["calls"].(float64)) != 4 || int(stats["qa"].(float64)) != 2 {
+	if int(stats["calls"].(float64)) != 4 || int(stats["qa"].(float64)) != 2 || int(stats["qb"].(float64)) != 7 {
 		t.Fatalf("stats = %#v", stats)
 	}
 	if body["revision"].(float64) != 7 {

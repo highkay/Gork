@@ -39,13 +39,13 @@ func handleWebUIImagineWS(w http.ResponseWriter, r *http.Request) {
 		writeWebUIJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "Method not allowed"}})
 		return
 	}
-	if !webUIImagineAllowed(r) {
+	if webUIImagineURLAccessToken(r) {
 		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
 		return
 	}
-	if webUIImagineLegacyAccessToken(r) {
-		w.Header().Set("Deprecation", "true")
-		w.Header().Set("Warning", `299 - "access_token query authentication is deprecated; use a WebSocket ticket"`)
+	if !webUIImagineAllowed(r) {
+		http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+		return
 	}
 	ws, err := acceptWebUIWebSocket(w, r)
 	if err != nil {

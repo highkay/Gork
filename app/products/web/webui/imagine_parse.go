@@ -86,13 +86,11 @@ func webUIImagineToken(r *http.Request) string {
 		}
 		return header
 	}
-	return strings.TrimSpace(r.URL.Query().Get("access_token"))
+	return ""
 }
 
-func webUIImagineLegacyAccessToken(r *http.Request) bool {
-	return strings.TrimSpace(r.URL.Query().Get("access_token")) != "" &&
-		strings.TrimSpace(r.URL.Query().Get("ticket")) == "" &&
-		strings.TrimSpace(r.Header.Get("Authorization")) == ""
+func webUIImagineURLAccessToken(r *http.Request) bool {
+	return strings.TrimSpace(r.URL.Query().Get("access_token")) != ""
 }
 
 func parseOptionalBool(value any) *bool {

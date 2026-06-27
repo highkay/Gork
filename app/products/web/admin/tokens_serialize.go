@@ -16,7 +16,7 @@ func adminTokenSerialize(account adminAssetsAccount) map[string]any {
 
 func adminQuotaBrief(quota map[string]any) map[string]any {
 	out := map[string]any{}
-	for _, mode := range []string{"auto", "fast", "expert", "heavy", "console"} {
+	for _, mode := range []string{"auto", "fast", "expert", "heavy", "grok_4_3", "console"} {
 		if raw, ok := quota[mode]; ok {
 			if value, ok := raw.(map[string]any); ok {
 				out[mode] = map[string]any{"remaining": adminAnyInt(value["remaining"]), "total": adminAnyInt(value["total"])}
@@ -30,7 +30,7 @@ func adminTokensFacetSnapshotFromRecords(records []adminAssetsAccount) adminToke
 	status := map[string]int{"all": 0, "active": 0, "cooling": 0, "invalid": 0, "disabled": 0}
 	nsfw := map[string]int{"all": 0, "enabled": 0, "disabled": 0}
 	pools := map[string]int{"all": 0, "basic": 0, "super": 0, "heavy": 0}
-	stats := map[string]int{"active": 0, "cooling": 0, "invalid": 0, "disabled": 0, "calls": 0, "success": 0, "fail": 0, "qa": 0, "qf": 0, "qe": 0, "qh": 0, "qc": 0}
+	stats := map[string]int{"active": 0, "cooling": 0, "invalid": 0, "disabled": 0, "calls": 0, "success": 0, "fail": 0, "qa": 0, "qf": 0, "qe": 0, "qh": 0, "qb": 0, "qc": 0}
 	for _, record := range records {
 		adminTokensFacetRecord(record, status, nsfw, pools, stats)
 	}
@@ -73,6 +73,7 @@ func adminTokensFacetUsage(record adminAssetsAccount, stats map[string]int) {
 	stats["qf"] += adminQuotaRemaining(record.Quota, "fast")
 	stats["qe"] += adminQuotaRemaining(record.Quota, "expert")
 	stats["qh"] += adminQuotaRemaining(record.Quota, "heavy")
+	stats["qb"] += adminQuotaRemaining(record.Quota, "grok_4_3")
 	stats["qc"] += adminQuotaRemaining(record.Quota, "console")
 }
 

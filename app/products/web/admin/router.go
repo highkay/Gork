@@ -198,6 +198,10 @@ func adminProtectedAny(handlers map[string]http.HandlerFunc) http.HandlerFunc {
 		}
 		queryAppKey := strings.TrimSpace(r.URL.Query().Get("app_key"))
 		rateLimitKey := adminAuthRateLimitKey(r)
+		if queryAppKey != "" && adminBatchStreamQueryAuth(r) {
+			writeAdminError(w, platform.NewAppError("Admin batch streams require Authorization header", platform.ErrorKindAuthentication, "invalid_api_key", http.StatusUnauthorized, nil))
+			return
+		}
 		if !adminAuthRateLimiter.Allow(rateLimitKey) {
 			writeAdminJSON(w, http.StatusTooManyRequests, map[string]any{"error": map[string]any{"message": "Too many authentication attempts"}})
 			return
@@ -213,6 +217,12 @@ func adminProtectedAny(handlers map[string]http.HandlerFunc) http.HandlerFunc {
 		}
 		handler(w, r)
 	}
+}
+
+func adminBatchStreamQueryAuth(r *http.Request) bool {
+	return r.Method == http.MethodGet &&
+		strings.HasPrefix(r.URL.Path, "/admin/api/batch/") &&
+		strings.HasSuffix(r.URL.Path, "/stream")
 }
 
 func writeAdminQueryAuthDeprecationHeaders(w http.ResponseWriter) {

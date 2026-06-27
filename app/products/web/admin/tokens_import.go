@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"mime/multipart"
@@ -28,7 +27,7 @@ func handleAdminTokensImportAsync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	task := runtimepkg.CreateTask(total)
-	taskCtx := context.Background()
+	taskCtx := task.Context()
 	if spec.Replace {
 		adminTokensAsyncRunner(func() { adminTokensRunReplaceImport(taskCtx, repo, refresh, task, payload, spec.AutoNSFW) })
 	} else {
