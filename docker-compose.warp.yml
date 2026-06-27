@@ -54,6 +54,7 @@ services:
       PORT: ${PORT:-${SERVER_PORT:-8000}}
       SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
       SERVER_PORT: ${SERVER_PORT:-8000}
+      ALLOW_UNAUTHENTICATED_API: ${ALLOW_UNAUTHENTICATED_API:-true}
       DATA_DIR: ${DATA_DIR:-/app/data}
       LOG_DIR: ${LOG_DIR:-/app/logs}
       TMPDIR: ${TMPDIR:-/app/data/tmp}

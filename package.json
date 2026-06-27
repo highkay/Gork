@@ -10,7 +10,7 @@
     "test:frontend": "npm run test:frontend:unit && npm run test:frontend:e2e"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.3.8",
+    "@biomejs/biome": "^2.5.1",
     "@playwright/test": "^1.57.0"
   }
 }

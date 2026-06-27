@@ -9,8 +9,3 @@ regexes = [
   '''(?i)(fake|dummy|example|test)[-_ ]?(api[-_ ]?key|secret|token|password)''',
   '''(?i)(api[-_ ]?key|secret|token|password)[-_ ]?(fake|dummy|example|test)''',
 ]
-paths = [
-  '''(^|/).*_test\.go$''',
-  '''(^|/)tests/''',
-  '''(^|/)docs/''',
-]

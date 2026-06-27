@@ -14,7 +14,7 @@ func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	repo := &fakeAdminTokensRepo{
 		listResults: []adminAssetsListResult{{Items: []adminAssetsAccount{{
-			Token: "1234567890abcdefghijXYZ987654321", Pool: "basic", Status: "cooling", Tags: []string{"nsfw"},
+			Token: "test-api-key-admin-token", Pool: "basic", Status: "cooling", Tags: []string{"nsfw"},
 			Quota:          map[string]any{"auto": map[string]any{"remaining": 2, "total": 5}},
 			UsageUseCount:  3,
 			UsageFailCount: 2,
@@ -42,7 +42,7 @@ func TestAdminTokensListSerializesFiltersAndFacets(t *testing.T) {
 	}
 	tokens := body["tokens"].([]any)
 	row := tokens[0].(map[string]any)
-	if row["token"] != "1234567890abcdefghijXYZ987654321" || row["token_masked"] != "12345678...87654321" || row["pool"] != "basic" || row["last_used_at"].(float64) != 123 {
+	if row["token"] != "test-api-key-admin-token" || row["token_masked"] != "test-api...in-token" || row["pool"] != "basic" || row["last_used_at"].(float64) != 123 {
 		t.Fatalf("row = %#v", row)
 	}
 	if row["fail_count"].(float64) != 2 || row["last_failed_at"].(float64) != 456 || row["last_fail_reason"] != "rate_limited" {
