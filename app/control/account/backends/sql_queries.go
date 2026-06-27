@@ -8,6 +8,8 @@ import (
 )
 
 func (r *SQLAccountRepository) RuntimeSnapshot(ctx context.Context) (account.RuntimeSnapshot, error) {
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return account.RuntimeSnapshot{}, err
 	}
@@ -27,6 +29,8 @@ func (r *SQLAccountRepository) ScanChanges(
 	if limit <= 0 {
 		limit = account.AccountScanChangesDefaultLimit
 	}
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return account.AccountChangeSet{}, err
 	}
@@ -40,6 +44,8 @@ func (r *SQLAccountRepository) GetAccounts(
 	if len(tokens) == 0 {
 		return []account.AccountRecord{}, nil
 	}
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return nil, err
 	}
@@ -56,6 +62,8 @@ func (r *SQLAccountRepository) ListAccounts(
 	query account.ListAccountsQuery,
 ) (account.AccountPage, error) {
 	query = normalizeLocalListQuery(query)
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return account.AccountPage{}, err
 	}

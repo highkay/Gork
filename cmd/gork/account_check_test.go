@@ -168,3 +168,23 @@ func TestRunGorkCommandConfigValidateReportsFieldError(t *testing.T) {
 		t.Fatalf("validate handled/code/err/stdout/stderr = %t/%d/%v/%q/%q", handled, code, err, stdout.String(), stderr.String())
 	}
 }
+
+func TestValidateConfigEnvAcceptsStringListOverrides(t *testing.T) {
+	defaults := map[string]any{
+		"proxy": map[string]any{
+			"egress": map[string]any{
+				"proxy_pool": []any{},
+			},
+		},
+		"retry": map[string]any{
+			"reset_session_status_codes": []any{403},
+		},
+	}
+	issues := validateConfigEnv(defaults, "GROK_", map[string]string{
+		"GROK_PROXY_EGRESS_PROXY_POOL":          "http://proxy-a:8080,http://proxy-b:8080",
+		"GROK_RETRY_RESET_SESSION_STATUS_CODES": "403,429",
+	})
+	if len(issues) != 0 {
+		t.Fatalf("validateConfigEnv issues = %#v", issues)
+	}
+}

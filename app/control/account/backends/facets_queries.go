@@ -36,6 +36,8 @@ func (r *LocalAccountRepository) ListFacets(ctx context.Context) (account.Accoun
 }
 
 func (r *SQLAccountRepository) ListFacets(ctx context.Context) (account.AccountFacetSnapshot, error) {
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return account.AccountFacetSnapshot{}, err
 	}

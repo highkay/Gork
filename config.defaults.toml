@@ -1,7 +1,11 @@
 # ==================== 访问控制 ====================
 [app]
+# 应用名称
+name = "grok"
 # 管理后台密码
 app_key = ""
+# 兼容旧管理后台密码键
+admin_key = ""
 # 应用访问地址
 app_url = ""
 # API 调用密钥
@@ -26,6 +30,40 @@ max_files = 7
 metrics_enabled = false
 # Go pprof 调试端点 /debug/pprof，默认关闭
 pprof_enabled = false
+
+
+# ==================== 服务端配置 ====================
+[server]
+# HTTP 最大请求头大小（字节），0 使用 Go 默认值
+max_header_bytes = 0
+
+
+# ==================== 安全配置 ====================
+[security.headers]
+# 是否启用 HSTS 响应头
+hsts_enabled = false
+
+[security.cors]
+# API 跨域允许来源列表，空列表仅允许同源/默认行为
+api_allowed_origins = []
+# WebUI/Admin 跨域允许来源列表，空列表仅允许同源/默认行为
+web_allowed_origins = []
+
+[security.media]
+# 本地媒体签名 URL 有效期（秒）
+signed_url_ttl_seconds = 3600
+
+[security.websocket]
+# WebUI WebSocket 全局连接上限
+max_connections = 128
+# WebUI WebSocket 单 IP 连接上限
+max_connections_per_ip = 16
+# WebUI WebSocket 单消息大小上限（字节）
+max_message_bytes = 1048576
+# WebUI WebSocket 读超时（秒）
+read_timeout_seconds = 60
+# WebUI WebSocket 写超时（秒）
+write_timeout_seconds = 15
 
 
 # ==================== 应用功能 ====================
@@ -118,11 +156,21 @@ reset_session_status_codes = [403]
 max_retries = 1
 # [App 层] 触发换账号重试的 HTTP 状态码，英文逗号分隔
 on_codes = "429,401,503"
+# 兼容旧运行时键：触发换账号重试的 HTTP 状态码
+retry_status_codes = "429,401,503"
 
+
+[account]
+# 账号仓储后端：local | redis | mysql | postgresql | sqlite
+storage = "local"
 
 [account.refresh]
 # 总开关：true=配额刷新模式（主动探测，选号评分）；false=自动重试模式（随机选号，零探测）
 enabled = true
+# 启动时是否立即刷新账号配额
+run_on_start = true
+# 刷新任务抖动比例，避免同时触发
+jitter_ratio = 0.1
 basic_interval_sec = 86400   # basic 号池周期（秒）：quota 模式用于后台刷新，random 模式用于 429 冷却；默认 86400s
 super_interval_sec = 7200    # super 号池周期（秒）：quota 模式用于后台刷新，random 模式用于 429 冷却；默认 7200s
 heavy_interval_sec = 7200    # heavy 号池周期（秒）：quota 模式用于后台刷新，random 模式用于 429 冷却；默认 7200s

@@ -60,7 +60,7 @@ func DefaultSchema(defaults map[string]any) []ConfigSchemaEntry {
 			Key:       key,
 			Kind:      inferConfigKind(flat[key]),
 			Default:   flat[key],
-			Sensitive: sensitiveConfigKey(key),
+			Sensitive: SensitiveConfigKey(key),
 			HotReload: hotReloadConfigKey(key),
 			Env:       EnvNameForKey("GROK_", key),
 			Desc:      configDescription(key),
@@ -261,28 +261,62 @@ func configMax(key string) (float64, bool) {
 	}
 }
 
-func sensitiveConfigKey(key string) bool {
-	terms := []string{"key", "token", "secret", "password", "passwd", "dsn", "sso", "clearance", "cookie"}
-	normalized := strings.ToLower(key)
-	for _, term := range terms {
-		if strings.Contains(normalized, term) {
+func SensitiveConfigKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	leaf := normalized
+	if dot := strings.LastIndex(leaf, "."); dot >= 0 {
+		leaf = leaf[dot+1:]
+	}
+	switch leaf {
+	case "app_key", "admin_key", "api_key", "webui_key", "cf_cookies", "cookie", "cookies", "dsn":
+		return true
+	}
+	for _, term := range []string{"token", "secret", "password", "passwd", "credential", "bearer"} {
+		if strings.Contains(leaf, term) {
 			return true
 		}
 	}
-	return false
+	return strings.HasSuffix(leaf, "_dsn")
 }
 
 func hotReloadConfigKey(key string) bool {
-	return !strings.HasPrefix(key, "account.storage") &&
-		!strings.Contains(key, "_url") &&
-		!strings.Contains(key, "dsn")
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	leaf := normalized
+	if dot := strings.LastIndex(leaf, "."); dot >= 0 {
+		leaf = leaf[dot+1:]
+	}
+	return !strings.HasPrefix(normalized, "account.storage") &&
+		!strings.HasSuffix(leaf, "_url") &&
+		!strings.Contains(leaf, "dsn")
 }
 
 func configDescription(key string) string {
+	if desc, ok := runtimeConfigDescriptions[key]; ok {
+		return desc
+	}
 	if desc, ok := configDescriptions[key]; ok {
 		return desc
 	}
 	return strings.ReplaceAll(key, ".", " ")
+}
+
+var runtimeConfigDescriptions = map[string]string{
+	"account.refresh.jitter_ratio":              "Refresh scheduler jitter ratio applied to avoid synchronized refreshes.",
+	"account.refresh.run_on_start":              "Runs quota refresh once at startup when refresh mode is enabled.",
+	"account.storage":                           "Account repository backend: local, redis, mysql, postgresql, or sqlite.",
+	"app.admin_key":                             "Legacy Admin console password key; app.app_key is preferred.",
+	"app.name":                                  "Application name used by config loaders and diagnostics.",
+	"retry.retry_status_codes":                  "Legacy retry HTTP status code key used by runtime compatibility paths.",
+	"security.cors.api_allowed_origins":         "Additional allowed origins for API CORS requests.",
+	"security.cors.web_allowed_origins":         "Additional allowed origins for WebUI/Admin CORS and WebSocket requests.",
+	"security.headers.hsts_enabled":             "Enables Strict-Transport-Security response headers.",
+	"security.media.signed_url_ttl_seconds":     "Signed local media URL lifetime in seconds.",
+	"security.websocket.max_connections":        "Maximum concurrent WebUI WebSocket connections.",
+	"security.websocket.max_connections_per_ip": "Maximum concurrent WebUI WebSocket connections per client IP.",
+	"security.websocket.max_message_bytes":      "Maximum WebUI WebSocket message size in bytes.",
+	"security.websocket.read_timeout_seconds":   "WebUI WebSocket read timeout in seconds.",
+	"security.websocket.write_timeout_seconds":  "WebUI WebSocket write timeout in seconds.",
+	"server.max_header_bytes":                   "HTTP server maximum request header size in bytes; 0 uses Go defaults.",
 }
 
 var configDescriptions = map[string]string{

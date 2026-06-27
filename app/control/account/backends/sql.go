@@ -38,10 +38,14 @@ func NewSQLAccountRepository(db *sql.DB, dialect SQLDialect, closeDB bool) *SQLA
 }
 
 func (r *SQLAccountRepository) Initialize(ctx context.Context) error {
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	return r.ensureInitialized(ctx)
 }
 
 func (r *SQLAccountRepository) GetRevision(ctx context.Context) (int, error) {
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return 0, err
 	}
@@ -59,6 +63,8 @@ func (r *SQLAccountRepository) Close(context.Context) error {
 }
 
 func (r *SQLAccountRepository) ensureInitialized(ctx context.Context) error {
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if r.initialized {
 		return nil
 	}

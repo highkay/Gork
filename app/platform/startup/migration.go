@@ -147,7 +147,7 @@ func RunStartupMigrations(ctx context.Context, config ConfigBackend, repo Accoun
 	if err := migrateConfig(ctx, config, options); err != nil {
 		return err
 	}
-	if err := migrateBasicRefreshInterval(ctx, config); err != nil {
+	if err := migrateBasicRefreshInterval(ctx, config, options); err != nil {
 		return err
 	}
 	if err := migrateAccounts(ctx, config, repo, options); err != nil {
@@ -198,7 +198,7 @@ func migrateConfig(ctx context.Context, backend ConfigBackend, options StartupMi
 	return backend.ApplyPatch(ctx, userData)
 }
 
-func migrateBasicRefreshInterval(ctx context.Context, backend ConfigBackend) error {
+func migrateBasicRefreshInterval(ctx context.Context, backend ConfigBackend, options StartupMigrationOptions) error {
 	data, err := backend.Load(ctx)
 	if err != nil {
 		return err
@@ -206,6 +206,10 @@ func migrateBasicRefreshInterval(ctx context.Context, backend ConfigBackend) err
 	refresh := nestedMap(nestedMap(data, "account"), "refresh")
 	value, ok := toInt(refresh["basic_interval_sec"])
 	if !ok || value != 36000 {
+		return nil
+	}
+	recordMigrationStep(options.Report, "config_basic_refresh_interval", "planned", 1, "account.refresh.basic_interval_sec 36000 -> 86400")
+	if options.DryRun {
 		return nil
 	}
 	return backend.ApplyPatch(ctx, map[string]any{"account": map[string]any{"refresh": map[string]any{"basic_interval_sec": 86400}}})

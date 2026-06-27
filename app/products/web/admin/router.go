@@ -469,21 +469,29 @@ func adminDirectoryError() error {
 }
 
 func redactAdminConfig(value any) any {
+	return redactAdminConfigValue("", value)
+}
+
+func redactAdminConfigValue(path string, value any) any {
 	switch typed := value.(type) {
 	case map[string]any:
 		redacted := make(map[string]any, len(typed))
 		for key, item := range typed {
-			if adminConfigKeySensitive(key) {
+			childPath := key
+			if path != "" {
+				childPath = path + "." + key
+			}
+			if adminConfigKeySensitive(childPath) {
 				redacted[key] = "<redacted>"
 				continue
 			}
-			redacted[key] = redactAdminConfig(item)
+			redacted[key] = redactAdminConfigValue(childPath, item)
 		}
 		return redacted
 	case []any:
 		redacted := make([]any, len(typed))
 		for i, item := range typed {
-			redacted[i] = redactAdminConfig(item)
+			redacted[i] = redactAdminConfigValue(path, item)
 		}
 		return redacted
 	case string:
@@ -497,27 +505,7 @@ func redactAdminConfig(value any) any {
 }
 
 func adminConfigKeySensitive(key string) bool {
-	normalized := strings.ToLower(strings.TrimSpace(key))
-	sensitiveTerms := []string{
-		"app_key",
-		"admin_key",
-		"api_key",
-		"bearer",
-		"cf_clearance",
-		"credential",
-		"dsn",
-		"password",
-		"passwd",
-		"secret",
-		"sso",
-		"token",
-	}
-	for _, term := range sensitiveTerms {
-		if strings.Contains(normalized, term) {
-			return true
-		}
-	}
-	return false
+	return config.SensitiveConfigKey(key)
 }
 
 func adminConfigStringSensitive(value string) bool {

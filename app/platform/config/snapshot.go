@@ -19,7 +19,7 @@ type ConfigSnapshotOptions struct {
 }
 
 type ConfigSnapshot struct {
-	mu            sync.Mutex
+	mu            sync.RWMutex
 	data          map[string]any
 	loaded        bool
 	mtimeDefaults time.Time
@@ -40,7 +40,9 @@ func (s *ConfigSnapshot) Load(ctx context.Context, defaultsPath string) error {
 	if defaultsPath == "" {
 		defaultsPath = ResolveDefaultsPath()
 	}
-	backend, err := s.getBackend()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	backend, err := s.getBackendLocked()
 	if err != nil {
 		return err
 	}
@@ -56,8 +58,6 @@ func (s *ConfigSnapshot) Load(ctx context.Context, defaultsPath string) error {
 		return nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	mt, err = configFileModTime(defaultsPath)
 	if err != nil {
 		return fmt.Errorf("Missing required defaults config: %s", defaultsPath)
@@ -86,18 +86,22 @@ func (s *ConfigSnapshot) Load(ctx context.Context, defaultsPath string) error {
 }
 
 func (s *ConfigSnapshot) EnsureLoaded(ctx context.Context, defaultsPath string) error {
-	if s.loaded {
+	s.mu.RLock()
+	loaded := s.loaded
+	s.mu.RUnlock()
+	if loaded {
 		return nil
 	}
 	return s.Load(ctx, defaultsPath)
 }
 
 func (s *ConfigSnapshot) getBackend() (backends.ConfigBackend, error) {
-	if s.backend != nil {
-		return s.backend, nil
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.getBackendLocked()
+}
+
+func (s *ConfigSnapshot) getBackendLocked() (backends.ConfigBackend, error) {
 	if s.backend != nil {
 		return s.backend, nil
 	}
@@ -115,6 +119,8 @@ func (s *ConfigSnapshot) getBackend() (backends.ConfigBackend, error) {
 }
 
 func (s *ConfigSnapshot) Get(key string, defaultValue any) any {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	return GetNested(s.data, key, defaultValue)
 }
 
@@ -260,6 +266,8 @@ func (s *ConfigSnapshot) Reset(ctx context.Context) error {
 }
 
 func (s *ConfigSnapshot) Raw() map[string]any {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	out := map[string]any{}
 	for key, value := range s.data {
 		out[key] = value

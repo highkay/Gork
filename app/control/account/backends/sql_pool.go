@@ -1,6 +1,7 @@
 package backends
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"strconv"
@@ -31,6 +32,25 @@ func sqlPoolSettingsFromEnv() (int, int, int) {
 	return envInt("ACCOUNT_SQL_POOL_SIZE", defaultPoolSize, 1),
 		envInt("ACCOUNT_SQL_MAX_OVERFLOW", defaultMaxOverflow, 0),
 		envInt("ACCOUNT_SQL_POOL_RECYCLE", 1800, 0)
+}
+
+func sqlPoolTimeoutContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout := sqlPoolTimeoutFromEnv()
+	if timeout <= 0 {
+		return ctx, func() {}
+	}
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
+func sqlPoolTimeoutFromEnv() time.Duration {
+	seconds := envInt("ACCOUNT_SQL_POOL_TIMEOUT", 30, 0)
+	if seconds <= 0 {
+		return 0
+	}
+	return time.Duration(seconds) * time.Second
 }
 
 func isServerlessSQLRuntime() bool {

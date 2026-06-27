@@ -247,12 +247,16 @@ func withAppMiddleware(next http.Handler) http.Handler {
 func writeAppSecurityHeaders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+	permissionsPolicy := "camera=(), microphone=(), geolocation=()"
+	if strings.HasPrefix(r.URL.Path, "/webui") {
+		permissionsPolicy = "camera=(), microphone=(self), geolocation=()"
+	}
+	w.Header().Set("Permissions-Policy", permissionsPolicy)
 	if appBoolConfig("security.headers.hsts_enabled", false) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 	}
 	if strings.HasPrefix(r.URL.Path, "/admin") || strings.HasPrefix(r.URL.Path, "/webui") {
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' ws: wss:; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; font-src 'self' https://cdn.jsdelivr.net data:; base-uri 'self'; frame-ancestors 'none'")
 	}
 }
 

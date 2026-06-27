@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/dslzl/gork/app/platform/config/backends"
@@ -96,6 +97,59 @@ func TestConfigSnapshotUpdateInvalidatesVersionAndTypedGetters(t *testing.T) {
 	}
 	if snapshot.GetStr("missing.key", "fallback") != "fallback" {
 		t.Fatalf("string default mismatch")
+	}
+}
+
+func TestConfigSnapshotConcurrentLoadReadAndUpdate(t *testing.T) {
+	defaults := writeSnapshotDefaults(t)
+	backend := &concurrentConfigBackend{
+		data:    map[string]any{"proxy": map[string]any{"timeout": 20, "mode": "pool"}},
+		version: 1,
+	}
+	snapshot := NewConfigSnapshot(backend, ConfigSnapshotOptions{})
+	if err := snapshot.Load(context.Background(), defaults); err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	ctx := context.Background()
+	errs := make(chan error, 16)
+	recordErr := func(err error) {
+		if err == nil {
+			return
+		}
+		select {
+		case errs <- err:
+		default:
+		}
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				recordErr(snapshot.Load(ctx, defaults))
+				_ = snapshot.GetInt("proxy.timeout", 0)
+				_ = snapshot.GetStr("proxy.mode", "")
+				_ = snapshot.GetBool("app.webui_enabled", false)
+				_ = snapshot.Raw()
+			}
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for j := 0; j < 100; j++ {
+			patch := map[string]any{"proxy": map[string]any{"timeout": j + 1}}
+			recordErr(snapshot.Update(ctx, patch))
+			recordErr(snapshot.Load(ctx, defaults))
+		}
+	}()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent snapshot operation returned error: %v", err)
 	}
 }
 
@@ -248,4 +302,39 @@ func (b *fakeConfigBackend) Version(context.Context) (any, error) {
 
 func (b *fakeConfigBackend) Close(context.Context) error {
 	return nil
+}
+
+type concurrentConfigBackend struct {
+	backends.ConfigBackend
+	mu      sync.Mutex
+	data    map[string]any
+	version int
+}
+
+func (b *concurrentConfigBackend) Load(context.Context) (map[string]any, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return DeepMergeConfig(map[string]any{}, b.data), nil
+}
+
+func (b *concurrentConfigBackend) ApplyPatch(_ context.Context, patch map[string]any) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.data = DeepMergeConfig(b.data, patch)
+	b.version++
+	return nil
+}
+
+func (b *concurrentConfigBackend) Clear(context.Context) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.data = map[string]any{}
+	b.version++
+	return nil
+}
+
+func (b *concurrentConfigBackend) Version(context.Context) (any, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.version, nil
 }

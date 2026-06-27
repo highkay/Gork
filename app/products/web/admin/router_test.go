@@ -135,6 +135,42 @@ func TestAdminConfigRevealSensitiveValuesRequiresConfirmationHeader(t *testing.T
 	}
 }
 
+func TestAdminConfigRedactsOnlySensitiveLeaves(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	adminRouterConfig = &fakeAdminConfig{raw: map[string]any{
+		"app": map[string]any{
+			"app_key": "secret-admin",
+		},
+		"account": map[string]any{
+			"sso_validation": map[string]any{
+				"enabled":      true,
+				"interval_sec": float64(300),
+			},
+		},
+		"proxy": map[string]any{
+			"clearance": map[string]any{
+				"mode":             "flaresolverr",
+				"cf_cookies":       "cf_clearance=secret",
+				"flaresolverr_url": "http://flaresolverr:8191",
+				"timeout_sec":      float64(60),
+			},
+		},
+	}}
+
+	rec := adminRequest(http.MethodGet, "/admin/api/config", "", "Bearer gork")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("redacted config status/body=%d/%s", rec.Code, rec.Body.String())
+	}
+	body := decodeAdminBody(t, rec)
+	assertAdminBodyValue(t, body, "app.app_key", "<redacted>")
+	assertAdminBodyValue(t, body, "account.sso_validation.enabled", true)
+	assertAdminBodyValue(t, body, "account.sso_validation.interval_sec", float64(300))
+	assertAdminBodyValue(t, body, "proxy.clearance.mode", "flaresolverr")
+	assertAdminBodyValue(t, body, "proxy.clearance.cf_cookies", "<redacted>")
+	assertAdminBodyValue(t, body, "proxy.clearance.flaresolverr_url", "http://flaresolverr:8191")
+	assertAdminBodyValue(t, body, "proxy.clearance.timeout_sec", float64(60))
+}
+
 func TestAdminConfigUpdateSanitizesAndRejectsStartupOnly(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	cfg := &fakeAdminConfig{strs: map[string]string{"logging.file_level": "debug"}, ints: map[string]int{"logging.max_files": 3}}
@@ -648,4 +684,15 @@ func decodeAdminBody(t *testing.T, rec *httptest.ResponseRecorder) map[string]an
 		t.Fatalf("decode body: %v", err)
 	}
 	return body
+}
+
+func assertAdminBodyValue(t *testing.T, body map[string]any, dotted string, want any) {
+	t.Helper()
+	got, ok := adminGoldenJSONValue(body, dotted)
+	if !ok {
+		t.Fatalf("json missing %q in %#v", dotted, body)
+	}
+	if got != want {
+		t.Fatalf("json[%s]=%#v want %#v in %#v", dotted, got, want, body)
+	}
 }

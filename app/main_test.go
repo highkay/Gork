@@ -112,6 +112,30 @@ func TestNewAppSecurityHeaders(t *testing.T) {
 	}
 }
 
+func TestWebUISecurityHeadersAllowVoiceAndExternalAssets(t *testing.T) {
+	stubAppMainRequestMiddleware(t)
+	app := NewApp(AppOptions{WebRouter: textHandler("web")})
+
+	rec := httptest.NewRecorder()
+	app.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/webui/chatkit", nil))
+
+	permissions := rec.Header().Get("Permissions-Policy")
+	if !strings.Contains(permissions, "microphone=(self)") {
+		t.Fatalf("webui permissions-policy = %q", permissions)
+	}
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, want := range []string{
+		"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+		"style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+		"font-src 'self' https://cdn.jsdelivr.net data:",
+		"connect-src 'self' ws: wss:",
+	} {
+		if !strings.Contains(csp, want) {
+			t.Fatalf("webui CSP missing %q: %s", want, csp)
+		}
+	}
+}
+
 func TestNewAppReloadsConfigAndReconcilesRefreshRuntimePerRequest(t *testing.T) {
 	resetAppMainDeps(t)
 	loadCalls := 0

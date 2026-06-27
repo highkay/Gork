@@ -14,6 +14,8 @@ func (r *SQLAccountRepository) UpsertAccounts(
 	if len(items) == 0 {
 		return account.AccountMutationResult{}, nil
 	}
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return account.AccountMutationResult{}, err
 	}
@@ -29,6 +31,8 @@ func (r *SQLAccountRepository) PatchAccounts(
 	if len(patches) == 0 {
 		return account.AccountMutationResult{}, nil
 	}
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return account.AccountMutationResult{}, err
 	}
@@ -44,6 +48,8 @@ func (r *SQLAccountRepository) DeleteAccounts(
 	if len(tokens) == 0 {
 		return account.AccountMutationResult{}, nil
 	}
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return account.AccountMutationResult{}, err
 	}
@@ -57,6 +63,8 @@ func (r *SQLAccountRepository) ReplacePool(
 	command account.BulkReplacePoolCommand,
 ) (account.AccountMutationResult, error) {
 	command.Normalize()
+	ctx, cancel := sqlPoolTimeoutContext(ctx)
+	defer cancel()
 	if err := r.ensureInitialized(ctx); err != nil {
 		return account.AccountMutationResult{}, err
 	}

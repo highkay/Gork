@@ -52,6 +52,27 @@ func TestRunStartupMigrationsMigratesConfigAndBasicInterval(t *testing.T) {
 	}
 }
 
+func TestRunStartupMigrationsDryRunDoesNotPatchBasicInterval(t *testing.T) {
+	config := &fakeMigrationConfig{
+		version: int64(1),
+		data: map[string]any{
+			"account": map[string]any{
+				"refresh": map[string]any{"basic_interval_sec": int64(36000)},
+			},
+		},
+	}
+
+	err := RunStartupMigrations(context.Background(), config, &fakeMigrationRepo{}, StartupMigrationOptions{
+		DryRun: true,
+	})
+	if err != nil {
+		t.Fatalf("RunStartupMigrations returned error: %v", err)
+	}
+	if len(config.patches) != 0 {
+		t.Fatalf("dry-run patches = %#v", config.patches)
+	}
+}
+
 func TestRunStartupMigrationsSeedsLocalConfigFromDefaultPath(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)

@@ -399,6 +399,23 @@ func TestConfigureSQLPoolUsesEnvAndServerlessDefaults(t *testing.T) {
 	}
 }
 
+func TestSQLPoolTimeoutFromEnv(t *testing.T) {
+	t.Setenv("ACCOUNT_SQL_POOL_TIMEOUT", "7")
+	if got := sqlPoolTimeoutFromEnv(); got != 7*time.Second {
+		t.Fatalf("sqlPoolTimeoutFromEnv = %v, want 7s", got)
+	}
+
+	t.Setenv("ACCOUNT_SQL_POOL_TIMEOUT", "0")
+	if got := sqlPoolTimeoutFromEnv(); got != 0 {
+		t.Fatalf("disabled sqlPoolTimeoutFromEnv = %v, want 0", got)
+	}
+
+	t.Setenv("ACCOUNT_SQL_POOL_TIMEOUT", "")
+	if got := sqlPoolTimeoutFromEnv(); got != 30*time.Second {
+		t.Fatalf("default sqlPoolTimeoutFromEnv = %v, want 30s", got)
+	}
+}
+
 func newTestSQLRepository(t *testing.T) *SQLAccountRepository {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")

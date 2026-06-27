@@ -112,12 +112,26 @@ func validateConfigEnv(defaults map[string]any, prefix string, env map[string]st
 			continue
 		}
 		patch := map[string]any{}
-		platformconfig.SetNested(patch, entry.Key, value)
+		platformconfig.SetNested(patch, entry.Key, configEnvValidationValue(entry, value))
 		if validation := platformconfig.ValidateConfigPatch(defaults, patch); validation != nil {
 			issues = append(issues, validation.Issues...)
 		}
 	}
 	return issues
+}
+
+func configEnvValidationValue(entry platformconfig.ConfigSchemaEntry, value string) any {
+	if entry.Kind != platformconfig.ConfigKindStringList {
+		return value
+	}
+	items := []any{}
+	for _, part := range strings.Split(value, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			items = append(items, part)
+		}
+	}
+	return items
 }
 
 func configCommandEnv() map[string]string {
