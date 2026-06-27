@@ -18,7 +18,18 @@ func handleAdminBatchStream(w http.ResponseWriter, r *http.Request) {
 	}
 	task := runtimepkg.GetTask(taskID)
 	if task == nil {
-		writeAdminError(w, adminBatchTaskNotFound())
+		snapshot, found, err := runtimepkg.GetTaskSnapshot(r.Context(), taskID)
+		if err != nil {
+			writeAdminError(w, err)
+			return
+		}
+		if !found {
+			writeAdminError(w, adminBatchTaskNotFound())
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-cache")
+		adminBatchWriteSSE(w, adminBatchSnapshotFromMap(snapshot))
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -78,6 +89,15 @@ func adminBatchSnapshot(task *runtimepkg.AsyncTask) map[string]any {
 	snapshot := task.Snapshot()
 	snapshot["type"] = "snapshot"
 	return snapshot
+}
+
+func adminBatchSnapshotFromMap(snapshot map[string]any) map[string]any {
+	out := make(map[string]any, len(snapshot)+1)
+	for key, value := range snapshot {
+		out[key] = value
+	}
+	out["type"] = "snapshot"
+	return out
 }
 
 func adminBatchWriteSSE(w http.ResponseWriter, event map[string]any) {

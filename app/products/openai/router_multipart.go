@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -77,51 +78,152 @@ func imageEditMultipartContent(prompt string, uploads []*multipart.FileHeader) (
 }
 
 func handleVideosCreate(w http.ResponseWriter, r *http.Request) {
-	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
-		httpbody.LimitMultipart(w, r)
-		if err := r.ParseMultipartForm(64 << 20); err != nil {
-			writeRouterError(w, platform.NewValidationError("Invalid multipart body", "body", ""))
-			return
-		}
-	} else {
-		httpbody.LimitJSON(w, r)
-		if err := r.ParseForm(); err != nil {
-			writeRouterError(w, platform.NewValidationError("Invalid form body", "body", ""))
-			return
-		}
-	}
-	if err := validateRouterVideoParams(r.FormValue("size"), func(param string) bool {
-		return strings.TrimSpace(r.FormValue(param)) != ""
-	}); err != nil {
+	payload, err := decodeRouterVideoCreateRequest(w, r)
+	if err != nil {
 		writeRouterError(w, err)
 		return
 	}
+	if err := validateRouterVideoParams(payload.options.Size, payload.hasParam); err != nil {
+		writeRouterError(w, err)
+		return
+	}
+	result, err := CreateVideo(r.Context(), payload.options)
+	if err != nil {
+		writeRouterError(w, err)
+		return
+	}
+	writeRouterJSON(w, http.StatusOK, result)
+}
+
+type routerVideoCreateRequest struct {
+	options  VideoCreateOptions
+	hasParam func(string) bool
+}
+
+func decodeRouterVideoCreateRequest(w http.ResponseWriter, r *http.Request) (routerVideoCreateRequest, error) {
+	contentType := strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type")))
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		httpbody.LimitMultipart(w, r)
+		if err := r.ParseMultipartForm(64 << 20); err != nil {
+			return routerVideoCreateRequest{}, platform.NewValidationError("Invalid multipart body", "body", "")
+		}
+		return routerVideoCreateFormRequest(r)
+	}
+	if strings.Contains(contentType, "application/json") || strings.Contains(contentType, "+json") {
+		httpbody.LimitJSON(w, r)
+		return routerVideoCreateJSONRequest(r)
+	}
+	httpbody.LimitJSON(w, r)
+	if err := r.ParseForm(); err != nil {
+		return routerVideoCreateRequest{}, platform.NewValidationError("Invalid form body", "body", "")
+	}
+	return routerVideoCreateFormRequest(r)
+}
+
+func routerVideoCreateFormRequest(r *http.Request) (routerVideoCreateRequest, error) {
 	inputReferences := []map[string]any(nil)
 	for _, upload := range filesForField(r, "input_reference[]") {
 		dataURI, err := uploadFileToDataURI(upload, "input_reference")
 		if err != nil {
-			writeRouterError(w, err)
-			return
+			return routerVideoCreateRequest{}, err
 		}
 		inputReferences = append(inputReferences, map[string]any{"image_url": dataURI})
 		if len(inputReferences) >= 7 {
 			break
 		}
 	}
-	result, err := CreateVideo(r.Context(), VideoCreateOptions{
-		Model:           routerStringDefault(r.FormValue("model"), "grok-video"),
-		Prompt:          r.FormValue("prompt"),
-		Seconds:         routerFormInt(r, "seconds", 6),
-		Size:            routerStringDefault(r.FormValue("size"), "720x1280"),
-		ResolutionName:  r.FormValue("resolution_name"),
-		Preset:          r.FormValue("preset"),
-		InputReferences: inputReferences,
-	})
-	if err != nil {
-		writeRouterError(w, err)
-		return
+	return routerVideoCreateRequest{
+		options: VideoCreateOptions{
+			Model:           routerStringDefault(r.FormValue("model"), "grok-video"),
+			Prompt:          r.FormValue("prompt"),
+			Seconds:         routerFormInt(r, "seconds", 6),
+			Size:            routerStringDefault(r.FormValue("size"), "720x1280"),
+			ResolutionName:  r.FormValue("resolution_name"),
+			Preset:          r.FormValue("preset"),
+			InputReferences: inputReferences,
+		},
+		hasParam: func(param string) bool {
+			return strings.TrimSpace(r.FormValue(param)) != ""
+		},
+	}, nil
+}
+
+func routerVideoCreateJSONRequest(r *http.Request) (routerVideoCreateRequest, error) {
+	var raw map[string]json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		return routerVideoCreateRequest{}, platform.NewValidationError("Invalid JSON body", "body", "")
 	}
-	writeRouterJSON(w, http.StatusOK, result)
+	return routerVideoCreateRequest{
+		options: VideoCreateOptions{
+			Model:           routerStringDefault(routerVideoJSONString(raw, "model"), "grok-video"),
+			Prompt:          routerVideoJSONString(raw, "prompt"),
+			Seconds:         routerVideoJSONInt(raw, "seconds", 6),
+			Size:            routerStringDefault(routerVideoJSONString(raw, "size"), "720x1280"),
+			ResolutionName:  routerVideoJSONString(raw, "resolution_name"),
+			Preset:          routerVideoJSONString(raw, "preset"),
+			InputReferences: routerVideoJSONInputReferences(raw),
+		},
+		hasParam: func(param string) bool {
+			return routerVideoJSONHasParam(raw, param)
+		},
+	}, nil
+}
+
+func routerVideoJSONString(raw map[string]json.RawMessage, key string) string {
+	value, ok := raw[key]
+	if !ok {
+		return ""
+	}
+	var out string
+	if err := json.Unmarshal(value, &out); err != nil {
+		return ""
+	}
+	return out
+}
+
+func routerVideoJSONInt(raw map[string]json.RawMessage, key string, fallback int) int {
+	value, ok := raw[key]
+	if !ok {
+		return fallback
+	}
+	var number int
+	if err := json.Unmarshal(value, &number); err == nil {
+		return number
+	}
+	var text string
+	if err := json.Unmarshal(value, &text); err == nil {
+		if parsed, err := strconv.Atoi(strings.TrimSpace(text)); err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
+func routerVideoJSONInputReferences(raw map[string]json.RawMessage) []map[string]any {
+	for _, key := range []string{"input_reference", "input_references", "input_reference[]"} {
+		value, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var references []map[string]any
+		if err := json.Unmarshal(value, &references); err != nil {
+			continue
+		}
+		if len(references) > 7 {
+			return references[:7]
+		}
+		return references
+	}
+	return nil
+}
+
+func routerVideoJSONHasParam(raw map[string]json.RawMessage, key string) bool {
+	value, ok := raw[key]
+	if !ok {
+		return false
+	}
+	trimmed := strings.TrimSpace(string(value))
+	return trimmed != "" && trimmed != "null" && trimmed != `""`
 }
 
 func handleVideosRead(w http.ResponseWriter, r *http.Request) {

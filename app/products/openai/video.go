@@ -3,6 +3,7 @@ package openai
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/dslzl/gork/app/platform"
 )
@@ -37,6 +38,8 @@ type VideoArtifact struct {
 }
 
 type VideoJob struct {
+	mu sync.RWMutex
+
 	ID                 string
 	Model              string
 	Prompt             string
@@ -54,6 +57,12 @@ type VideoJob struct {
 }
 
 func (j *VideoJob) ToDict() map[string]any {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	return j.toDictLocked()
+}
+
+func (j *VideoJob) toDictLocked() map[string]any {
 	payload := map[string]any{
 		"id":         j.ID,
 		"object":     videoObject,
@@ -76,6 +85,55 @@ func (j *VideoJob) ToDict() map[string]any {
 		payload["remixed_from_video_id"] = j.RemixedFromVideoID
 	}
 	return payload
+}
+
+func (j *VideoJob) Snapshot() map[string]any {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	payload := j.toDictLocked()
+	if j.VideoURL != "" {
+		payload["video_url"] = j.VideoURL
+	}
+	if j.ContentPath != "" {
+		payload["content_path"] = j.ContentPath
+	}
+	return payload
+}
+
+func (j *VideoJob) contentState() (string, string) {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	return j.Status, j.ContentPath
+}
+
+func (j *VideoJob) setStatus(status string, progress int) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.Status = status
+	if progress >= 0 {
+		if progress > 100 {
+			progress = 100
+		}
+		j.Progress = progress
+	}
+}
+
+func (j *VideoJob) fail(message string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.Status = "failed"
+	j.Error = map[string]any{"code": "video_generation_failed", "message": message}
+}
+
+func (j *VideoJob) complete(artifact VideoArtifact, completedAt int64) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.Status = "completed"
+	j.Progress = 100
+	j.CompletedAt = completedAt
+	j.VideoURL = artifact.VideoURL
+	j.ContentPath = artifact.LocalContentFilePath
+	j.RemixedFromVideoID = artifact.RemixedFromVideoID
 }
 
 func ValidateVideoLength(seconds int) error {

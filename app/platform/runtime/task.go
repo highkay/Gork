@@ -13,6 +13,14 @@ type TaskSnapshotStore interface {
 	Publish(task *AsyncTask, event map[string]any)
 }
 
+type TaskSnapshotReader interface {
+	GetSnapshot(ctx context.Context, taskID string) (map[string]any, error)
+}
+
+type TaskSnapshotWriter interface {
+	PublishSnapshot(ctx context.Context, taskID string, snapshot map[string]any) error
+}
+
 type AsyncTaskOptions struct {
 	ID            string
 	SnapshotStore TaskSnapshotStore
@@ -217,6 +225,38 @@ func GetTask(taskID string) *AsyncTask {
 	taskRegistry.Lock()
 	defer taskRegistry.Unlock()
 	return taskRegistry.tasks[taskID]
+}
+
+func GetTaskSnapshot(ctx context.Context, taskID string) (map[string]any, bool, error) {
+	if task := GetTask(taskID); task != nil {
+		return task.Snapshot(), true, nil
+	}
+	taskRegistry.Lock()
+	store := taskRegistry.snapshotStore
+	taskRegistry.Unlock()
+	reader, ok := store.(TaskSnapshotReader)
+	if !ok || reader == nil {
+		return nil, false, nil
+	}
+	snapshot, err := reader.GetSnapshot(ctx, taskID)
+	if err != nil {
+		return nil, false, err
+	}
+	if snapshot == nil {
+		return nil, false, nil
+	}
+	return snapshot, true, nil
+}
+
+func PublishTaskSnapshot(ctx context.Context, taskID string, snapshot map[string]any) error {
+	taskRegistry.Lock()
+	store := taskRegistry.snapshotStore
+	taskRegistry.Unlock()
+	writer, ok := store.(TaskSnapshotWriter)
+	if !ok || writer == nil {
+		return nil
+	}
+	return writer.PublishSnapshot(ctx, taskID, snapshot)
 }
 
 func ExpireTask(ctx context.Context, taskID string, ttl time.Duration) error {

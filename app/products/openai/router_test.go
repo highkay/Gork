@@ -672,7 +672,7 @@ func TestRouterRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 	routerEditImages = func(_ context.Context, _ imageEditOptions) (imageResult, error) {
 		return imageResult{Response: map[string]any{"created": float64(2), "data": []any{map[string]any{"b64_json": "aW1n"}}}}, nil
 	}
-	videoStartJob = func(context.Context, *VideoJob, videoJobOptions) {}
+	videoStartJob = func(*VideoJob, videoJobOptions) {}
 
 	imageID := "1234567890abcdef"
 	imageDir, err := storage.ImageFilesDir()

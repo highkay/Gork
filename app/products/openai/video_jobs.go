@@ -12,6 +12,7 @@ import (
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 type VideoCreateOptions struct {
@@ -54,8 +55,19 @@ var (
 		}
 		return "video_" + hex.EncodeToString(raw[:])
 	}
-	videoStartJob = func(ctx context.Context, job *VideoJob, options videoJobOptions) {
-		go runVideoJob(ctx, job, options)
+	videoStartJob = func(job *VideoJob, options videoJobOptions) {
+		ctx, cancel := videoJobContext()
+		go func() {
+			defer cancel()
+			runVideoJob(ctx, job, options)
+		}()
+	}
+	videoJobContext = func() (context.Context, context.CancelFunc) {
+		timeout := time.Duration(chatTimeoutSeconds() * float64(time.Second))
+		if timeout <= 0 {
+			return context.Background(), func() {}
+		}
+		return context.WithTimeout(context.Background(), timeout)
 	}
 	videoScheduleExpiration = func(videoID string) {
 		go expireVideoJob(videoID, videoJobTTL)
@@ -79,8 +91,9 @@ func CreateVideo(ctx context.Context, options VideoCreateOptions) (map[string]an
 		Status:    "queued",
 	}
 	putVideoJob(job)
+	publishVideoJobSnapshot(job)
 	videoScheduleExpiration(job.ID)
-	videoStartJob(ctx, job, videoJobOptions{
+	videoStartJob(job, videoJobOptions{
 		Size:            normalized.Size,
 		ResolutionName:  options.ResolutionName,
 		Prompt:          normalized.Prompt,
@@ -127,7 +140,18 @@ func normalizeVideoCreateOptions(options VideoCreateOptions) (normalizedVideoCre
 func RetrieveVideo(videoID string) (map[string]any, error) {
 	job, ok := GetVideoJob(videoID)
 	if !ok {
-		return nil, platform.NewValidationError("Video '"+videoID+"' not found", "video_id", "")
+		snapshot, found, err := runtimepkg.GetTaskSnapshot(context.Background(), videoID)
+		if err != nil {
+			return nil, err
+		}
+		if !found {
+			return nil, platform.NewValidationError("Video '"+videoID+"' not found", "video_id", "")
+		}
+		payload, ok := videoPayloadFromSnapshot(snapshot)
+		if !ok {
+			return nil, platform.NewValidationError("Video '"+videoID+"' not found", "video_id", "")
+		}
+		return payload, nil
 	}
 	return job.ToDict(), nil
 }
@@ -135,15 +159,30 @@ func RetrieveVideo(videoID string) (map[string]any, error) {
 func VideoContentPath(videoID string) (string, error) {
 	job, ok := GetVideoJob(videoID)
 	if !ok {
-		return "", platform.NewValidationError("Video '"+videoID+"' not found", "video_id", "")
+		snapshot, found, err := runtimepkg.GetTaskSnapshot(context.Background(), videoID)
+		if err != nil {
+			return "", err
+		}
+		if !found || snapshot["object"] != videoObject {
+			return "", platform.NewValidationError("Video '"+videoID+"' not found", "video_id", "")
+		}
+		if snapshot["status"] != "completed" || strings.TrimSpace(asString(snapshot["content_path"])) == "" {
+			return "", platform.NewAppError("Video content is not ready yet", platform.ErrorKindValidation, "video_not_ready", 409, nil)
+		}
+		path := strings.TrimSpace(asString(snapshot["content_path"]))
+		if _, err := os.Stat(path); err != nil {
+			return "", platform.NewValidationError("Video content for '"+videoID+"' not found", "video_id", "")
+		}
+		return path, nil
 	}
-	if job.Status != "completed" || job.ContentPath == "" {
+	status, path := job.contentState()
+	if status != "completed" || path == "" {
 		return "", platform.NewAppError("Video content is not ready yet", platform.ErrorKindValidation, "video_not_ready", 409, nil)
 	}
-	if _, err := os.Stat(job.ContentPath); err != nil {
+	if _, err := os.Stat(path); err != nil {
 		return "", platform.NewValidationError("Video content for '"+videoID+"' not found", "video_id", "")
 	}
-	return job.ContentPath, nil
+	return path, nil
 }
 
 func GetVideoJob(videoID string) (*VideoJob, bool) {
@@ -175,15 +214,8 @@ func expireVideoJob(videoID string, ttl time.Duration) {
 }
 
 func setVideoJobStatus(job *VideoJob, status string, progress int) {
-	videoJobsMu.Lock()
-	defer videoJobsMu.Unlock()
-	job.Status = status
-	if progress >= 0 {
-		if progress > 100 {
-			progress = 100
-		}
-		job.Progress = progress
-	}
+	job.setStatus(status, progress)
+	publishVideoJobSnapshot(job)
 }
 
 func runVideoJob(ctx context.Context, job *VideoJob, options videoJobOptions) {
@@ -197,21 +229,33 @@ func runVideoJob(ctx context.Context, job *VideoJob, options videoJobOptions) {
 		Preset:          options.Preset,
 		InputReferences: options.InputReferences,
 	})
-	videoJobsMu.Lock()
-	defer videoJobsMu.Unlock()
 	if err != nil {
-		job.Status = "failed"
-		job.Error = map[string]any{"code": "video_generation_failed", "message": err.Error()}
+		job.fail(err.Error())
+		publishVideoJobSnapshot(job)
 		return
 	}
-	job.Status = "completed"
-	job.Progress = 100
-	job.CompletedAt = videoNowUnix()
-	job.VideoURL = artifact.VideoURL
-	job.ContentPath = artifact.LocalContentFilePath
-	job.RemixedFromVideoID = artifact.RemixedFromVideoID
+	job.complete(artifact, videoNowUnix())
+	publishVideoJobSnapshot(job)
 }
 
 func strconvItoa(value int) string {
 	return strconv.FormatInt(int64(value), 10)
+}
+
+func publishVideoJobSnapshot(job *VideoJob) {
+	_ = runtimepkg.PublishTaskSnapshot(context.Background(), job.ID, job.Snapshot())
+}
+
+func videoPayloadFromSnapshot(snapshot map[string]any) (map[string]any, bool) {
+	if snapshot["object"] != videoObject {
+		return nil, false
+	}
+	payload := make(map[string]any, len(snapshot))
+	for key, value := range snapshot {
+		if key == "content_path" || key == "video_url" {
+			continue
+		}
+		payload[key] = value
+	}
+	return payload, true
 }

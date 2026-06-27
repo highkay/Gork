@@ -380,6 +380,24 @@ func TestAdminBatchStreamAndCancelMissingTaskReturnNotFound(t *testing.T) {
 	}
 }
 
+func TestAdminBatchStreamReadsRuntimeSnapshotFallback(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	store := &fakeAdminTaskSnapshotStore{snapshots: map[string]map[string]any{
+		"remote-task": {"task_id": "remote-task", "status": "running", "processed": 3},
+	}}
+	runtimepkg.SetTaskSnapshotStore(store)
+	t.Cleanup(func() { runtimepkg.SetTaskSnapshotStore(nil) })
+
+	stream := adminRequest(http.MethodGet, "/admin/api/batch/remote-task/stream", "", "Bearer gork")
+	text := stream.Body.String()
+	if stream.Code != http.StatusOK {
+		t.Fatalf("stream status/body=%d/%s", stream.Code, text)
+	}
+	if !strings.Contains(text, `"type":"snapshot"`) || !strings.Contains(text, `"processed":3`) {
+		t.Fatalf("stream body = %q", text)
+	}
+}
+
 func TestAdminBatchCancelMarksTaskCancelled(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	task := runtimepkg.CreateTask(1)
@@ -388,6 +406,24 @@ func TestAdminBatchCancelMarksTaskCancelled(t *testing.T) {
 	if body["status"] != "success" || !task.Cancelled {
 		t.Fatalf("body=%#v cancelled=%v", body, task.Cancelled)
 	}
+}
+
+type fakeAdminTaskSnapshotStore struct {
+	snapshots map[string]map[string]any
+}
+
+func (s *fakeAdminTaskSnapshotStore) Publish(*runtimepkg.AsyncTask, map[string]any) {}
+
+func (s *fakeAdminTaskSnapshotStore) GetSnapshot(_ context.Context, taskID string) (map[string]any, error) {
+	snapshot := s.snapshots[taskID]
+	if snapshot == nil {
+		return nil, nil
+	}
+	out := make(map[string]any, len(snapshot))
+	for key, value := range snapshot {
+		out[key] = value
+	}
+	return out, nil
 }
 
 func TestAdminBatchRouteGoldenStatusHeadersAndShapes(t *testing.T) {

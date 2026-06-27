@@ -68,6 +68,18 @@ func (s *RedisTaskSnapshotStore) GetSnapshot(ctx context.Context, taskID string)
 	return decoded, nil
 }
 
+func (s *RedisTaskSnapshotStore) PublishSnapshot(ctx context.Context, taskID string, snapshot map[string]any) error {
+	key := s.keyPrefix + taskID
+	mapping := map[string]string{
+		"snapshot":   jsonCompact(snapshot),
+		"updated_at": strconvTaskFloat(time.Now()),
+	}
+	if err := s.redis.HSet(ctx, key, mapping); err != nil {
+		return err
+	}
+	return s.redis.Expire(ctx, key, s.ttlS)
+}
+
 func (s *RedisTaskSnapshotStore) write(ctx context.Context, task *AsyncTask, event map[string]any) error {
 	mapping := map[string]string{
 		"snapshot":   jsonCompact(task.Snapshot()),

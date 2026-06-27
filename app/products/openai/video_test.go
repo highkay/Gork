@@ -9,12 +9,14 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 	"github.com/dslzl/gork/app/platform"
+	runtimepkg "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func TestVideoValidationHelpersMatchPython(t *testing.T) {
@@ -42,7 +44,7 @@ func TestVideoValidationHelpersMatchPython(t *testing.T) {
 func TestVideoCreateRetrieveAndContentPath(t *testing.T) {
 	resetVideoDepsForTest(t)
 	t.Setenv("DATA_DIR", t.TempDir())
-	videoStartJob = func(context.Context, *VideoJob, videoJobOptions) {}
+	videoStartJob = func(*VideoJob, videoJobOptions) {}
 	scheduledVideoID := ""
 	videoScheduleExpiration = func(videoID string) { scheduledVideoID = videoID }
 
@@ -83,18 +85,93 @@ func TestVideoCreateRetrieveAndContentPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	job, _ := GetVideoJob(videoID)
-	job.Status = "completed"
-	job.ContentPath = path
+	job.complete(VideoArtifact{LocalContentFilePath: path}, videoNowUnix())
 	gotPath, err := VideoContentPath(videoID)
 	if err != nil || gotPath != path {
 		t.Fatalf("content path=%q err=%v", gotPath, err)
 	}
 }
 
+func TestVideoCreateWorkerUsesDetachedContext(t *testing.T) {
+	resetVideoDepsForTest(t)
+	seen := make(chan error, 1)
+	videoGenerate = func(ctx context.Context, _ videoGenerateOptions) (VideoArtifact, error) {
+		seen <- ctx.Err()
+		return VideoArtifact{}, errors.New("stop")
+	}
+	requestCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := CreateVideo(requestCtx, VideoCreateOptions{Model: "grok-imagine-video", Prompt: "make a clip", Seconds: 6, Size: "720x1280"}); err != nil {
+		t.Fatalf("CreateVideo returned error: %v", err)
+	}
+	select {
+	case err := <-seen:
+		if err != nil {
+			t.Fatalf("background context inherited request cancellation: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("background video worker did not start")
+	}
+}
+
+func TestVideoCreatePublishesRuntimeSnapshotFallback(t *testing.T) {
+	resetVideoDepsForTest(t)
+	store := &fakeVideoSnapshotStore{snapshots: map[string]map[string]any{}}
+	runtimepkg.SetTaskSnapshotStore(store)
+	t.Cleanup(func() { runtimepkg.SetTaskSnapshotStore(nil) })
+	videoStartJob = func(*VideoJob, videoJobOptions) {}
+
+	body, err := CreateVideo(context.Background(), VideoCreateOptions{Model: "grok-imagine-video", Prompt: "snapshot clip", Seconds: 6, Size: "720x1280"})
+	if err != nil {
+		t.Fatalf("CreateVideo returned error: %v", err)
+	}
+	videoID := body["id"].(string)
+	if store.snapshots[videoID] == nil {
+		t.Fatalf("missing runtime snapshot for %s", videoID)
+	}
+
+	clearVideoJobs()
+	retrieved, err := RetrieveVideo(videoID)
+	if err != nil {
+		t.Fatalf("RetrieveVideo runtime snapshot returned error: %v", err)
+	}
+	if retrieved["id"] != videoID || retrieved["prompt"] != "snapshot clip" || retrieved["object"] != videoObject {
+		t.Fatalf("retrieved snapshot = %#v", retrieved)
+	}
+}
+
+func TestVideoJobConcurrentStatusReads(t *testing.T) {
+	resetVideoDepsForTest(t)
+	path := filepath.Join(t.TempDir(), "video_testid.mp4")
+	if err := os.WriteFile(path, []byte("mp4"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	job := &VideoJob{ID: "video_testid", Model: "grok-imagine-video", Prompt: "race", Seconds: "6", Size: "720x1280", Quality: videoQuality, CreatedAt: 1, Status: "queued"}
+	putVideoJob(job)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 100; j++ {
+				_, _ = RetrieveVideo(job.ID)
+				_, _ = VideoContentPath(job.ID)
+			}
+		}()
+	}
+	for progress := 0; progress <= 100; progress++ {
+		setVideoJobStatus(job, "in_progress", progress)
+	}
+	job.complete(VideoArtifact{LocalContentFilePath: path}, videoNowUnix())
+	wg.Wait()
+}
+
 func TestRouterVideoEndpointsUseVideoJobs(t *testing.T) {
 	resetRouterDepsForTest(t)
 	resetVideoDepsForTest(t)
-	videoStartJob = func(context.Context, *VideoJob, videoJobOptions) {}
+	videoStartJob = func(*VideoJob, videoJobOptions) {}
 
 	form := strings.NewReader("model=grok-imagine-video&prompt=make+video&seconds=6&size=720x1280")
 	req := httptest.NewRequest(http.MethodPost, "/v1/videos", form)
@@ -113,6 +190,28 @@ func TestRouterVideoEndpointsUseVideoJobs(t *testing.T) {
 	}
 	if decodeRouterJSON(t, rec)["id"] != videoID {
 		t.Fatalf("retrieve body=%s", rec.Body.String())
+	}
+}
+
+func TestRouterVideoCreateAcceptsJSON(t *testing.T) {
+	resetRouterDepsForTest(t)
+	resetVideoDepsForTest(t)
+	videoStartJob = func(*VideoJob, videoJobOptions) {}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/videos", strings.NewReader(`{"model":"grok-imagine-video","prompt":"json clip","seconds":10,"size":"1280x720"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("create status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	videoID := decodeRouterJSON(t, rec)["id"].(string)
+	retrieved, err := RetrieveVideo(videoID)
+	if err != nil {
+		t.Fatalf("retrieve err=%v", err)
+	}
+	if retrieved["prompt"] != "json clip" || retrieved["seconds"] != "10" || retrieved["size"] != "1280x720" {
+		t.Fatalf("retrieved=%#v", retrieved)
 	}
 }
 
@@ -270,4 +369,31 @@ func resetVideoDepsForTest(t *testing.T) {
 		routerMediaSigningSecret = oldMediaSecret
 		clearVideoJobs()
 	})
+}
+
+type fakeVideoSnapshotStore struct {
+	snapshots map[string]map[string]any
+}
+
+func (s *fakeVideoSnapshotStore) Publish(*runtimepkg.AsyncTask, map[string]any) {}
+
+func (s *fakeVideoSnapshotStore) PublishSnapshot(_ context.Context, taskID string, snapshot map[string]any) error {
+	s.snapshots[taskID] = cloneVideoSnapshot(snapshot)
+	return nil
+}
+
+func (s *fakeVideoSnapshotStore) GetSnapshot(_ context.Context, taskID string) (map[string]any, error) {
+	snapshot := s.snapshots[taskID]
+	if snapshot == nil {
+		return nil, nil
+	}
+	return cloneVideoSnapshot(snapshot), nil
+}
+
+func cloneVideoSnapshot(snapshot map[string]any) map[string]any {
+	out := make(map[string]any, len(snapshot))
+	for key, value := range snapshot {
+		out[key] = value
+	}
+	return out
 }

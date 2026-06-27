@@ -177,6 +177,30 @@ func TestRedisTaskSnapshotStorePublishesAndReadsSnapshot(t *testing.T) {
 	}
 }
 
+func TestTaskSnapshotRegistryReadsRuntimeStoreFallback(t *testing.T) {
+	redis := &fakeTaskRedis{}
+	store := NewRedisTaskSnapshotStore(redis, RedisTaskSnapshotStoreOptions{KeyPrefix: "task:", TTLS: 60})
+	SetTaskSnapshotStore(store)
+	defer SetTaskSnapshotStore(nil)
+
+	err := PublishTaskSnapshot(context.Background(), "remote", map[string]any{
+		"task_id": "remote",
+		"status":  "running",
+	})
+	if err != nil {
+		t.Fatalf("PublishTaskSnapshot returned error: %v", err)
+	}
+	redis.raw = map[string]any{"snapshot": redis.mapping["snapshot"]}
+
+	snapshot, found, err := GetTaskSnapshot(context.Background(), "remote")
+	if err != nil {
+		t.Fatalf("GetTaskSnapshot returned error: %v", err)
+	}
+	if !found || snapshot["task_id"] != "remote" || snapshot["status"] != "running" {
+		t.Fatalf("snapshot found=%v value=%#v", found, snapshot)
+	}
+}
+
 type fakeTaskSnapshotStore struct {
 	events []map[string]any
 }

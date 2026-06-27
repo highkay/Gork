@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -100,11 +101,11 @@ func TestDynamicConsoleModelSourceUsesConfiguredEndpointAtRequestTime(t *testing
 	if got := modelNamesForSpecs(source.ListContext(context.Background())); len(got) == 0 {
 		t.Fatalf("configured endpoint list empty")
 	}
-	if len(client.requests) != 1 {
-		t.Fatalf("requests = %d, want 1", len(client.requests))
+	if client.requestCount() != 1 {
+		t.Fatalf("requests = %d, want 1", client.requestCount())
 	}
 	want := "https://console.test/auth_mgmt.AuthManagement/ListModels"
-	if got := client.requests[0].URL.String(); got != want {
+	if got := client.requestAt(0).URL.String(); got != want {
 		t.Fatalf("request URL = %q, want %q", got, want)
 	}
 }
@@ -243,8 +244,8 @@ func TestDynamicConsoleModelSourceListContextCancelsInitialRefresh(t *testing.T)
 	if got := source.ListContext(ctx); len(got) != 0 {
 		t.Fatalf("cancelled initial list = %#v, want empty fallback", got)
 	}
-	if client.calls != 0 {
-		t.Fatalf("cancelled context should not start HTTP refresh, calls=%d", client.calls)
+	if client.callCount() != 0 {
+		t.Fatalf("cancelled context should not start HTTP refresh, calls=%d", client.callCount())
 	}
 	if source.LastErrorTime().IsZero() {
 		t.Fatalf("cancelled refresh should expose last error time")
@@ -268,14 +269,14 @@ func TestDynamicConsoleModelSourceReturnsStaleCacheWhileRefreshing(t *testing.T)
 	}
 
 	now = now.Add(2 * time.Second)
-	client.block = release
+	client.setBlock(release)
 	got := modelNamesForSpecs(source.ListContext(context.Background()))
 	if !reflect.DeepEqual(got, []string{"grok-4.20-dynamic", "grok-4.20-dynamic-latest", "grok-code-fast"}) {
 		t.Fatalf("stale list = %#v", got)
 	}
-	waitForDynamicRefresh(t, func() bool { return client.calls == 2 })
-	if client.calls != 2 {
-		t.Fatalf("expired cache should start one background refresh, calls=%d", client.calls)
+	waitForDynamicRefresh(t, func() bool { return client.callCount() == 2 })
+	if client.callCount() != 2 {
+		t.Fatalf("expired cache should start one background refresh, calls=%d", client.callCount())
 	}
 	close(release)
 }
@@ -339,10 +340,10 @@ func TestDynamicConsoleModelSourceProbeListModelsBypassesCache(t *testing.T) {
 	if err := source.ProbeListModels(context.Background(), "probe-token"); err != nil {
 		t.Fatalf("ProbeListModels second call returned error: %v", err)
 	}
-	if client.calls != 2 {
-		t.Fatalf("ProbeListModels should bypass cache, calls=%d", client.calls)
+	if client.callCount() != 2 {
+		t.Fatalf("ProbeListModels should bypass cache, calls=%d", client.callCount())
 	}
-	request := client.requests[0]
+	request := client.requestAt(0)
 	if cookie := request.Header.Get("Cookie"); cookie != "sso=probe-token; sso-rw=probe-token" {
 		t.Fatalf("probe cookie = %q", cookie)
 	}
@@ -454,6 +455,7 @@ func modelNamesForSpecs(specs []model.ModelSpec) []string {
 }
 
 type fakeDynamicModelHTTPClient struct {
+	mu       sync.Mutex
 	body     []byte
 	err      error
 	status   int
@@ -486,23 +488,52 @@ func (p *fakeDynamicConsoleModelProvider) ProbeListModels(_ context.Context, tok
 }
 
 func (c *fakeDynamicModelHTTPClient) Do(request *http.Request) (*http.Response, error) {
+	c.mu.Lock()
 	c.calls++
 	c.requests = append(c.requests, request)
-	if c.block != nil {
-		<-c.block
-	}
-	if c.err != nil {
-		return nil, c.err
-	}
+	block := c.block
+	err := c.err
 	status := c.status
 	if status == 0 {
 		status = http.StatusOK
 	}
+	body := append([]byte(nil), c.body...)
+	c.mu.Unlock()
+	if block != nil {
+		<-block
+	}
+	if err != nil {
+		return nil, err
+	}
 	return &http.Response{
 		StatusCode: status,
 		Header:     http.Header{"Content-Type": []string{"application/grpc-web+proto"}},
-		Body:       io.NopCloser(bytes.NewReader(c.body)),
+		Body:       io.NopCloser(bytes.NewReader(body)),
 	}, nil
+}
+
+func (c *fakeDynamicModelHTTPClient) setBlock(block <-chan struct{}) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.block = block
+}
+
+func (c *fakeDynamicModelHTTPClient) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.calls
+}
+
+func (c *fakeDynamicModelHTTPClient) requestCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.requests)
+}
+
+func (c *fakeDynamicModelHTTPClient) requestAt(index int) *http.Request {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.requests[index]
 }
 
 func waitForDynamicRefresh(t *testing.T, done func() bool) {
