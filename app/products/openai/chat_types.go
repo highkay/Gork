@@ -112,6 +112,7 @@ type chatCompletionPlan struct {
 	ResponseID       string
 	TimeoutSeconds   float64
 	ToolNames        []string
+	ToolsDisabled    bool
 	ToolOverrides    map[string]any
 	RequestOverrides map[string]any
 }

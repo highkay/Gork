@@ -14,6 +14,7 @@ import (
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	accountbackends "github.com/dslzl/gork/app/control/account/backends"
 	reverse "github.com/dslzl/gork/app/dataplane/reverse"
+	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
 func runGorkCommand(ctx context.Context, args []string, stdout io.Writer, stderr io.Writer) (bool, int, error) {
@@ -128,7 +129,7 @@ func runProtocolCheckCommand(ctx context.Context, args []string, stdout io.Write
 			return true, 2, fmt.Errorf("unknown protocol-check flag: %s", args[i])
 		}
 	}
-	results := reverse.RunProtocolCheck(ctx, targets, nil)
+	results := reverse.RunProtocolCheck(ctx, targets, reverse.EndpointProtocolChecker{Endpoints: reverseruntime.GlobalEndpointTable()})
 	if jsonOutput {
 		encoder := json.NewEncoder(stdout)
 		encoder.SetIndent("", "  ")
@@ -145,6 +146,9 @@ func runProtocolCheckCommand(ctx context.Context, args []string, stdout io.Write
 }
 
 func protocolCheckExitCode(results []reverse.ProtocolCheckResult) int {
+	if len(results) == 0 {
+		return 1
+	}
 	for _, result := range results {
 		if result.Status != "ok" {
 			return 1

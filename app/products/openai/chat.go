@@ -93,11 +93,14 @@ func runChatCompletionAttempt(ctx context.Context, options chatCompletionOptions
 	}
 
 	state, frames, err := consumeChatLines(lines, consumeChatLinesOptions{
-		Model:      options.Model,
-		ResponseID: plan.ResponseID,
-		EmitThink:  plan.EmitThink,
-		IsStream:   plan.IsStream,
-		ToolNames:  plan.ToolNames,
+		Context:      ctx,
+		Token:        account.Token,
+		Model:        options.Model,
+		ResponseID:   plan.ResponseID,
+		EmitThink:    plan.EmitThink,
+		IsStream:     plan.IsStream,
+		ToolNames:    plan.ToolNames,
+		DisableTools: plan.ToolsDisabled,
 	})
 	if err != nil {
 		return chatCompletionResult{}, err

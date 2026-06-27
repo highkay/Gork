@@ -23,6 +23,13 @@ func NewToolSieve(toolNames []string) *ToolSieve {
 	return &ToolSieve{toolNames: toolNames}
 }
 
+func suppressToolSyntax(text string) string {
+	sieve := NewToolSieve(nil)
+	safe, _ := sieve.Feed(text)
+	_ = sieve.Flush()
+	return safe
+}
+
 func (s *ToolSieve) Feed(chunk string) (string, []protocol.ParsedToolCall) {
 	if s.done || chunk == "" {
 		if s.capturing {

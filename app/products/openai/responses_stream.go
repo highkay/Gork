@@ -21,7 +21,7 @@ func collectResponseStream(ctx context.Context, lines []string, options response
 	reasoningClosed := false
 	toolCallsEmitted := false
 	var sieve *ToolSieve
-	if len(options.ToolNames) > 0 {
+	if len(options.ToolNames) > 0 || options.ToolsDisabled {
 		sieve = NewToolSieve(options.ToolNames)
 	}
 	for _, line := range lines {
@@ -64,10 +64,12 @@ func collectResponseStream(ctx context.Context, lines []string, options response
 				if sieve != nil {
 					safeText, calls := sieve.Feed(text)
 					if calls != nil {
-						toolItems = buildResponseFunctionCallItems(calls)
-						frames = append(frames, emitResponseFunctionCallEvents(toolItems, responseMessageIndex(reasoningStarted))...)
-						toolCallsEmitted = true
-						continue
+						if !options.ToolsDisabled {
+							toolItems = buildResponseFunctionCallItems(calls)
+							frames = append(frames, emitResponseFunctionCallEvents(toolItems, responseMessageIndex(reasoningStarted))...)
+							toolCallsEmitted = true
+							continue
+						}
 					}
 					text = safeText
 				}
@@ -104,7 +106,7 @@ func collectResponseStream(ctx context.Context, lines []string, options response
 			break
 		}
 	}
-	if sieve != nil && !toolCallsEmitted {
+	if sieve != nil && !toolCallsEmitted && !options.ToolsDisabled {
 		if calls := sieve.Flush(); calls != nil {
 			toolItems = buildResponseFunctionCallItems(calls)
 			frames = append(frames, emitResponseFunctionCallEvents(toolItems, responseMessageIndex(reasoningStarted))...)
@@ -126,6 +128,9 @@ func collectResponseStream(ctx context.Context, lines []string, options response
 	}
 	if refs := adapter.ReferencesSuffix(); refs != "" {
 		state.Text += refs
+	}
+	if options.ToolsDisabled {
+		state.Text = suppressToolSyntax(state.Text)
 	}
 	if len(state.Annotations) == 0 {
 		state.Annotations = adapter.AnnotationsList()

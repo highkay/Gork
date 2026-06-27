@@ -54,9 +54,12 @@ func Responses(ctx context.Context, options responseOptions) (chatCompletionResu
 		return chatCompletionResult{}, platform.NewUpstreamError("Empty message after extraction", 400, "")
 	}
 	toolNames := []string{}
+	toolsDisabled := protocol.ToolChoiceDisablesTools(options.ToolChoice)
 	if len(options.Tools) > 0 {
 		chatTools := toResponseChatTools(options.Tools)
-		toolNames = protocol.ExtractToolNames(chatTools)
+		if !toolsDisabled {
+			toolNames = protocol.ExtractToolNames(chatTools)
+		}
 		message = protocol.InjectIntoMessage(message, protocol.BuildToolSystemPrompt(chatTools, options.ToolChoice))
 	}
 
@@ -78,12 +81,13 @@ func Responses(ctx context.Context, options responseOptions) (chatCompletionResu
 			return chatCompletionResult{}, platform.NewRateLimitError("No available accounts for this model tier")
 		}
 		result, err := runResponseAttempt(ctx, responseAttemptOptions{
-			Request:   options,
-			Account:   account,
-			Message:   message,
-			Files:     files,
-			IDs:       ids,
-			ToolNames: toolNames,
+			Request:       options,
+			Account:       account,
+			Message:       message,
+			Files:         files,
+			IDs:           ids,
+			ToolNames:     toolNames,
+			ToolsDisabled: toolsDisabled,
 		})
 		finishChatAttempt(ctx, directory, account, err == nil, err)
 		if err == nil {
@@ -109,12 +113,13 @@ type responseIDs struct {
 }
 
 type responseAttemptOptions struct {
-	Request   responseOptions
-	Account   chatAccount
-	Message   string
-	Files     []string
-	IDs       responseIDs
-	ToolNames []string
+	Request       responseOptions
+	Account       chatAccount
+	Message       string
+	Files         []string
+	IDs           responseIDs
+	ToolNames     []string
+	ToolsDisabled bool
 }
 
 func runResponseAttempt(ctx context.Context, options responseAttemptOptions) (chatCompletionResult, error) {

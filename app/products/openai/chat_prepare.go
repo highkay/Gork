@@ -114,8 +114,12 @@ func prepareChatCompletion(options chatCompletionOptions) (chatCompletionPlan, e
 	plan.Message = message
 	plan.Files = files
 
+	toolsDisabled := protocol.ToolChoiceDisablesTools(options.ToolChoice)
+	plan.ToolsDisabled = toolsDisabled
 	if len(options.Tools) > 0 {
-		plan.ToolNames = protocol.ExtractToolNames(options.Tools)
+		if !toolsDisabled {
+			plan.ToolNames = protocol.ExtractToolNames(options.Tools)
+		}
 		toolPrompt := protocol.BuildToolSystemPrompt(options.Tools, options.ToolChoice)
 		plan.Message = protocol.InjectIntoMessage(plan.Message, toolPrompt)
 	}

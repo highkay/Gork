@@ -8,11 +8,14 @@ import (
 )
 
 type consumeChatLinesOptions struct {
-	Model      string
-	ResponseID string
-	EmitThink  bool
-	IsStream   bool
-	ToolNames  []string
+	Context      context.Context
+	Token        string
+	Model        string
+	ResponseID   string
+	EmitThink    bool
+	IsStream     bool
+	ToolNames    []string
+	DisableTools bool
 }
 
 func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatCompletionState, []string, error) {
@@ -24,7 +27,7 @@ func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatComp
 	ended := false
 	toolCallsEmitted := false
 	var sieve *ToolSieve
-	if options.IsStream && len(options.ToolNames) > 0 {
+	if options.IsStream && (len(options.ToolNames) > 0 || options.DisableTools) {
 		sieve = NewToolSieve(options.ToolNames)
 	}
 
@@ -62,8 +65,10 @@ func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatComp
 							})))
 						}
 						if calls != nil {
-							frames = appendToolCallFrames(frames, options.ResponseID, options.Model, calls)
-							toolCallsEmitted = true
+							if !options.DisableTools {
+								frames = appendToolCallFrames(frames, options.ResponseID, options.Model, calls)
+								toolCallsEmitted = true
+							}
 						}
 						continue
 					}
@@ -99,8 +104,15 @@ func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatComp
 		Annotations:   adapter.AnnotationsList(),
 		SearchSources: adapter.SearchSourcesList(),
 	}
+	if options.DisableTools {
+		state.Text = suppressToolSyntax(state.Text)
+	}
 	for _, image := range adapter.ImageURLs {
-		resolved, err := resolveImage(context.Background(), "", image.URL, image.ImageID)
+		ctx := options.Context
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		resolved, err := resolveImage(ctx, options.Token, image.URL, image.ImageID)
 		if err == nil && resolved != "" {
 			state.ImageTexts = append(state.ImageTexts, resolved)
 		}

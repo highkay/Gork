@@ -58,6 +58,17 @@ func ExtractToolNames(tools []map[string]any) []string {
 	return names
 }
 
+func ToolChoiceDisablesTools(toolChoice any) bool {
+	if choice, ok := toolChoice.(string); ok {
+		return strings.EqualFold(strings.TrimSpace(choice), "none")
+	}
+	choice, ok := toolChoice.(map[string]any)
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(stringFromMap(choice, "type")), "none")
+}
+
 func InjectIntoMessage(message, systemPrompt string) string {
 	return "[system]: " + systemPrompt + "\n\n" + escapeInjectedUserMessage(message)
 }
@@ -121,11 +132,11 @@ func formatToolDefinitions(tools []map[string]any) string {
 }
 
 func buildChoiceInstruction(toolChoice any) string {
+	if ToolChoiceDisablesTools(toolChoice) {
+		return choiceNone
+	}
 	if toolChoice == nil || toolChoice == "auto" {
 		return choiceAuto
-	}
-	if toolChoice == "none" {
-		return choiceNone
 	}
 	if toolChoice == "required" {
 		return choiceRequired

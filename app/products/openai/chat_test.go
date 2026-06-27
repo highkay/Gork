@@ -212,6 +212,47 @@ func TestChatResolveImageProxiesImaginePublicEvenForGrokURL(t *testing.T) {
 	}
 }
 
+func TestConsumeChatLinesPropagatesContextAndTokenToImageResolver(t *testing.T) {
+	resetChatDepsForTest(t)
+	imageFormatConfig = "base64"
+	type contextKey string
+	ctx := context.WithValue(context.Background(), contextKey("request"), "marker")
+	var gotContext context.Context
+	var gotToken string
+	var gotURL string
+	downloadImageBytes = func(ctx context.Context, token string, rawURL string) ([]byte, string, error) {
+		gotContext = ctx
+		gotToken = token
+		gotURL = rawURL
+		return []byte("img"), "image/png", nil
+	}
+
+	state, _, err := consumeChatLines([]string{
+		`data: {"result":{"response":{"cardAttachment":{"jsonData":"{\"id\":\"img-card\",\"image_chunk\":{\"progress\":100,\"imageUuid\":\"imgctx\",\"imageUrl\":\"generated/context.png\",\"moderated\":false}}"}}}}`,
+		`data: [DONE]`,
+	}, consumeChatLinesOptions{
+		Context:    ctx,
+		Token:      "tok-image",
+		Model:      "grok-4.20-auto",
+		ResponseID: "chatcmpl-test",
+	})
+	if err != nil {
+		t.Fatalf("consumeChatLines err=%v", err)
+	}
+	if gotContext == nil {
+		t.Fatalf("image resolver was not called")
+	}
+	if gotContext.Value(contextKey("request")) != "marker" || gotToken != "tok-image" {
+		t.Fatalf("image resolver context/token = %#v/%q", gotContext, gotToken)
+	}
+	if gotURL != "https://assets.grok.com/generated/context.png" {
+		t.Fatalf("image resolver url=%q", gotURL)
+	}
+	if len(state.ImageTexts) != 1 || !strings.Contains(state.ImageTexts[0], "data:image/png;base64") {
+		t.Fatalf("image texts=%#v", state.ImageTexts)
+	}
+}
+
 func TestChatPrepareFileAttachmentsSkipsEmptyAndKeepsIDs(t *testing.T) {
 	resetChatDepsForTest(t)
 	uploaded := []string{}
@@ -839,6 +880,70 @@ func TestChatCompletionsStreamSieveEmitsToolCallChunks(t *testing.T) {
 	}
 	if !strings.Contains(joined, `"tool_calls"`) || !strings.Contains(joined, `"finish_reason":"tool_calls"`) {
 		t.Fatalf("missing tool call chunks=%s", joined)
+	}
+}
+
+func TestChatCompletionsToolChoiceNoneSuppressesToolOutput(t *testing.T) {
+	resetChatDepsForTest(t)
+	stream := true
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok1", ModeID: model.ModeAuto}}}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+	streamPost = func(context.Context, chatStreamRequest) (*chatStreamResponse, error) {
+		return &chatStreamResponse{StatusCode: 200, Lines: []string{
+			`data: {"result":{"response":{"token":"before <tool_calls><tool_call><tool_name>search</tool_name><parameters>{\"q\":\"go\"}</parameters></tool_call></tool_calls> after","isThinking":false,"messageTag":"final"}}}`,
+			`data: [DONE]`,
+		}}, nil
+	}
+
+	plan, err := prepareChatCompletion(chatCompletionOptions{
+		Model:      "grok-4.20-auto",
+		Messages:   []map[string]any{{"role": "user", "content": "hi"}},
+		Tools:      []map[string]any{{"type": "function", "function": map[string]any{"name": "search"}}},
+		ToolChoice: "none",
+	})
+	if err != nil {
+		t.Fatalf("prepare err=%v", err)
+	}
+	if !plan.ToolsDisabled || len(plan.ToolNames) != 0 {
+		t.Fatalf("tool disable plan=%t names=%#v", plan.ToolsDisabled, plan.ToolNames)
+	}
+
+	result, err := Completions(context.Background(), chatCompletionOptions{
+		Model:      "grok-4.20-auto",
+		Messages:   []map[string]any{{"role": "user", "content": "hi"}},
+		Stream:     &stream,
+		Tools:      []map[string]any{{"type": "function", "function": map[string]any{"name": "search"}}},
+		ToolChoice: "none",
+	})
+	if err != nil {
+		t.Fatalf("Completions stream none err=%v", err)
+	}
+	joined := strings.Join(result.StreamFrames, "")
+	if strings.Contains(joined, "<tool_calls>") || strings.Contains(joined, `"tool_calls"`) {
+		t.Fatalf("tool output leaked in frames=%s", joined)
+	}
+	if !strings.Contains(joined, "before ") || strings.Contains(joined, " after") {
+		t.Fatalf("tool suppression did not preserve expected safe prefix only: %s", joined)
+	}
+	if !strings.Contains(joined, "data: [DONE]") {
+		t.Fatalf("stream missing done frame=%s", joined)
+	}
+}
+
+func TestConsumeChatLinesToolChoiceNoneSuppressesNonStreamToolSyntax(t *testing.T) {
+	state, _, err := consumeChatLines([]string{
+		`data: {"result":{"response":{"token":"before <tool_calls><tool_call><tool_name>search</tool_name><parameters>{\"q\":\"go\"}</parameters></tool_call></tool_calls> after","isThinking":false,"messageTag":"final"}}}`,
+		`data: [DONE]`,
+	}, consumeChatLinesOptions{
+		Model:        "grok-4.20-auto",
+		ResponseID:   "chatcmpl-test",
+		DisableTools: true,
+	})
+	if err != nil {
+		t.Fatalf("consumeChatLines err=%v", err)
+	}
+	if state.Text != "before " {
+		t.Fatalf("text=%q", state.Text)
 	}
 }
 

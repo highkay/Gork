@@ -29,12 +29,16 @@ type EndpointProtocolChecker struct {
 	Now       func() time.Time
 }
 
+type MissingProtocolChecker struct {
+	Now func() time.Time
+}
+
 func RunProtocolCheck(ctx context.Context, targets []string, checker ProtocolChecker) []ProtocolCheckResult {
 	if len(targets) == 0 {
 		targets = DefaultProtocolCheckTargets
 	}
 	if checker == nil {
-		checker = EndpointProtocolChecker{Endpoints: reverseruntime.GlobalEndpointTable()}
+		checker = MissingProtocolChecker{}
 	}
 	results := make([]ProtocolCheckResult, 0, len(targets))
 	for _, target := range targets {
@@ -65,7 +69,26 @@ func (c EndpointProtocolChecker) CheckProtocolTarget(_ context.Context, target s
 	return result
 }
 
+func (c MissingProtocolChecker) CheckProtocolTarget(_ context.Context, target string) ProtocolCheckResult {
+	start := c.now()
+	return ProtocolCheckResult{
+		Target:    target,
+		Status:    "error",
+		LatencyMS: c.now().Sub(start).Milliseconds(),
+		ErrorType: "operational_check_unavailable",
+		RequestID: fmt.Sprintf("protocol-%d", start.UnixNano()),
+		CheckedAt: start.UTC().Format(time.RFC3339),
+	}
+}
+
 func (c EndpointProtocolChecker) now() time.Time {
+	if c.Now != nil {
+		return c.Now()
+	}
+	return time.Now()
+}
+
+func (c MissingProtocolChecker) now() time.Time {
 	if c.Now != nil {
 		return c.Now()
 	}

@@ -90,6 +90,29 @@ func TestBuildToolSystemPromptMatchesPythonChoiceMapAndFallback(t *testing.T) {
 	}
 }
 
+func TestToolChoiceDisablesTools(t *testing.T) {
+	for _, choice := range []any{
+		"none",
+		" NONE ",
+		map[string]any{"type": "none"},
+		map[string]any{"type": " NONE "},
+	} {
+		if !ToolChoiceDisablesTools(choice) {
+			t.Fatalf("choice should disable tools: %#v", choice)
+		}
+	}
+	for _, choice := range []any{
+		nil,
+		"auto",
+		"required",
+		map[string]any{"type": "function", "function": map[string]any{"name": "search"}},
+	} {
+		if ToolChoiceDisablesTools(choice) {
+			t.Fatalf("choice should not disable tools: %#v", choice)
+		}
+	}
+}
+
 func TestBuildToolSystemPromptKeepsUnicodeParametersLikePython(t *testing.T) {
 	prompt := BuildToolSystemPrompt([]map[string]any{
 		{

@@ -74,7 +74,10 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 
 func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOptions, account chatAccount, responseID string, isStream bool, timeoutS float64) (chatCompletionResult, error) {
 	upstreamStream := true
-	functionToolNames := protocol.ClientFunctionToolNames(options.Tools)
+	functionToolNames := []string{}
+	if !protocol.ToolChoiceDisablesTools(options.ToolChoice) {
+		functionToolNames = protocol.ClientFunctionToolNames(options.Tools)
+	}
 	payload := protocol.BuildConsolePayload(protocol.ConsolePayloadOptions{
 		Messages:        options.Messages,
 		Model:           options.Model,
