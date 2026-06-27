@@ -24,7 +24,11 @@ var (
 	proxyImaginePublicConfig = false
 	appURLConfig             = ""
 	downloadImageBytes       = func(ctx context.Context, token string, rawURL string) ([]byte, string, error) {
-		result, err := transport.DownloadAsset(ctx, token, rawURL)
+		runtime, err := defaultProxyTransportRuntime(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		result, err := transport.DownloadAsset(ctx, token, rawURL, transport.AssetsOptions{ProxyRuntime: runtime})
 		if err != nil {
 			return nil, "", err
 		}
@@ -47,7 +51,11 @@ var (
 		return fileID
 	}
 	uploadInput = func(ctx context.Context, token string, fileInput string) (string, string, error) {
-		result, err := transport.UploadFromInput(ctx, token, fileInput)
+		runtime, err := defaultProxyTransportRuntime(ctx)
+		if err != nil {
+			return "", "", err
+		}
+		result, err := transport.UploadFromInput(ctx, token, fileInput, transport.AssetUploadOptions{ProxyRuntime: runtime})
 		if err != nil {
 			return "", "", err
 		}

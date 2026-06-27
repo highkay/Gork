@@ -17,6 +17,7 @@ import (
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	proxycontrol "github.com/dslzl/gork/app/control/proxy"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
+	proxydataplane "github.com/dslzl/gork/app/dataplane/proxy"
 	reverse "github.com/dslzl/gork/app/dataplane/reverse"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
@@ -86,7 +87,7 @@ var (
 		return status
 	}
 	adminProxyStatus = func(ctx context.Context) map[string]any {
-		directory, err := proxycontrol.GetProxyDirectory(ctx)
+		directory, err := proxycontrol.GetProxyDirectory(ctx, proxydataplane.ProductionDirectoryOptions())
 		if err != nil {
 			return map[string]any{"error": err.Error()}
 		}

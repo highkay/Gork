@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -14,7 +16,46 @@ import (
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
+
+type fakeDynamicConfigBackend struct {
+	data map[string]any
+}
+
+func (f fakeDynamicConfigBackend) Load(context.Context) (map[string]any, error) {
+	return f.data, nil
+}
+
+func (f fakeDynamicConfigBackend) ApplyPatch(context.Context, map[string]any) error {
+	return nil
+}
+
+func (f fakeDynamicConfigBackend) Clear(context.Context) error {
+	return nil
+}
+
+func (f fakeDynamicConfigBackend) Version(context.Context) (any, error) {
+	return "test", nil
+}
+
+func (f fakeDynamicConfigBackend) Close(context.Context) error {
+	return nil
+}
+
+func useDynamicGlobalConfig(t *testing.T, data map[string]any) {
+	t.Helper()
+	previous := platformconfig.GlobalConfig
+	t.Cleanup(func() { platformconfig.GlobalConfig = previous })
+	defaultsPath := filepath.Join(t.TempDir(), "config.defaults.toml")
+	if err := os.WriteFile(defaultsPath, []byte(""), 0o600); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	platformconfig.GlobalConfig = platformconfig.NewConfigSnapshot(fakeDynamicConfigBackend{data: data}, platformconfig.ConfigSnapshotOptions{})
+	if err := platformconfig.GlobalConfig.Load(context.Background(), defaultsPath); err != nil {
+		t.Fatalf("load global config: %v", err)
+	}
+}
 
 func TestDynamicConsoleModelRegistryDelegatesSource(t *testing.T) {
 	source := &fakeDynamicConsoleModelProvider{
@@ -37,6 +78,34 @@ func TestDynamicConsoleModelRegistryDelegatesSource(t *testing.T) {
 	}
 	if source.probedToken != "probe-token" {
 		t.Fatalf("probed token = %q", source.probedToken)
+	}
+}
+
+func TestDynamicConsoleModelSourceUsesConfiguredEndpointAtRequestTime(t *testing.T) {
+	useDynamicGlobalConfig(t, map[string]any{
+		"reverse": map[string]any{
+			"endpoints": map[string]any{
+				"console_base": "https://console.test",
+			},
+		},
+	})
+	client := &fakeDynamicModelHTTPClient{body: sampleDynamicConsoleModelsResponse(t)}
+	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
+		Client: client,
+		Directory: func() chatDirectory {
+			return &fakeChatDirectory{accounts: []chatAccount{{Token: "sso-token", ModeID: model.ModeConsole}}}
+		},
+	})
+
+	if got := modelNamesForSpecs(source.ListContext(context.Background())); len(got) == 0 {
+		t.Fatalf("configured endpoint list empty")
+	}
+	if len(client.requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(client.requests))
+	}
+	want := "https://console.test/auth_mgmt.AuthManagement/ListModels"
+	if got := client.requests[0].URL.String(); got != want {
+		t.Fatalf("request URL = %q, want %q", got, want)
 	}
 }
 
@@ -89,6 +158,20 @@ func TestDynamicConsoleModelSourceFetchesAndCachesListModels(t *testing.T) {
 	}
 	if !reflect.DeepEqual(body, transport.EncodeGRPCWebPayload(nil)) {
 		t.Fatalf("request body = %#v, want empty grpc-web frame", body)
+	}
+}
+
+func TestDynamicConsoleModelSourceRejectsOversizedListModelsBody(t *testing.T) {
+	source := newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
+		Endpoint: "https://console.x.ai/auth_mgmt.AuthManagement/ListModels",
+		Client: &fakeDynamicModelHTTPClient{
+			body: bytes.Repeat([]byte("x"), int(maxDynamicConsoleListModelsResponseBytes)+1),
+		},
+	})
+
+	_, _, err := source.postListModels(context.Background(), "sso-token")
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("postListModels error = %v, want oversized body error", err)
 	}
 }
 

@@ -91,7 +91,7 @@ func DownloadAsset(ctx context.Context, token string, filePath string, options .
 	option := assetsOptions(options...)
 	downloadURL, origin, referer := protocol.ResolveDownloadURL(filePath)
 	contentType := protocol.InferContentType(downloadURL)
-	lease, err := acquireAssetsProxy(ctx, option.ProxyRuntime)
+	lease, err := acquireAssetsProxy(ctx, option.ProxyRuntime, true)
 	if err != nil {
 		return AssetDownloadResult{}, err
 	}
@@ -112,7 +112,7 @@ func DownloadAsset(ctx context.Context, token string, filePath string, options .
 }
 
 func listAssetsInner(ctx context.Context, token string, params map[string]any, option AssetsOptions) (map[string]any, error) {
-	lease, err := acquireAssetsProxy(ctx, option.ProxyRuntime)
+	lease, err := acquireAssetsProxy(ctx, option.ProxyRuntime, false)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func listAssetsInner(ctx context.Context, token string, params map[string]any, o
 }
 
 func deleteAssetInner(ctx context.Context, token string, assetID string, option AssetsOptions) (map[string]any, error) {
-	lease, err := acquireAssetsProxy(ctx, option.ProxyRuntime)
+	lease, err := acquireAssetsProxy(ctx, option.ProxyRuntime, false)
 	if err != nil {
 		return nil, err
 	}
@@ -229,11 +229,11 @@ func acquireAssetsSlot(ctx context.Context, slots chan struct{}) (func(), error)
 	}
 }
 
-func acquireAssetsProxy(ctx context.Context, runtime AssetsProxyRuntime) (controlproxy.ProxyLease, error) {
+func acquireAssetsProxy(ctx context.Context, runtime AssetsProxyRuntime, resource bool) (controlproxy.ProxyLease, error) {
 	if runtime == nil {
 		return controlproxy.ProxyLease{}, assetsTransportError("assets", fmt.Errorf("proxy runtime is not configured"))
 	}
-	return runtime.Acquire(ctx, controlproxy.AcquireOptions{Scope: controlproxy.ProxyScopeAsset, Kind: controlproxy.RequestKindHTTP})
+	return runtime.Acquire(ctx, controlproxy.AcquireOptions{Scope: controlproxy.ProxyScopeAsset, Kind: controlproxy.RequestKindHTTP, Resource: resource})
 }
 
 func handleAssetsError(ctx context.Context, runtime AssetsProxyRuntime, lease controlproxy.ProxyLease, label string, err error) error {

@@ -81,7 +81,7 @@ func grokImageURL(rawURL string) string {
 	if strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://") {
 		return rawURL
 	}
-	return imageBaseURL + strings.TrimLeft(rawURL, "/")
+	return imageBaseURL() + strings.TrimLeft(rawURL, "/")
 }
 
 func firstStringFromAny(values ...any) string {

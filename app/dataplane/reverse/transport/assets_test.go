@@ -110,7 +110,7 @@ func TestListAssetsUsesAssetProxyAndReportsSuccess(t *testing.T) {
 	if !reflect.DeepEqual(request.Params, map[string]any{"limit": 50}) {
 		t.Fatalf("params = %#v", request.Params)
 	}
-	assertAssetsAcquire(t, runtime.acquires[0], controlproxy.ProxyScopeAsset, controlproxy.RequestKindHTTP)
+	assertAssetsAcquire(t, runtime.acquires[0], controlproxy.ProxyScopeAsset, controlproxy.RequestKindHTTP, false)
 	assertAssetsFeedback(t, runtime.feedbacks, 0, controlproxy.ProxyFeedbackSuccess, intPtr(200))
 }
 
@@ -133,7 +133,7 @@ func TestDeleteAssetUsesDeleteURLAndReportsSuccess(t *testing.T) {
 	if request.URL != protocol.AssetDeleteURL("asset-1") || request.Timeout != 8*time.Second {
 		t.Fatalf("delete request = %#v", request)
 	}
-	assertAssetsAcquire(t, runtime.acquires[0], controlproxy.ProxyScopeAsset, controlproxy.RequestKindHTTP)
+	assertAssetsAcquire(t, runtime.acquires[0], controlproxy.ProxyScopeAsset, controlproxy.RequestKindHTTP, false)
 	assertAssetsFeedback(t, runtime.feedbacks, 0, controlproxy.ProxyFeedbackSuccess, intPtr(200))
 }
 
@@ -170,7 +170,7 @@ func TestDownloadAssetBuildsHeadersAndReturnsStream(t *testing.T) {
 		request.ExtraHeaders["Sec-Fetch-Mode"] != "navigate" {
 		t.Fatalf("download headers = %#v", request.ExtraHeaders)
 	}
-	assertAssetsAcquire(t, runtime.acquires[0], controlproxy.ProxyScopeAsset, controlproxy.RequestKindHTTP)
+	assertAssetsAcquire(t, runtime.acquires[0], controlproxy.ProxyScopeAsset, controlproxy.RequestKindHTTP, true)
 	assertAssetsFeedback(t, runtime.feedbacks, 0, controlproxy.ProxyFeedbackSuccess, intPtr(200))
 }
 
@@ -234,10 +234,10 @@ func TestDownloadAssetAppliesUpstreamAndTransportFeedback(t *testing.T) {
 	assertAssetsFeedback(t, transportRuntime.feedbacks, 0, controlproxy.ProxyFeedbackTransportError, nil)
 }
 
-func assertAssetsAcquire(t *testing.T, acquire controlproxy.AcquireOptions, scope controlproxy.ProxyScope, kind controlproxy.RequestKind) {
+func assertAssetsAcquire(t *testing.T, acquire controlproxy.AcquireOptions, scope controlproxy.ProxyScope, kind controlproxy.RequestKind, resource bool) {
 	t.Helper()
-	if acquire.Scope != scope || acquire.Kind != kind {
-		t.Fatalf("acquire options = %#v, want %s/%s", acquire, scope, kind)
+	if acquire.Scope != scope || acquire.Kind != kind || acquire.Resource != resource {
+		t.Fatalf("acquire options = %#v, want %s/%s resource=%v", acquire, scope, kind, resource)
 	}
 }
 

@@ -44,15 +44,33 @@ var (
 		return storage.SaveLocalImage(raw, mime, fileID)
 	}
 	imageStreamImages = func(ctx context.Context, token, prompt string, options transport.ImagineOptions) ([]map[string]any, error) {
+		if options.ProxyRuntime == nil {
+			runtime, err := defaultProxyTransportRuntime(ctx)
+			if err != nil {
+				return nil, err
+			}
+			options.ProxyRuntime = runtime
+		}
 		return transport.StreamImages(ctx, token, prompt, options)
 	}
 	imageUploadFromInput = func(ctx context.Context, token, fileInput string) (transport.AssetUploadResult, error) {
-		return transport.UploadFromInput(ctx, token, fileInput)
+		runtime, err := defaultProxyTransportRuntime(ctx)
+		if err != nil {
+			return transport.AssetUploadResult{}, err
+		}
+		return transport.UploadFromInput(ctx, token, fileInput, transport.AssetUploadOptions{ProxyRuntime: runtime})
 	}
 	imageResolveUploadedAssetReference = func(token, fileID, fileURI string) (string, error) {
 		return transport.ResolveUploadedAssetReference(token, fileID, fileURI)
 	}
 	imageCreateMediaPost = func(ctx context.Context, token, mediaType string, options transport.MediaOptions) (map[string]any, error) {
+		if options.ProxyRuntime == nil {
+			runtime, err := defaultProxyTransportRuntime(ctx)
+			if err != nil {
+				return nil, err
+			}
+			options.ProxyRuntime = runtime
+		}
 		return transport.CreateMediaPost(ctx, token, mediaType, options)
 	}
 	imageCollectEditImages = func(ctx context.Context, options imageCollectEditOptions) ([]imageOutput, error) {

@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -104,6 +105,27 @@ func TestFlareSolverrProviderSuppressesRequestAndDecodeFailures(t *testing.T) {
 	}
 	if _, ok, err := provider.RefreshBundle(context.Background(), "node-1", "", "https://grok.com"); err != nil || ok {
 		t.Fatalf("RefreshBundle decode failure ok=%v err=%v, want false nil", ok, err)
+	}
+}
+
+func TestFlareSolverrProviderRejectsOversizedResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(bytes.Repeat([]byte("x"), int(maxFlareSolverrResponseBytes)+1))
+	}))
+	defer server.Close()
+
+	provider := FlareSolverrClearanceProvider{
+		Config: fakeFlareSolverrConfig{
+			strings: map[string]string{
+				"proxy.clearance.mode":             "flaresolverr",
+				"proxy.clearance.flaresolverr_url": server.URL,
+			},
+		},
+		Client: server.Client(),
+	}
+	if _, ok, err := provider.RefreshBundle(context.Background(), "node-1", "", "https://grok.com"); err == nil || ok {
+		t.Fatalf("RefreshBundle oversized response ok=%v err=%v, want error", ok, err)
 	}
 }
 

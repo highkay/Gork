@@ -9,6 +9,7 @@ import (
 
 	controlmodel "github.com/dslzl/gork/app/control/model"
 	dataaccount "github.com/dslzl/gork/app/dataplane/account"
+	proxydataplane "github.com/dslzl/gork/app/dataplane/proxy"
 	"github.com/dslzl/gork/app/dataplane/reverse"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
@@ -186,7 +187,12 @@ func writeWebUIVoiceError(w http.ResponseWriter, err error) {
 }
 
 func defaultWebUIVoiceFetchToken(ctx context.Context, token string, options webUIVoiceOptions) (map[string]any, error) {
+	runtime, err := proxydataplane.GetTransportRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return transport.FetchLiveKitToken(ctx, token, transport.LiveKitOptions{
+		ProxyRuntime:      runtime,
 		Voice:             options.Voice,
 		Personality:       options.Personality,
 		Speed:             options.Speed,

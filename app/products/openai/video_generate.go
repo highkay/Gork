@@ -23,17 +23,32 @@ const (
 
 var (
 	videoCreateMediaPost = func(ctx context.Context, token, mediaType string, options transport.MediaOptions) (map[string]any, error) {
+		if options.ProxyRuntime == nil {
+			runtime, err := defaultProxyTransportRuntime(ctx)
+			if err != nil {
+				return nil, err
+			}
+			options.ProxyRuntime = runtime
+		}
 		return transport.CreateMediaPost(ctx, token, mediaType, options)
 	}
 	videoUploadFromInput = func(ctx context.Context, token, fileInput string) (transport.AssetUploadResult, error) {
-		return transport.UploadFromInput(ctx, token, fileInput)
+		runtime, err := defaultProxyTransportRuntime(ctx)
+		if err != nil {
+			return transport.AssetUploadResult{}, err
+		}
+		return transport.UploadFromInput(ctx, token, fileInput, transport.AssetUploadOptions{ProxyRuntime: runtime})
 	}
 	videoResolveUploadedAssetReference = func(token, fileID, fileURI string) (string, error) {
 		return transport.ResolveUploadedAssetReference(token, fileID, fileURI)
 	}
 	videoStreamLines   = defaultVideoStreamLines
 	videoDownloadBytes = func(ctx context.Context, token, rawURL string) ([]byte, string, error) {
-		result, err := transport.DownloadAsset(ctx, token, rawURL)
+		runtime, err := defaultProxyTransportRuntime(ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		result, err := transport.DownloadAsset(ctx, token, rawURL, transport.AssetsOptions{ProxyRuntime: runtime})
 		if err != nil {
 			return nil, "", err
 		}

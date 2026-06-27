@@ -415,3 +415,48 @@ func TestProxyDirectoryFlareRefreshKeepsOldBundleOnFailure(t *testing.T) {
 		t.Fatalf("bundle after failed refresh = %#v, want old bundle kept", bundle)
 	}
 }
+
+func TestProxyDirectoryRefreshClearanceSafePreservesObservabilityCounters(t *testing.T) {
+	now := int64(1_000)
+	key := BundleKey{Affinity: "direct", ClearanceHost: "grok.com"}
+	flare := &fakeFlareProvider{bundles: []ClearanceBundle{
+		func() ClearanceBundle {
+			bundle := NewClearanceBundle("new")
+			bundle.AffinityKey = key.Affinity
+			bundle.ClearanceHost = key.ClearanceHost
+			bundle.CFCookies = "cf=new"
+			return bundle
+		}(),
+	}}
+	directory := NewProxyDirectory(DirectoryOptions{
+		Config: fakeDirectoryConfig{strings: map[string]string{
+			"proxy.egress.mode":       "direct",
+			"proxy.clearance.mode":    "flaresolverr",
+			"proxy.clearance.browser": "chrome",
+		}},
+		FlareProvider: flare,
+		Clock:         func() int64 { return now },
+	})
+	if err := directory.Load(context.Background()); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	previousRefreshAt := int64(500)
+	directory.bundles[key] = ClearanceBundle{
+		BundleID:         "old",
+		State:            ClearanceBundleValid,
+		AffinityKey:      key.Affinity,
+		ClearanceHost:    key.ClearanceHost,
+		LastRefreshAt:    &previousRefreshAt,
+		RefreshCount:     7,
+		LastRefreshError: "old-error",
+	}
+
+	now = 2_000
+	if err := directory.RefreshClearanceSafe(context.Background()); err != nil {
+		t.Fatalf("RefreshClearanceSafe() error = %v", err)
+	}
+	bundle := directory.Bundles()[key]
+	if bundle.BundleID != "new" || bundle.RefreshCount != 8 || bundle.LastRefreshAt == nil || *bundle.LastRefreshAt != now || bundle.LastRefreshError != "" {
+		t.Fatalf("refreshed bundle observability = %#v", bundle)
+	}
+}

@@ -20,11 +20,10 @@ import (
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
 
-var dynamicConsoleListModelsEndpoint = reverseruntime.DefaultEndpointTable().Resolve("console_list_models")
+const maxDynamicConsoleListModelsResponseBytes int64 = 8 << 20
 
 var defaultDynamicConsoleModels = newDynamicConsoleModelRegistry(
 	newDynamicConsoleModelSource(dynamicConsoleModelSourceOptions{
-		Endpoint:   dynamicConsoleListModelsEndpoint,
 		TTL:        10 * time.Minute,
 		FailureTTL: 30 * time.Second,
 	}),
@@ -119,9 +118,6 @@ func (r *dynamicConsoleModelRegistry) ProbeListModels(ctx context.Context, token
 
 func newDynamicConsoleModelSource(options dynamicConsoleModelSourceOptions) *dynamicConsoleModelSource {
 	endpoint := options.Endpoint
-	if endpoint == "" {
-		endpoint = reverseruntime.GlobalEndpointTable().Resolve("console_list_models")
-	}
 	ttl := options.TTL
 	if ttl <= 0 {
 		ttl = 10 * time.Minute
@@ -146,6 +142,13 @@ func newDynamicConsoleModelSource(options dynamicConsoleModelSourceOptions) *dyn
 		endpoint: endpoint, ttl: ttl, failureTTL: failureTTL, now: now,
 		client: client, directory: directory,
 	}
+}
+
+func (s *dynamicConsoleModelSource) endpointURL() string {
+	if s.endpoint != "" {
+		return s.endpoint
+	}
+	return reverseruntime.GlobalEndpointTable().Resolve("console_list_models")
 }
 
 func (s *dynamicConsoleModelSource) List() []model.ModelSpec {
@@ -297,7 +300,7 @@ func parseDynamicConsoleModelSpecs(raw []byte, headers map[string]string) ([]mod
 }
 
 func (s *dynamicConsoleModelSource) postListModels(ctx context.Context, token string) ([]byte, map[string]string, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, bytes.NewReader(transport.EncodeGRPCWebPayload(nil)))
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpointURL(), bytes.NewReader(transport.EncodeGRPCWebPayload(nil)))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -318,7 +321,7 @@ func (s *dynamicConsoleModelSource) postListModels(ctx context.Context, token st
 		return nil, nil, err
 	}
 	defer response.Body.Close()
-	raw, err := io.ReadAll(response.Body)
+	raw, err := readDynamicConsoleResponseBody(response.Body)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -326,6 +329,17 @@ func (s *dynamicConsoleModelSource) postListModels(ctx context.Context, token st
 		return nil, nil, fmt.Errorf("list models returned status %d", response.StatusCode)
 	}
 	return raw, lowerHTTPHeaders(response.Header), nil
+}
+
+func readDynamicConsoleResponseBody(reader io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(reader, maxDynamicConsoleListModelsResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > maxDynamicConsoleListModelsResponseBytes {
+		return nil, fmt.Errorf("list models response body exceeds %d bytes", maxDynamicConsoleListModelsResponseBytes)
+	}
+	return raw, nil
 }
 
 func specsFromDynamicConsoleMessages(messages [][]byte) []model.ModelSpec {

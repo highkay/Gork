@@ -30,6 +30,8 @@ type FlareSolverrClearanceProvider struct {
 	Client HTTPDoer
 }
 
+const maxFlareSolverrResponseBytes int64 = 1 << 20
+
 type globalFlareSolverrConfig struct{}
 
 func (globalFlareSolverrConfig) GetString(key, defaultValue string) string {
@@ -137,9 +139,9 @@ func (p FlareSolverrClearanceProvider) solve(ctx context.Context, fsURL, proxyUR
 	}
 	defer resp.Body.Close()
 
-	raw, err := io.ReadAll(resp.Body)
+	raw, err := readFlareSolverrResponseBody(resp.Body)
 	if err != nil {
-		return flareSolverrSolveResult{}, false, nil
+		return flareSolverrSolveResult{}, false, err
 	}
 	if resp.StatusCode >= 400 {
 		return flareSolverrSolveResult{}, false, nil
@@ -177,6 +179,17 @@ func (p FlareSolverrClearanceProvider) solve(ctx context.Context, fsURL, proxyUR
 		UserAgent:     result.Solution.UserAgent,
 		ClearanceHost: host,
 	}, true, nil
+}
+
+func readFlareSolverrResponseBody(reader io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(reader, maxFlareSolverrResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(raw)) > maxFlareSolverrResponseBytes {
+		return nil, fmt.Errorf("flaresolverr response body exceeds %d bytes", maxFlareSolverrResponseBytes)
+	}
+	return raw, nil
 }
 
 func clearanceHost(target string) string {

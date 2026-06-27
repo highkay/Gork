@@ -9,7 +9,9 @@ import (
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
-var imageBaseURL = reverseruntime.DefaultEndpointTable().Resolve("assets_download") + "/"
+var imageBaseURL = func() string {
+	return reverseruntime.GlobalEndpointTable().Resolve("assets_download") + "/"
+}
 
 var camelBoundaryRe = regexp.MustCompile(`([a-z0-9])([A-Z])`)
 

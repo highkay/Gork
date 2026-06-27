@@ -252,6 +252,8 @@ func TestUploadFromInputFetchesURLAndReuploadsBase64(t *testing.T) {
 	if len(client.gets) != 1 || client.gets[0].url != "https://files.test/path/cat.jpg?download=1" || client.gets[0].timeout != 30*time.Second {
 		t.Fatalf("get calls = %#v", client.gets)
 	}
+	assertAssetAcquire(t, proxyRuntime.acquires[0], controlproxy.ProxyScopeAsset, controlproxy.RequestKindHTTP, true)
+	assertAssetAcquire(t, proxyRuntime.acquires[1], controlproxy.ProxyScopeAsset, controlproxy.RequestKindHTTP, false)
 	var payload map[string]string
 	if err := json.Unmarshal(client.posts[0].body, &payload); err != nil {
 		t.Fatalf("payload JSON: %v", err)
@@ -381,6 +383,13 @@ func assertAssetFeedback(t *testing.T, feedbacks []assetFeedbackCall, index int,
 	}
 }
 
+func assertAssetAcquire(t *testing.T, acquire controlproxy.AcquireOptions, scope controlproxy.ProxyScope, kind controlproxy.RequestKind, resource bool) {
+	t.Helper()
+	if acquire.Scope != scope || acquire.Kind != kind || acquire.Resource != resource {
+		t.Fatalf("acquire options = %#v, want %s/%s resource=%v", acquire, scope, kind, resource)
+	}
+}
+
 func resetAssetUploadConcurrencyForTest(t *testing.T, value int) {
 	t.Helper()
 	assetUploadSlotsMu.Lock()
@@ -417,19 +426,25 @@ func newFakeAssetProxyRuntime(ids ...string) *fakeAssetProxyRuntime {
 }
 
 type fakeAssetProxyRuntime struct {
-	leases    []controlproxy.ProxyLease
-	acquires  int
-	feedbacks []assetFeedbackCall
+	leases         []controlproxy.ProxyLease
+	acquires       []controlproxy.AcquireOptions
+	acquireCounter int
+	feedbacks      []assetFeedbackCall
 }
 
-func (r *fakeAssetProxyRuntime) Acquire(context.Context) (*controlproxy.ProxyLease, error) {
-	if r.acquires >= len(r.leases) {
+func (r *fakeAssetProxyRuntime) Acquire(_ context.Context, options ...controlproxy.AcquireOptions) (controlproxy.ProxyLease, error) {
+	option := controlproxy.AcquireOptions{}
+	if len(options) > 0 {
+		option = options[0]
+	}
+	r.acquires = append(r.acquires, option)
+	if r.acquireCounter >= len(r.leases) {
 		lease := controlproxy.NewProxyLease("lease")
 		r.leases = append(r.leases, lease)
 	}
-	lease := r.leases[r.acquires]
-	r.acquires++
-	return &lease, nil
+	lease := r.leases[r.acquireCounter]
+	r.acquireCounter++
+	return lease, nil
 }
 
 func (r *fakeAssetProxyRuntime) Feedback(_ context.Context, lease controlproxy.ProxyLease, feedback controlproxy.ProxyFeedback) error {

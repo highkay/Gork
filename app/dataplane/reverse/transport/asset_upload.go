@@ -38,7 +38,7 @@ var (
 )
 
 type AssetProxyRuntime interface {
-	Acquire(ctx context.Context) (*controlproxy.ProxyLease, error)
+	Acquire(ctx context.Context, options ...controlproxy.AcquireOptions) (controlproxy.ProxyLease, error)
 	Feedback(ctx context.Context, lease controlproxy.ProxyLease, feedback controlproxy.ProxyFeedback) error
 }
 
@@ -123,7 +123,7 @@ func ResolveUploadedAssetReference(token string, fileID string, fileURI string) 
 }
 
 func uploadFileInner(ctx context.Context, token string, filename string, mime string, b64 string, option AssetUploadOptions) (AssetUploadResult, error) {
-	lease, err := acquireAssetProxy(ctx, option.ProxyRuntime, "Asset upload transport error")
+	lease, err := acquireAssetProxy(ctx, option.ProxyRuntime, "Asset upload transport error", false)
 	if err != nil {
 		return AssetUploadResult{}, err
 	}
@@ -146,7 +146,7 @@ func uploadFileInner(ctx context.Context, token string, filename string, mime st
 }
 
 func uploadFromURL(ctx context.Context, token string, fileURL string, option AssetUploadOptions) (AssetUploadResult, error) {
-	lease, err := acquireAssetProxy(ctx, option.ProxyRuntime, "Asset fetch transport error")
+	lease, err := acquireAssetProxy(ctx, option.ProxyRuntime, "Asset fetch transport error", true)
 	if err != nil {
 		return AssetUploadResult{}, err
 	}
@@ -214,15 +214,19 @@ func assetUploadConcurrency() int {
 	return clampAssetConcurrency(assetUploadConcurrencyProvider())
 }
 
-func acquireAssetProxy(ctx context.Context, runtime AssetProxyRuntime, label string) (*controlproxy.ProxyLease, error) {
+func acquireAssetProxy(ctx context.Context, runtime AssetProxyRuntime, label string, resource bool) (*controlproxy.ProxyLease, error) {
 	if runtime == nil {
 		return nil, assetTransportError(label, fmt.Errorf("proxy runtime is not configured"))
 	}
-	lease, err := runtime.Acquire(ctx)
+	lease, err := runtime.Acquire(ctx, controlproxy.AcquireOptions{
+		Scope:    controlproxy.ProxyScopeAsset,
+		Kind:     controlproxy.RequestKindHTTP,
+		Resource: resource,
+	})
 	if err != nil {
 		return nil, assetTransportError(label, err)
 	}
-	return lease, nil
+	return &lease, nil
 }
 
 func uploadPayload(filename string, mime string, b64 string) ([]byte, error) {

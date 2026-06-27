@@ -5,13 +5,18 @@ import (
 	"encoding/json"
 	"time"
 
+	proxydataplane "github.com/dslzl/gork/app/dataplane/proxy"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
 
 var messagesUploadInput = func(ctx context.Context, token string, fileInput string) (string, string, error) {
-	result, err := transport.UploadFromInput(ctx, token, fileInput)
+	runtime, err := proxydataplane.GetTransportRuntime(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	result, err := transport.UploadFromInput(ctx, token, fileInput, transport.AssetUploadOptions{ProxyRuntime: runtime})
 	if err != nil {
 		return "", "", err
 	}

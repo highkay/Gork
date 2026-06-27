@@ -11,6 +11,7 @@ import (
 	accountbackends "github.com/dslzl/gork/app/control/account/backends"
 	proxycontrol "github.com/dslzl/gork/app/control/proxy"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
+	proxydataplane "github.com/dslzl/gork/app/dataplane/proxy"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 	platformstorage "github.com/dslzl/gork/app/platform/storage"
@@ -422,7 +423,7 @@ func defaultAppMainStartProxyScheduler(ctx context.Context, _ *appMainLifecycleS
 	if !accountcontrol.IsRefreshSchedulerLeader() {
 		return nil, nil
 	}
-	directory, err := proxycontrol.GetProxyDirectory(ctx)
+	directory, err := proxycontrol.GetProxyDirectory(ctx, proxydataplane.ProductionDirectoryOptions())
 	if err != nil {
 		return nil, err
 	}

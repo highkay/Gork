@@ -54,9 +54,7 @@ func (d *ProxyDirectory) RefreshClearanceSafe(ctx context.Context) error {
 			return err
 		}
 		if ok {
-			d.mu.Lock()
-			d.bundles[key] = bundle
-			d.mu.Unlock()
+			d.recordSuccessfulBundleRefresh(key, bundle)
 		}
 	}
 	return nil
@@ -107,14 +105,23 @@ func (d *ProxyDirectory) buildBundleAsWinner(ctx context.Context, mode Clearance
 	if err != nil || !ok {
 		return nil, err
 	}
+	bundle = d.recordSuccessfulBundleRefresh(key, bundle)
+	return &bundle, nil
+}
+
+func (d *ProxyDirectory) recordSuccessfulBundleRefresh(key BundleKey, bundle ClearanceBundle) ClearanceBundle {
 	now := d.clock()
 	bundle.LastRefreshAt = &now
-	bundle.RefreshCount++
 	bundle.LastRefreshError = ""
 	d.mu.Lock()
+	if existing, ok := d.bundles[key]; ok {
+		bundle.RefreshCount = existing.RefreshCount + 1
+	} else {
+		bundle.RefreshCount++
+	}
 	d.bundles[key] = bundle
 	d.mu.Unlock()
-	return &bundle, nil
+	return bundle
 }
 
 func (d *ProxyDirectory) refreshBundle(ctx context.Context, mode ClearanceMode, affinity, host string, target refreshTarget) (ClearanceBundle, bool, error) {
