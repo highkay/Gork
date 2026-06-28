@@ -484,7 +484,7 @@ func TestDefaultAccountDirectoryLifecycleDoesNotBlockStartupOnLargeBootstrap(t *
 	}
 }
 
-func TestAppMainEnsureInitialAdminKeyGeneratesAndPersistsMissingKey(t *testing.T) {
+func TestAppMainEnsureInitialAdminKeyUsesFixedDefaultAndPersistsMissingKey(t *testing.T) {
 	data := map[string]any{"app": map[string]any{"app_key": ""}}
 	backend := lifecycleConfigBackend{data: &data}
 	previousConfig := config.GlobalConfig
@@ -504,8 +504,8 @@ func TestAppMainEnsureInitialAdminKeyGeneratesAndPersistsMissingKey(t *testing.T
 		t.Fatalf("ensure initial admin key: %v", err)
 	}
 
-	if len(generatedKey) != 64 {
-		t.Fatalf("generated key length=%d key=%q", len(generatedKey), generatedKey)
+	if generatedKey != appMainInitialAdminKey {
+		t.Fatalf("generated key=%q, want %q", generatedKey, appMainInitialAdminKey)
 	}
 	if strings.TrimSpace(config.GetConfig("app.app_key", "").(string)) != generatedKey {
 		t.Fatalf("global config app key was not reloaded")

@@ -183,7 +183,7 @@ go build -o gork ./cmd/gork
 
 ### 首次启动
 
-服务首次启动时会为 `app.app_key` 生成随机初始 Admin key 并输出到日志。访问 `http://localhost:8000/admin/login`，使用日志中的初始 key 登录后依次完成：
+服务首次启动时会为 `app.app_key` 写入固定初始 Admin key `gork` 并输出到日志。访问 `http://localhost:8000/admin/login`，使用日志中的初始 key 登录后依次完成：
 
 1. 修改 `app.app_key`（Admin 后台登录密码）
 2. 设置 `app.api_key`（API 调用鉴权密钥，留空则不鉴权）
@@ -299,7 +299,7 @@ server {
 | 范围 | 配置项 | 规则 |
 | :-- | :-- | :-- |
 | `/v1/*` | `app.api_key` | 为空则不额外鉴权 |
-| `/admin/*` | `app.app_key` | 为空时首次启动自动生成随机初始值 |
+| `/admin/*` | `app.app_key` | 为空时首次启动初始化为固定值 `gork` |
 | `/webui/*` | `app.webui_enabled`, `app.webui_key` | 默认关闭；`webui_key` 为空则不额外校验 |
 
 <br>

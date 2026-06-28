@@ -2,7 +2,7 @@
 
 This file is generated from `config.defaults.toml` through `gork config docs`. Do not hand-edit the table without updating the schema in `app/platform/config`.
 
-Runtime config keys can be set in TOML or overridden with the listed `GROK_` environment variable names. Startup-only storage variables such as `ACCOUNT_STORAGE`, `ACCOUNT_REDIS_URL`, `ACCOUNT_MYSQL_URL`, `ACCOUNT_POSTGRESQL_URL`, `CONFIG_LOCAL_PATH`, `DATA_DIR`, and `RUNTIME_REDIS_URL` remain documented in README and operations docs because they are read before the hot-reload config snapshot is created.
+Runtime config keys can be set in TOML or overridden by the listed `GROK_` environment names. Startup-only storage variables `ACCOUNT_STORAGE`, `ACCOUNT_REDIS_URL`, `ACCOUNT_MYSQL_URL`, `ACCOUNT_POSTGRESQL_URL`, `CONFIG_LOCAL_PATH`, `DATA_DIR`, and `RUNTIME_REDIS_URL` remain documented in README and operations docs because they are read before the hot-reload config snapshot is created.
 
 | Key | Type | Default | Env | Hot reload | Sensitive | Description |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
@@ -26,7 +26,7 @@ Runtime config keys can be set in TOML or overridden with the listed `GROK_` env
 | `account.storage` | `string` | `local` | `GROK_ACCOUNT_STORAGE` | `false` | `false` | Account repository backend: local, redis, mysql, postgresql, or sqlite. |
 | `app.admin_key` | `string` | `` | `GROK_APP_ADMIN_KEY` | `true` | `true` | Legacy Admin console password key; app.app_key is preferred. |
 | `app.api_key` | `string` | `` | `GROK_APP_API_KEY` | `true` | `true` | API bearer token for /v1/* routes; empty disables API authentication. |
-| `app.app_key` | `string` | `` | `GROK_APP_APP_KEY` | `true` | `true` | Admin console password; generated at first startup when empty. |
+| `app.app_key` | `string` | `` | `GROK_APP_APP_KEY` | `true` | `true` | Admin console password; initialized to fixed value gork at first startup when empty. |
 | `app.app_url` | `string` | `` | `GROK_APP_APP_URL` | `false` | `false` | Public base URL used to build local media links. |
 | `app.name` | `string` | `grok` | `GROK_APP_NAME` | `true` | `false` | Application name used by config loaders and diagnostics. |
 | `app.webui_enabled` | `bool` | `false` | `GROK_APP_WEBUI_ENABLED` | `true` | `false` | Enables the built-in WebUI pages. |

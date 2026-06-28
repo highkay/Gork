@@ -148,7 +148,7 @@ go build -o gork ./cmd/gork
 
 ### First-time setup
 
-On first startup, the service generates a random initial Admin key for `app.app_key` and prints it to the logs. Open `http://localhost:8000/admin/login`, sign in with that initial key, then:
+On first startup, the service writes the fixed initial Admin key `gork` to `app.app_key` and prints it to the logs. Open `http://localhost:8000/admin/login`, sign in with that initial key, then:
 
 1. Change `app.app_key` (Admin console password)
 2. Set `app.api_key` (API auth key; leave empty to disable auth)
@@ -218,7 +218,7 @@ After enabling the reverse proxy, set `app.app_url` to `https://your.domain.com`
 | Scope | Config | Rule |
 | :-- | :-- | :-- |
 | `/v1/*` | `app.api_key` | No auth when empty |
-| `/admin/*` | `app.app_key` | Generates a random initial value on first startup when empty |
+| `/admin/*` | `app.app_key` | Initializes to the fixed value `gork` on first startup when empty |
 | `/webui/*` | `app.webui_enabled`, `app.webui_key` | Disabled by default; no extra check when `webui_key` is empty |
 
 <br>

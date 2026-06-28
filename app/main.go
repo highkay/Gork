@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -24,6 +22,8 @@ import (
 	"github.com/dslzl/gork/app/products/openai"
 	"github.com/dslzl/gork/app/products/web"
 )
+
+const appMainInitialAdminKey = "gork"
 
 var (
 	appStartedAt = time.Now()
@@ -115,11 +115,7 @@ func appMainEnsureInitialAdminKey(ctx context.Context) error {
 }
 
 func appMainGenerateInitialAdminKey() (string, error) {
-	var raw [32]byte
-	if _, err := rand.Read(raw[:]); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(raw[:]), nil
+	return appMainInitialAdminKey, nil
 }
 
 func (app *App) Handler() http.Handler {

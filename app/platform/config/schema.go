@@ -321,7 +321,7 @@ var runtimeConfigDescriptions = map[string]string{
 
 var configDescriptions = map[string]string{
 	"app.api_key":       "API bearer token for /v1/* routes; empty disables API authentication.",
-	"app.app_key":       "Admin console password; generated at first startup when empty.",
+	"app.app_key":       "Admin console password; initialized to fixed value gork at first startup when empty.",
 	"app.app_url":       "Public base URL used to build local media links.",
 	"app.webui_enabled": "Enables the built-in WebUI pages.",
 	"app.webui_key":     "Optional WebUI password; empty allows WebUI access once enabled.",
