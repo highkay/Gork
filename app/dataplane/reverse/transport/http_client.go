@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 const defaultMaxHTTPBodyBytes int64 = 8 << 20
@@ -51,7 +52,9 @@ func (c netHTTPClient) do(ctx context.Context, method string, request HTTPReques
 	for key, value := range request.Headers {
 		rawRequest.Header.Set(key, value)
 	}
-	if rawRequest.Header.Get("Accept-Encoding") == "" {
+	if request.Stream {
+		rawRequest.Header.Set("Accept-Encoding", streamAcceptEncoding(rawRequest.Header.Get("Accept-Encoding")))
+	} else if rawRequest.Header.Get("Accept-Encoding") == "" {
 		rawRequest.Header.Set("Accept-Encoding", "gzip, deflate")
 	}
 	response, err := c.httpDoer().Do(rawRequest)
@@ -60,10 +63,15 @@ func (c netHTTPClient) do(ctx context.Context, method string, request HTTPReques
 		return HTTPResponse{}, err
 	}
 	if request.Stream && response.StatusCode == 200 {
+		stream, err := decodeHTTPResponseStream(response)
+		if err != nil {
+			cancel()
+			return HTTPResponse{}, err
+		}
 		return HTTPResponse{
 			StatusCode: response.StatusCode,
 			Headers:    firstHeaderValues(response.Header),
-			Stream:     &cancelOnCloseReader{ReadCloser: response.Body, cancel: cancel},
+			Stream:     &cancelOnCloseReader{ReadCloser: stream, cancel: cancel},
 		}, nil
 	}
 	defer cancel()
@@ -105,6 +113,79 @@ func readHTTPResponseBody(response *http.Response, maxBytes int64) ([]byte, erro
 		return decodeGzipBody(body, maxBytes)
 	}
 	return body, nil
+}
+
+func decodeHTTPResponseStream(response *http.Response) (io.ReadCloser, error) {
+	body := response.Body
+	encoding := strings.ToLower(strings.TrimSpace(response.Header.Get("Content-Encoding")))
+	switch encoding {
+	case "", "identity":
+		return body, nil
+	case "gzip":
+		reader, err := gzip.NewReader(body)
+		if err != nil {
+			_ = body.Close()
+			return nil, fmt.Errorf("decode gzip response: %w", err)
+		}
+		return &decodedStreamReadCloser{
+			reader: reader,
+			closers: []io.Closer{
+				reader,
+				body,
+			},
+			errPrefix: "decode gzip response",
+		}, nil
+	case "deflate":
+		reader := flate.NewReader(body)
+		return &decodedStreamReadCloser{
+			reader: reader,
+			closers: []io.Closer{
+				reader,
+				body,
+			},
+			errPrefix: "decode deflate response",
+		}, nil
+	default:
+		_ = body.Close()
+		return nil, fmt.Errorf("decode stream response: unsupported content encoding %q", encoding)
+	}
+}
+
+func streamAcceptEncoding(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "gzip, deflate"
+	}
+	for _, part := range strings.Split(value, ",") {
+		token := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
+		if token == "br" || token == "zstd" {
+			return "gzip, deflate"
+		}
+	}
+	return value
+}
+
+type decodedStreamReadCloser struct {
+	reader    io.Reader
+	closers   []io.Closer
+	errPrefix string
+}
+
+func (r *decodedStreamReadCloser) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if err != nil && err != io.EOF && r.errPrefix != "" {
+		return n, fmt.Errorf("%s: %w", r.errPrefix, err)
+	}
+	return n, err
+}
+
+func (r *decodedStreamReadCloser) Close() error {
+	var firstErr error
+	for _, closer := range r.closers {
+		if err := closer.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 func readLimitedHTTPBody(reader io.Reader, maxBytes int64) ([]byte, error) {

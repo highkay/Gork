@@ -93,6 +93,34 @@ func TestPostStreamFailureDecodesGzipBody(t *testing.T) {
 	}
 }
 
+func TestPostStreamDecodesGzipLines(t *testing.T) {
+	var acceptEncoding string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		acceptEncoding = r.Header.Get("Accept-Encoding")
+		w.Header().Set("Content-Encoding", "gzip")
+		writer := gzip.NewWriter(w)
+		if _, err := writer.Write([]byte("data: one\n\ndata: two\n")); err != nil {
+			t.Fatalf("write gzip stream: %v", err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatalf("close gzip stream: %v", err)
+		}
+	}))
+	defer server.Close()
+
+	stream, err := PostStream(context.Background(), server.URL, "token", []byte("payload"), HTTPOptions{Timeout: time.Second})
+	if err != nil {
+		t.Fatalf("PostStream returned error: %v", err)
+	}
+	got := drainHTTPLineStream(t, stream)
+	if !reflect.DeepEqual(got, []string{"data: one", "", "data: two"}) {
+		t.Fatalf("gzip stream lines = %#v", got)
+	}
+	if acceptEncoding != "gzip, deflate" {
+		t.Fatalf("stream Accept-Encoding = %q", acceptEncoding)
+	}
+}
+
 func TestNetHTTPClientRejectsOversizedNonStreamBody(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
