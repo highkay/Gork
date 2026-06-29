@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 )
@@ -105,7 +107,7 @@ func (t *AsyncTask) Detach(ch chan map[string]any) {
 }
 
 func (t *AsyncTask) Record(success bool, options TaskRecordOptions) {
-	delta := maxRuntimeInt(1, options.Count)
+	delta := max(1, options.Count)
 	t.mu.Lock()
 	t.Processed += delta
 	if success {
@@ -207,7 +209,7 @@ func (t *AsyncTask) baseEvent(kind string) map[string]any {
 
 func (t *AsyncTask) publish(event map[string]any) {
 	t.mu.Lock()
-	queues := append([]chan map[string]any(nil), t.queues...)
+	queues := slices.Clone(t.queues)
 	store := t.snapshotStore
 	t.mu.Unlock()
 	for _, ch := range queues {
@@ -298,14 +300,7 @@ func ExpireTask(ctx context.Context, taskID string, ttl time.Duration) error {
 }
 
 func cloneTaskMap(input map[string]any) map[string]any {
-	if input == nil {
-		return nil
-	}
-	out := make(map[string]any, len(input))
-	for key, value := range input {
-		out[key] = value
-	}
-	return out
+	return maps.Clone(input)
 }
 
 func randomTaskID() string {

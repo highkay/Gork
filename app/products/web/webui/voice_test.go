@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -179,7 +180,7 @@ type fakeWebUIVoiceDirectory struct {
 }
 
 func (d *fakeWebUIVoiceDirectory) Reserve(_ context.Context, poolCandidates []int, modeID int) (*reverse.AccountLease, error) {
-	d.reservePool = append([]int(nil), poolCandidates...)
+	d.reservePool = slices.Clone(poolCandidates)
 	d.reserveMode = controlmodel.ModeID(modeID)
 	if d.lease == nil {
 		return nil, nil

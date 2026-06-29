@@ -160,15 +160,15 @@ func optionalWindowValues(window *controlaccount.QuotaWindow) (int, int, int, in
 }
 
 func remaining(window controlaccount.QuotaWindow) int {
-	return maxInt(0, window.Remaining)
+	return max(0, window.Remaining)
 }
 
 func total(window controlaccount.QuotaWindow) int {
-	return maxInt(0, window.Total)
+	return max(0, window.Total)
 }
 
 func windowSeconds(window controlaccount.QuotaWindow) int {
-	return maxInt(0, window.WindowSeconds)
+	return max(0, window.WindowSeconds)
 }
 
 func resetSeconds(window controlaccount.QuotaWindow) int {
@@ -183,11 +183,4 @@ func optionalMSToS(value *int64) int {
 		return 0
 	}
 	return int(appruntime.MSToS(*value))
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

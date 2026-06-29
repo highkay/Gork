@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"strconv"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
@@ -91,7 +93,7 @@ func appMainStartupRecords(records []accountcontrol.AccountRecord) []platformsta
 			Token:          record.Token,
 			Pool:           record.Pool,
 			Status:         string(record.Status),
-			Tags:           append([]string(nil), record.Tags...),
+			Tags:           slices.Clone(record.Tags),
 			Ext:            appMainCloneMap(record.Ext),
 			Quotas:         appMainStartupQuotas(record.Quota),
 			UsageUseCount:  record.UsageUseCount,
@@ -126,7 +128,7 @@ func appMainControlUpserts(items []platformstartup.AccountUpsert) []accountcontr
 		out = append(out, accountcontrol.AccountUpsert{
 			Token: item.Token,
 			Pool:  item.Pool,
-			Tags:  append([]string(nil), item.Tags...),
+			Tags:  slices.Clone(item.Tags),
 			Ext:   appMainCloneMap(item.Ext),
 		})
 	}
@@ -176,11 +178,7 @@ func appMainCloneMap(data map[string]any) map[string]any {
 	if len(data) == 0 {
 		return nil
 	}
-	out := make(map[string]any, len(data))
-	for key, value := range data {
-		out[key] = value
-	}
-	return out
+	return maps.Clone(data)
 }
 
 func appMainStringPtr(value string) *string {

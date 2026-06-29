@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -89,7 +90,7 @@ func (rt *fakeAdminBatchAuthRoundTripper) RoundTrip(req *http.Request) (*http.Re
 	contentType := req.Header.Get("Content-Type")
 	rt.requests = append(rt.requests, adminBatchAuthCapturedRequest{
 		URL:         req.URL.String(),
-		Body:        append([]byte(nil), body...),
+		Body:        slices.Clone(body),
 		Cookie:      req.Header.Get("Cookie"),
 		ContentType: contentType,
 		Origin:      req.Header.Get("Origin"),

@@ -38,7 +38,7 @@ func TestRegistryLookupMatchesPython(t *testing.T) {
 		t.Fatalf("Resolve returned %#v, want video capability", resolved)
 	}
 
-	if _, err := Resolve("missing-model"); err == nil || err.Error() != "Unknown model: 'missing-model'" {
+	if _, err := Resolve("missing-model"); err == nil || err.Error() != "unknown model: 'missing-model'" {
 		t.Fatalf("Resolve unknown error = %v", err)
 	}
 }

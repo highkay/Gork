@@ -2,7 +2,7 @@ package backends
 
 import (
 	"context"
-	"sort"
+	"slices"
 
 	account "github.com/dslzl/gork/app/control/account"
 )
@@ -188,7 +188,7 @@ func sortedSetMembers(set map[string]struct{}) []string {
 	for item := range set {
 		out = append(out, item)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

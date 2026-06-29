@@ -99,7 +99,6 @@ func collectResponseStream(ctx context.Context, lines []string, options response
 					}
 				}
 			case "soft_stop":
-				break
 			}
 		}
 		if toolCallsEmitted {

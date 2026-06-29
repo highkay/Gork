@@ -37,7 +37,7 @@ func NewRedisTaskSnapshotStore(redis RedisTaskClient, options RedisTaskSnapshotS
 	if ttlS == 0 {
 		ttlS = defaultRedisTaskSnapshotTTLS
 	}
-	return &RedisTaskSnapshotStore{redis: redis, keyPrefix: prefix, ttlS: maxRuntimeInt(1, ttlS)}
+	return &RedisTaskSnapshotStore{redis: redis, keyPrefix: prefix, ttlS: max(1, ttlS)}
 }
 
 func (s *RedisTaskSnapshotStore) Publish(task *AsyncTask, event map[string]any) {

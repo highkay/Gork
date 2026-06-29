@@ -169,7 +169,7 @@ func (s *AccountRefreshService) runRefreshBatch(ctx context.Context, records []A
 		batchCtx, cancelBatch = context.WithTimeout(ctx, s.batchTimeout)
 	}
 	defer cancelBatch()
-	concurrency := maxInt(s.usageConcurrency, 1)
+	concurrency := max(s.usageConcurrency, 1)
 	if concurrency > len(records) {
 		concurrency = len(records)
 	}

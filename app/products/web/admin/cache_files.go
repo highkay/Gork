@@ -1,10 +1,11 @@
 package admin
 
 import (
+	"cmp"
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/dslzl/gork/app/platform"
@@ -28,7 +29,7 @@ func adminCacheStats(mediaType storage.MediaType) map[string]any {
 	for _, file := range files {
 		totalSize += file.SizeBytes
 	}
-	limitMB := maxAdminBatchInt(0, adminCacheConfigInt("cache.local."+string(mediaType)+"_max_mb", 0))
+	limitMB := max(0, adminCacheConfigInt("cache.local."+string(mediaType)+"_max_mb", 0))
 	limitBytes := int64(limitMB) * 1024 * 1024
 	return adminCacheStatsPayload(len(files), totalSize, limitMB, limitBytes)
 }
@@ -71,7 +72,9 @@ func adminCacheFiles(mediaType storage.MediaType) []adminCacheFile {
 		return nil
 	}
 	files := adminCacheFilesFromEntries(mediaType, dir, entries)
-	sort.Slice(files, func(i int, j int) bool { return files[i].Modified > files[j].Modified })
+	slices.SortFunc(files, func(left, right adminCacheFile) int {
+		return cmp.Compare(right.Modified, left.Modified)
+	})
 	return files
 }
 

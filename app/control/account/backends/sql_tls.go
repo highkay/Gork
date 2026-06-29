@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	mysql "github.com/go-sql-driver/mysql"
@@ -148,7 +148,7 @@ func validatePostgreSQLSSLOptions(mode string, options map[string]string) error 
 		}
 	}
 	if len(unsupported) > 0 {
-		sort.Strings(unsupported)
+		slices.Sort(unsupported)
 		return fmt.Errorf("Unsupported PostgreSQL SSL URL parameter(s): %s", strings.Join(unsupported, ", "))
 	}
 	if mode == "disable" && hasSSLOption(options, "sslrootcert", "sslcert", "sslkey") {
@@ -388,7 +388,7 @@ func sqlTLSConfigName(options map[string]string, serverName, mode string) string
 	for key := range options {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	var builder strings.Builder
 	builder.WriteString(serverName)
 	builder.WriteByte('\n')

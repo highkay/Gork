@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -58,7 +59,7 @@ func (f fakeDirectoryConfig) GetList(key string, defaultValue []string) []string
 		return defaultValue
 	}
 	if value, ok := f.lists[key]; ok {
-		return append([]string(nil), value...)
+		return slices.Clone(value)
 	}
 	return defaultValue
 }

@@ -1,8 +1,9 @@
 package protocol
 
 import (
+	"cmp"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -94,7 +95,7 @@ func (a *ReasoningAggregator) observeLanguage(text string) {
 			enCount++
 		}
 	}
-	if cjkCount >= 4 || cjkCount > maxInt(2, enCount/2) {
+	if cjkCount >= 4 || cjkCount > max(2, enCount/2) {
 		a.zhVotes++
 		if a.language == "" {
 			a.language = "zh"
@@ -132,11 +133,14 @@ func (a *ReasoningAggregator) extractReportEvents(message string) []ReasoningEve
 			clause string
 		}{score: score, clause: clause})
 	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].score != candidates[j].score {
-			return candidates[i].score > candidates[j].score
+	slices.SortStableFunc(candidates, func(left, right struct {
+		score  int
+		clause string
+	}) int {
+		if left.score != right.score {
+			return cmp.Compare(right.score, left.score)
 		}
-		return runeLen(candidates[i].clause) < runeLen(candidates[j].clause)
+		return cmp.Compare(runeLen(left.clause), runeLen(right.clause))
 	})
 	reports := a.selectReportEvents(candidates)
 	out := make([]ReasoningEvent, 0, len(reports))
@@ -194,21 +198,21 @@ func (a *ReasoningAggregator) selectReportEvents(candidates []struct {
 			break
 		}
 	}
-	sort.SliceStable(results, func(i, j int) bool {
+	slices.SortStableFunc(results, func(left, right reasoningReportEvent) int {
 		leftSection, rightSection := 1, 1
-		if results[i].section == "evidence" {
+		if left.section == "evidence" {
 			leftSection = 0
 		}
-		if results[j].section == "evidence" {
+		if right.section == "evidence" {
 			rightSection = 0
 		}
 		if leftSection != rightSection {
-			return leftSection < rightSection
+			return cmp.Compare(leftSection, rightSection)
 		}
-		if results[i].track != results[j].track {
-			return results[i].track < results[j].track
+		if left.track != right.track {
+			return cmp.Compare(left.track, right.track)
 		}
-		return results[i].level > results[j].level
+		return cmp.Compare(right.level, left.level)
 	})
 	return results
 }
@@ -237,11 +241,4 @@ func toString(value any) string {
 
 func runeLen(text string) int {
 	return len([]rune(text))
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

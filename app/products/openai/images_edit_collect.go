@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"slices"
+	"strings"
+
 	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/platform"
-	"regexp"
-	"sort"
-	"strings"
 )
 
 var imageXUserIDPattern = regexp.MustCompile(`(?:^|;\s*)x-userid=([^;]+)`)
@@ -31,7 +32,7 @@ func collectEditImages(ctx context.Context, options imageCollectEditOptions) ([]
 		for index := range finalURLs {
 			indexes = append(indexes, index)
 		}
-		sort.Ints(indexes)
+		slices.Sort(indexes)
 		for _, index := range indexes {
 			rawURL := finalURLs[index]
 			if rawURL == "" {

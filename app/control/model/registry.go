@@ -1,9 +1,10 @@
 package model
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -87,7 +88,7 @@ func GetContext(ctx context.Context, modelName string) (ModelSpec, bool) {
 func Resolve(modelName string) (ModelSpec, error) {
 	spec, ok := Get(modelName)
 	if !ok {
-		return ModelSpec{}, fmt.Errorf("Unknown model: '%s'", modelName)
+		return ModelSpec{}, fmt.Errorf("unknown model: '%s'", modelName)
 	}
 	return spec, nil
 }
@@ -144,14 +145,14 @@ func SetDynamicProviderContext(provider func(context.Context) []ModelSpec) func(
 }
 
 func allModels(ctx context.Context) []ModelSpec {
-	all := append([]ModelSpec{}, Models...)
+	all := slices.Clone(Models)
 	seen := make(map[string]struct{}, len(all))
 	for _, spec := range all {
 		seen[spec.ModelName] = struct{}{}
 	}
 	dynamic := dynamicModels(ctx)
-	sort.SliceStable(dynamic, func(i, j int) bool {
-		return dynamic[i].ModelName < dynamic[j].ModelName
+	slices.SortStableFunc(dynamic, func(left, right ModelSpec) int {
+		return cmp.Compare(left.ModelName, right.ModelName)
 	})
 	for _, spec := range dynamic {
 		if spec.ModelName == "" {

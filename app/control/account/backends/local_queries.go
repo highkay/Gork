@@ -186,7 +186,7 @@ func listLocalAccounts(
 		Total:      total,
 		Page:       query.Page,
 		PageSize:   query.PageSize,
-		TotalPages: maxInt(1, (total+query.PageSize-1)/query.PageSize),
+		TotalPages: max(1, (total+query.PageSize-1)/query.PageSize),
 		Revision:   revision,
 	}, nil
 }
@@ -294,13 +294,6 @@ func placeholders(n int) string {
 		return ""
 	}
 	return strings.TrimRight(strings.Repeat("?,", n), ",")
-}
-
-func maxInt(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func localQueryError(name string, err error) error {

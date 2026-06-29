@@ -1,6 +1,7 @@
 package observability
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -9,7 +10,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -284,14 +285,14 @@ func sortedRequestDurationKeys(items map[requestMetricKey]float64) []requestMetr
 }
 
 func sortRequestKeys(keys []requestMetricKey) {
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].method != keys[j].method {
-			return keys[i].method < keys[j].method
+	slices.SortFunc(keys, func(left, right requestMetricKey) int {
+		if left.method != right.method {
+			return cmp.Compare(left.method, right.method)
 		}
-		if keys[i].path != keys[j].path {
-			return keys[i].path < keys[j].path
+		if left.path != right.path {
+			return cmp.Compare(left.path, right.path)
 		}
-		return keys[i].status < keys[j].status
+		return cmp.Compare(left.status, right.status)
 	})
 }
 
@@ -300,11 +301,11 @@ func sortedUpstreamKeys(items map[upstreamMetricKey]int) []upstreamMetricKey {
 	for key := range items {
 		keys = append(keys, key)
 	}
-	sort.Slice(keys, func(i, j int) bool {
-		if keys[i].product != keys[j].product {
-			return keys[i].product < keys[j].product
+	slices.SortFunc(keys, func(left, right upstreamMetricKey) int {
+		if left.product != right.product {
+			return cmp.Compare(left.product, right.product)
 		}
-		return keys[i].status < keys[j].status
+		return cmp.Compare(left.status, right.status)
 	})
 	return keys
 }

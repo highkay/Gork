@@ -2,7 +2,9 @@ package proxy
 
 import (
 	"context"
+	"maps"
 	"reflect"
+	"slices"
 	"sync"
 
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
@@ -81,7 +83,7 @@ type emptyDirectoryConfig struct{}
 
 func (emptyDirectoryConfig) GetString(_ string, defaultValue string) string { return defaultValue }
 func (emptyDirectoryConfig) GetList(_ string, defaultValue []string) []string {
-	return append([]string(nil), defaultValue...)
+	return slices.Clone(defaultValue)
 }
 func (emptyDirectoryConfig) GetInt(_ string, defaultValue int) int { return defaultValue }
 
@@ -146,8 +148,8 @@ func (d *ProxyDirectory) Load(ctx context.Context) error {
 		ClearanceMode: string(clearanceMode),
 		BaseURL:       baseURL,
 		ResourceURL:   resourceURL,
-		BasePool:      append([]string(nil), basePool...),
-		ResourcePool:  append([]string(nil), resourcePool...),
+		BasePool:      slices.Clone(basePool),
+		ResourcePool:  slices.Clone(resourcePool),
 		FlareURL:      cfg.GetString("proxy.clearance.flaresolverr_url", ""),
 		CFCookies:     clearance.CFCookies,
 		UserAgent:     clearance.UserAgent,
@@ -251,11 +253,7 @@ func (d *ProxyDirectory) Nodes() []EgressNode {
 func (d *ProxyDirectory) Bundles() map[BundleKey]ClearanceBundle {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	out := make(map[BundleKey]ClearanceBundle, len(d.bundles))
-	for key, bundle := range d.bundles {
-		out[key] = bundle
-	}
-	return out
+	return maps.Clone(d.bundles)
 }
 
 func (d *ProxyDirectory) pickProxyURL(resource bool) (*string, error) {

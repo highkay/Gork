@@ -93,8 +93,8 @@ func MakeResponseID() string {
 }
 
 func BuildUsage(promptTokens, completionTokens int, reasoningTokens ...int) map[string]any {
-	pt := maxInt(0, promptTokens)
-	ct := maxInt(0, completionTokens)
+	pt := max(0, promptTokens)
+	ct := max(0, completionTokens)
 	rt := optionalNonNegative(reasoningTokens)
 
 	return map[string]any{

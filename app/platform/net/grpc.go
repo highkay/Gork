@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -88,7 +89,7 @@ func (client GRPCClient) ParseResponse(body []byte, contentType string, headers 
 		if flag&0x01 != 0 {
 			return response, errors.New("grpc-web compressed frame is not supported")
 		}
-		response.Messages = append(response.Messages, append([]byte(nil), payload...))
+		response.Messages = append(response.Messages, slices.Clone(payload))
 	}
 
 	mergeHeaderTrailers(response.Trailers, headers)

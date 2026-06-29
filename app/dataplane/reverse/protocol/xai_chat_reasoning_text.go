@@ -75,7 +75,7 @@ func (a *ReasoningAggregator) inferEvidenceLevel(clause string, defaultLevel int
 		return 4
 	}
 	if stringInSubstring(lowered, "x平台", "x posts", "社区", "widely believed", "传闻", "rumor") {
-		return maxInt(2, defaultLevel-1)
+		return max(2, defaultLevel-1)
 	}
 	return defaultLevel
 }

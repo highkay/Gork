@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -357,7 +357,7 @@ func specsFromDynamicConsoleMessages(messages [][]byte) []model.ModelSpec {
 			ordered = append(ordered, name)
 		}
 	}
-	sort.Strings(ordered)
+	slices.Sort(ordered)
 
 	specs := make([]model.ModelSpec, 0, len(ordered))
 	for _, name := range ordered {
@@ -524,5 +524,5 @@ func cloneModelSpecs(specs []model.ModelSpec) []model.ModelSpec {
 	if len(specs) == 0 {
 		return nil
 	}
-	return append([]model.ModelSpec{}, specs...)
+	return slices.Clone(specs)
 }

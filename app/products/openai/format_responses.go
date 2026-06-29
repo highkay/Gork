@@ -4,9 +4,9 @@ import "fmt"
 
 func BuildRespUsage(inputTokens, outputTokens int, reasoningTokens ...int) map[string]any {
 	return map[string]any{
-		"input_tokens":  maxInt(0, inputTokens),
-		"output_tokens": maxInt(0, outputTokens),
-		"total_tokens":  maxInt(0, inputTokens+outputTokens),
+		"input_tokens":  max(0, inputTokens),
+		"output_tokens": max(0, outputTokens),
+		"total_tokens":  max(0, inputTokens+outputTokens),
 		"output_tokens_details": map[string]any{
 			"reasoning_tokens": optionalNonNegative(reasoningTokens),
 		},

@@ -141,7 +141,7 @@ func listSQLAccounts(
 		return account.AccountPage{}, err
 	}
 	return account.AccountPage{Items: items, Total: total, Page: query.Page,
-		PageSize: query.PageSize, TotalPages: maxInt(1, (total+query.PageSize-1)/query.PageSize),
+		PageSize: query.PageSize, TotalPages: max(1, (total+query.PageSize-1)/query.PageSize),
 		Revision: revision}, nil
 }
 

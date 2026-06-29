@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -86,8 +87,8 @@ func NewApp(options AppOptions) *App {
 	}
 	return &App{
 		handler:       observability.Middleware(withAppMiddleware(newAppRouter(normalizeAppOptions(options)))),
-		startupHooks:  append([]Hook(nil), options.StartupHooks...),
-		shutdownHooks: append([]Hook(nil), options.ShutdownHooks...),
+		startupHooks:  slices.Clone(options.StartupHooks),
+		shutdownHooks: slices.Clone(options.ShutdownHooks),
 	}
 }
 

@@ -2,7 +2,7 @@ package openai
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -109,7 +109,8 @@ func computeProgressPercent(progressMap map[any]int, total int) int {
 	for _, value := range progressMap {
 		values = append(values, clampProgress(value))
 	}
-	sort.Sort(sort.Reverse(sort.IntSlice(values)))
+	slices.Sort(values)
+	slices.Reverse(values)
 	sum := 0
 	for i := 0; i < total && i < len(values); i++ {
 		sum += values[i]
@@ -133,11 +134,6 @@ func progressReason(label string, progress, completed, total int) string {
 		reason += fmt.Sprintf(" (%d/%d)", completed, total)
 	}
 	return reason
-}
-
-func imageStreamFrames(images []imageOutput, modelName, responseID string, chatFormat bool) []string {
-	frames := make([]string, 0, len(images)+2)
-	return appendImageStreamFrames(frames, images, modelName, responseID, chatFormat)
 }
 
 func appendImageStreamFrames(frames []string, images []imageOutput, modelName, responseID string, chatFormat bool) []string {

@@ -2,6 +2,8 @@ package admin
 
 import (
 	"context"
+	"maps"
+	"slices"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
@@ -34,8 +36,8 @@ func (r accountRuntimeRepository) ListAccounts(ctx context.Context, query adminA
 		PageSize:    query.PageSize,
 		Pool:        stringPtr(query.Pool),
 		Status:      status,
-		Tags:        append([]string(nil), query.Tags...),
-		ExcludeTags: append([]string(nil), query.ExcludeTags...),
+		Tags:        slices.Clone(query.Tags),
+		ExcludeTags: slices.Clone(query.ExcludeTags),
 		SortBy:      query.SortBy,
 		SortDesc:    query.SortDesc,
 	})
@@ -152,7 +154,7 @@ func adminAccountFromControl(record accountcontrol.AccountRecord) adminAssetsAcc
 		Token:          record.Token,
 		Pool:           record.Pool,
 		Status:         string(record.Status),
-		Tags:           append([]string(nil), record.Tags...),
+		Tags:           slices.Clone(record.Tags),
 		Quota:          cloneRuntimeMap(record.Quota),
 		UsageUseCount:  record.UsageUseCount,
 		UsageFailCount: record.UsageFailCount,
@@ -174,7 +176,7 @@ func accountUpsertsFromAdmin(upserts []adminTokensUpsert) []accountcontrol.Accou
 		out = append(out, accountcontrol.AccountUpsert{
 			Token: upsert.Token,
 			Pool:  upsert.Pool,
-			Tags:  append([]string(nil), upsert.Tags...),
+			Tags:  slices.Clone(upsert.Tags),
 			Ext:   cloneRuntimeMap(upsert.Ext),
 		})
 	}
@@ -195,9 +197,9 @@ func accountPatchFromAdmin(patch adminBatchAccountPatch) accountcontrol.AccountP
 		Token:          patch.Token,
 		Pool:           stringPtr(patch.Pool),
 		Status:         status,
-		Tags:           append([]string(nil), patch.Tags...),
-		AddTags:        append([]string(nil), patch.AddTags...),
-		RemoveTags:     append([]string(nil), patch.RemoveTags...),
+		Tags:           slices.Clone(patch.Tags),
+		AddTags:        slices.Clone(patch.AddTags),
+		RemoveTags:     slices.Clone(patch.RemoveTags),
 		QuotaAuto:      cloneRuntimeMap(patch.QuotaAuto),
 		QuotaFast:      cloneRuntimeMap(patch.QuotaFast),
 		QuotaExpert:    cloneRuntimeMap(patch.QuotaExpert),
@@ -277,12 +279,5 @@ func stringValue(value *string) string {
 }
 
 func cloneRuntimeMap(input map[string]any) map[string]any {
-	if input == nil {
-		return nil
-	}
-	out := make(map[string]any, len(input))
-	for key, value := range input {
-		out[key] = value
-	}
-	return out
+	return maps.Clone(input)
 }

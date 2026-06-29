@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"os"
 	goruntime "runtime"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -137,7 +137,7 @@ func adminRouteMany(path string, handlers map[string]http.HandlerFunc) adminRout
 	for method := range handlers {
 		methods = append(methods, method)
 	}
-	sort.Strings(methods)
+	slices.Sort(methods)
 	return adminRoute{Path: path, Methods: methods, Handlers: handlers}
 }
 
@@ -254,14 +254,14 @@ func handleAdminProtocolCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	results := adminProtocolCheckRunner(r.Context(), payload.Targets)
 	adminProtocolCheckMu.Lock()
-	adminProtocolCheckLatest = append([]reverse.ProtocolCheckResult(nil), results...)
+	adminProtocolCheckLatest = slices.Clone(results)
 	adminProtocolCheckMu.Unlock()
 	writeAdminJSON(w, http.StatusOK, results)
 }
 
 func handleAdminProtocolCheckLatest(w http.ResponseWriter, _ *http.Request) {
 	adminProtocolCheckMu.Lock()
-	results := append([]reverse.ProtocolCheckResult(nil), adminProtocolCheckLatest...)
+	results := slices.Clone(adminProtocolCheckLatest)
 	adminProtocolCheckMu.Unlock()
 	writeAdminJSON(w, http.StatusOK, results)
 }

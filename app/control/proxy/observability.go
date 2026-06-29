@@ -1,6 +1,9 @@
 package proxy
 
-import "sort"
+import (
+	"cmp"
+	"slices"
+)
 
 func (d *ProxyDirectory) ObservabilityStatus() map[string]any {
 	d.mu.Lock()
@@ -30,10 +33,10 @@ func (d *ProxyDirectory) ObservabilityStatus() map[string]any {
 		}
 		bundles = append(bundles, item)
 	}
-	sort.Slice(bundles, func(i, j int) bool {
-		left := bundles[i]["affinity"].(string) + "@" + bundles[i]["clearance_host"].(string)
-		right := bundles[j]["affinity"].(string) + "@" + bundles[j]["clearance_host"].(string)
-		return left < right
+	slices.SortFunc(bundles, func(leftBundle, rightBundle map[string]any) int {
+		left := leftBundle["affinity"].(string) + "@" + leftBundle["clearance_host"].(string)
+		right := rightBundle["affinity"].(string) + "@" + rightBundle["clearance_host"].(string)
+		return cmp.Compare(left, right)
 	})
 	return map[string]any{
 		"clearance_mode":     string(d.clearanceMode),

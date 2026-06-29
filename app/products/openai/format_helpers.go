@@ -19,7 +19,7 @@ func optionalNonNegative(values []int) int {
 	if len(values) == 0 {
 		return 0
 	}
-	return maxInt(0, values[0])
+	return max(0, values[0])
 }
 
 func asParsedToolCall(call any) (protocol.ParsedToolCall, bool) {
@@ -34,13 +34,6 @@ func asParsedToolCall(call any) (protocol.ParsedToolCall, bool) {
 	default:
 		return protocol.ParsedToolCall{}, false
 	}
-}
-
-func maxInt(left, right int) int {
-	if left > right {
-		return left
-	}
-	return right
 }
 
 func marshalCompactJSON(value any) (string, error) {

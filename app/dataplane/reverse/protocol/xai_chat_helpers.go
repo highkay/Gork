@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 )
@@ -182,14 +183,7 @@ func anySlice(value any) []any {
 }
 
 func cloneAnyMap(in map[string]any) map[string]any {
-	if in == nil {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
+	return maps.Clone(in)
 }
 
 func cloneAnyMaps(in []map[string]any) []map[string]any {

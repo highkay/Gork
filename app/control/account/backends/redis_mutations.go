@@ -2,6 +2,7 @@ package backends
 
 import (
 	"context"
+	"maps"
 	"strconv"
 
 	account "github.com/dslzl/gork/app/control/account"
@@ -256,14 +257,7 @@ func (r *RedisAccountRepository) restoreRedisBackup(ctx context.Context, backup 
 }
 
 func cloneRedisHash(input map[string]string) map[string]string {
-	if input == nil {
-		return nil
-	}
-	out := make(map[string]string, len(input))
-	for key, value := range input {
-		out[key] = value
-	}
-	return out
+	return maps.Clone(input)
 }
 
 func (r *RedisAccountRepository) rollbackRedisUpsert(

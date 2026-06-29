@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"maps"
 	"strings"
 	"sync"
 )
@@ -21,11 +22,7 @@ func GetProjectMeta() map[string]string {
 		projectMeta = map[string]string{"name": ProjectName, "version": ProjectVersion}
 	})
 
-	out := make(map[string]string, len(projectMeta))
-	for key, value := range projectMeta {
-		out[key] = value
-	}
-	return out
+	return maps.Clone(projectMeta)
 }
 
 // GetProjectVersion returns the current project version.

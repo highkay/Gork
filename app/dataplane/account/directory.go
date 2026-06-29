@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 
 	controlaccount "github.com/dslzl/gork/app/control/account"
@@ -322,7 +323,7 @@ func normalizePoolCandidates(poolCandidates any) []int {
 	case int:
 		return []int{value}
 	case []int:
-		return append([]int(nil), value...)
+		return slices.Clone(value)
 	case []shared.PoolID:
 		pools := make([]int, 0, len(value))
 		for _, poolID := range value {

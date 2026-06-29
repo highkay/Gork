@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -497,7 +498,7 @@ func (c *fakeDynamicModelHTTPClient) Do(request *http.Request) (*http.Response, 
 	if status == 0 {
 		status = http.StatusOK
 	}
-	body := append([]byte(nil), c.body...)
+	body := slices.Clone(c.body)
 	c.mu.Unlock()
 	if block != nil {
 		<-block

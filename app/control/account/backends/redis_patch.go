@@ -35,13 +35,13 @@ func appendRedisUsageUpdates(
 	patch account.AccountPatch,
 ) {
 	if patch.UsageUseDelta != nil {
-		updates["usage_use_count"] = formatInt(maxInt(0, record.UsageUseCount+*patch.UsageUseDelta))
+		updates["usage_use_count"] = formatInt(max(0, record.UsageUseCount+*patch.UsageUseDelta))
 	}
 	if patch.UsageFailDelta != nil {
-		updates["usage_fail_count"] = formatInt(maxInt(0, record.UsageFailCount+*patch.UsageFailDelta))
+		updates["usage_fail_count"] = formatInt(max(0, record.UsageFailCount+*patch.UsageFailDelta))
 	}
 	if patch.UsageSyncDelta != nil {
-		updates["usage_sync_count"] = formatInt(maxInt(0, record.UsageSyncCount+*patch.UsageSyncDelta))
+		updates["usage_sync_count"] = formatInt(max(0, record.UsageSyncCount+*patch.UsageSyncDelta))
 	}
 }
 

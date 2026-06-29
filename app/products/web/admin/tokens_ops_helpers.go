@@ -2,6 +2,7 @@ package admin
 
 import (
 	"net/http"
+	"slices"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	"github.com/dslzl/gork/app/platform"
@@ -58,7 +59,7 @@ func adminTokensEnsureTargetFree(r *http.Request, repo adminTokensRepository, to
 
 func adminTokensCopyStateAndDeleteOld(r *http.Request, repo adminTokensRepository, oldToken string, newToken string, pool string, record adminAssetsAccount) error {
 	patch := adminTokensEditPatch(newToken, pool, record)
-	patch.Tags = append([]string(nil), record.Tags...)
+	patch.Tags = slices.Clone(record.Tags)
 	patch.ExtMerge = cloneRuntimeMap(record.Ext)
 	if _, err := repo.PatchAccounts(r.Context(), []adminBatchAccountPatch{patch}); err != nil {
 		return err

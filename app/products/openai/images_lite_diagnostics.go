@@ -3,7 +3,7 @@ package openai
 import (
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
@@ -103,7 +103,7 @@ func liteDiagnosticCounts(counts map[string]int) string {
 	for key := range counts {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	parts := make([]string, 0, len(keys))
 	for _, key := range keys {
 		if counts[key] > 1 {

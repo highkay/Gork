@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -692,15 +693,15 @@ func (r *lifecycleAccountRepository) ScanChanges(_ context.Context, revision int
 	return next, nil
 }
 func (r *lifecycleAccountRepository) UpsertAccounts(_ context.Context, items []accountcontrol.AccountUpsert) (accountcontrol.AccountMutationResult, error) {
-	r.upserts = append([]accountcontrol.AccountUpsert(nil), items...)
+	r.upserts = slices.Clone(items)
 	return accountcontrol.AccountMutationResult{Upserted: len(items)}, nil
 }
 func (r *lifecycleAccountRepository) PatchAccounts(_ context.Context, patches []accountcontrol.AccountPatch) (accountcontrol.AccountMutationResult, error) {
-	r.patches = append([]accountcontrol.AccountPatch(nil), patches...)
+	r.patches = slices.Clone(patches)
 	return accountcontrol.AccountMutationResult{Patched: len(patches)}, nil
 }
 func (r *lifecycleAccountRepository) DeleteAccounts(_ context.Context, tokens []string) (accountcontrol.AccountMutationResult, error) {
-	r.deleted = append([]string(nil), tokens...)
+	r.deleted = slices.Clone(tokens)
 	return accountcontrol.AccountMutationResult{Deleted: len(tokens)}, nil
 }
 func (r *lifecycleAccountRepository) GetAccounts(context.Context, []string) ([]accountcontrol.AccountRecord, error) {
@@ -709,7 +710,7 @@ func (r *lifecycleAccountRepository) GetAccounts(context.Context, []string) ([]a
 func (r *lifecycleAccountRepository) ListAccounts(_ context.Context, query accountcontrol.ListAccountsQuery) (accountcontrol.AccountPage, error) {
 	r.listQuery = query
 	return accountcontrol.AccountPage{
-		Items:      append([]accountcontrol.AccountRecord(nil), r.snapshot.Items...),
+		Items:      slices.Clone(r.snapshot.Items),
 		Total:      len(r.snapshot.Items),
 		Page:       query.Page,
 		PageSize:   query.PageSize,

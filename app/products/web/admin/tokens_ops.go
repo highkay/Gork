@@ -135,5 +135,5 @@ func adminTokensToggleBatch(r *http.Request, repo adminTokensRepository, req adm
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"status": "success", "disabled": req.Disabled, "summary": map[string]any{"total": len(tokens), "ok": result.Patched, "fail": maxAdminBatchInt(0, len(tokens)-result.Patched)}}, nil
+	return map[string]any{"status": "success", "disabled": req.Disabled, "summary": map[string]any{"total": len(tokens), "ok": result.Patched, "fail": max(0, len(tokens)-result.Patched)}}, nil
 }

@@ -2,6 +2,7 @@ package products
 
 import (
 	"context"
+	"slices"
 
 	controlmodel "github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
@@ -48,7 +49,7 @@ func RunAccountDispatch[T any](
 		attempts = 1
 	}
 	for attempt := 0; attempt < attempts; attempt++ {
-		lease, ok, err := options.Directory.ReserveDispatchAccount(ctx, AccountDispatchQuery{Spec: options.Spec, Excluded: append([]string(nil), excluded...)})
+		lease, ok, err := options.Directory.ReserveDispatchAccount(ctx, AccountDispatchQuery{Spec: options.Spec, Excluded: slices.Clone(excluded)})
 		if err != nil {
 			return zero, err
 		}

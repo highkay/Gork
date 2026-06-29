@@ -57,7 +57,7 @@ func defaultResetWindow(window QuotaWindow, now int64) QuotaWindow {
 }
 
 func rateLimitedWindowPatch(window QuotaWindow, now int64) QuotaWindow {
-	resetAt := now + int64(maxInt(window.WindowSeconds, 1))*1000
+	resetAt := now + int64(max(window.WindowSeconds, 1))*1000
 	if window.ResetAt != nil && *window.ResetAt > now {
 		resetAt = *window.ResetAt
 	}
@@ -112,11 +112,4 @@ func boolInt(value bool) int {
 
 func swallowRefreshError(err error) error {
 	return nil
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

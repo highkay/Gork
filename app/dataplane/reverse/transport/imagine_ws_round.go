@@ -57,7 +57,7 @@ func streamImagineRound(ctx context.Context, ws ImagineWebSocketConnection, opti
 			return result, nil
 		}
 
-		msg, err := ws.Receive(ctx, minImagineDuration(options.StreamTimeout, options.RoundTimeout-elapsed))
+		msg, err := ws.Receive(ctx, min(options.StreamTimeout, options.RoundTimeout-elapsed))
 		if err != nil {
 			if imagineIsReceiveTimeout(err) {
 				if len(slots) > 0 && imagineAllSlotsDone(slots) {

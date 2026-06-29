@@ -263,7 +263,7 @@ func (r *fakeRuntimeRedis) CompareExpire(_ context.Context, key string, owner st
 		return false, nil
 	}
 	r.expireKey = key
-	r.expireSeconds = maxRuntimeInt(1, ttlMS/1000)
+	r.expireSeconds = max(1, ttlMS/1000)
 	return true, nil
 }
 

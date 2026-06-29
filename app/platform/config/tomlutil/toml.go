@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -214,8 +214,8 @@ func splitKeys(data map[string]any) ([]string, []string) {
 		}
 		scalars = append(scalars, key)
 	}
-	sort.Strings(scalars)
-	sort.Strings(sections)
+	slices.Sort(scalars)
+	slices.Sort(sections)
 	return scalars, sections
 }
 

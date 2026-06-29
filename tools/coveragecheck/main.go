@@ -8,7 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -228,7 +228,7 @@ func sortedThresholdPackages() []string {
 	for pkg := range softMinimums {
 		packages = append(packages, pkg)
 	}
-	sort.Strings(packages)
+	slices.Sort(packages)
 	return packages
 }
 
@@ -237,7 +237,7 @@ func sortedPackages(coverage report) []string {
 	for pkg := range coverage {
 		packages = append(packages, pkg)
 	}
-	sort.Strings(packages)
+	slices.Sort(packages)
 	return packages
 }
 

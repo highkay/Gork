@@ -60,11 +60,3 @@ func stripWhitespace(value string) string {
 		return r
 	}, value)
 }
-
-func truncateString(value string, limit int) string {
-	if len([]rune(value)) <= limit {
-		return value
-	}
-	runes := []rune(value)
-	return string(runes[:limit])
-}

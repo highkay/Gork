@@ -106,13 +106,6 @@ func adminBatchRefreshSvc() (adminBatchRefreshService, error) {
 	return nil, platform.NewAppError("Refresh service is not initialised", platform.ErrorKindServer, "refresh_service_not_initialised", 500, nil)
 }
 
-func maxAdminBatchInt(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 type adminBatchClassifiedError struct {
 	class string
 	err   error

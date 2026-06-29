@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -590,7 +591,7 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	oldTokensRunner := adminTokensAsyncRunner
 	oldTokensNow := adminTokensNowMS
 	oldProtocolCheckRunner := adminProtocolCheckRunner
-	oldProtocolCheckLatest := append([]reverse.ProtocolCheckResult(nil), adminProtocolCheckLatest...)
+	oldProtocolCheckLatest := slices.Clone(adminProtocolCheckLatest)
 	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{AdminKey: "gork"} }
 	adminAuthRateLimiter = ratelimit.New(5, time.Minute)
 	adminRouterConfig = &fakeAdminConfig{}

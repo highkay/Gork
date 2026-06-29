@@ -58,9 +58,5 @@ func handleImageGenerations(w http.ResponseWriter, r *http.Request) {
 }
 
 func chatFromImageResult(result imageResult) chatCompletionResult {
-	return chatCompletionResult{
-		IsStream:     result.IsStream,
-		StreamFrames: result.StreamFrames,
-		Response:     result.Response,
-	}
+	return chatCompletionResult(result)
 }

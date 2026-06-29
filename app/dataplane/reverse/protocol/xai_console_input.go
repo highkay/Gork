@@ -2,7 +2,7 @@ package protocol
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -148,7 +148,7 @@ func consolePythonString(value any) string {
 		for key := range v {
 			keys = append(keys, key)
 		}
-		sort.Strings(keys)
+		slices.Sort(keys)
 		parts := make([]string, 0, len(keys))
 		for _, key := range keys {
 			parts = append(parts, fmt.Sprintf("'%s': %s", key, consolePythonLiteral(v[key])))

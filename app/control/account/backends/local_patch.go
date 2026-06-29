@@ -3,7 +3,7 @@ package backends
 import (
 	"context"
 	"database/sql"
-	"sort"
+	"slices"
 	"strings"
 
 	account "github.com/dslzl/gork/app/control/account"
@@ -133,13 +133,13 @@ func appendUsagePatchSets(
 	patch account.AccountPatch,
 ) []localPatchSet {
 	if patch.UsageUseDelta != nil {
-		sets = append(sets, localPatchSet{"usage_use_count", maxInt(0, record.UsageUseCount+*patch.UsageUseDelta)})
+		sets = append(sets, localPatchSet{"usage_use_count", max(0, record.UsageUseCount+*patch.UsageUseDelta)})
 	}
 	if patch.UsageFailDelta != nil {
-		sets = append(sets, localPatchSet{"usage_fail_count", maxInt(0, record.UsageFailCount+*patch.UsageFailDelta)})
+		sets = append(sets, localPatchSet{"usage_fail_count", max(0, record.UsageFailCount+*patch.UsageFailDelta)})
 	}
 	if patch.UsageSyncDelta != nil {
-		sets = append(sets, localPatchSet{"usage_sync_count", maxInt(0, record.UsageSyncCount+*patch.UsageSyncDelta)})
+		sets = append(sets, localPatchSet{"usage_sync_count", max(0, record.UsageSyncCount+*patch.UsageSyncDelta)})
 	}
 	return sets
 }
@@ -219,7 +219,7 @@ func patchedTags(current []string, patch account.AccountPatch) string {
 	for tag := range tagSet {
 		tags = append(tags, tag)
 	}
-	sort.Strings(tags)
+	slices.Sort(tags)
 	raw, _ := jsonString(tags)
 	return raw
 }

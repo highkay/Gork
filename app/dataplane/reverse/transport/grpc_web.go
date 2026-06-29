@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -90,7 +91,7 @@ func ParseGRPCWebResponse(body []byte, contentType string, headers map[string]st
 		if flag&0x01 != 0 {
 			return GRPCWebTransportResponse{}, errors.New("grpc-web compressed frame is not supported")
 		}
-		messages = append(messages, append([]byte(nil), payload...))
+		messages = append(messages, slices.Clone(payload))
 	}
 	mergeHeaderTrailers(trailers, headers)
 	return GRPCWebTransportResponse{Messages: messages, Trailers: trailers}, nil

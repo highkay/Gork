@@ -77,7 +77,7 @@ func (s *AccountRefreshService) ValidateSSOBatch(ctx context.Context, page int, 
 }
 
 func (s *AccountRefreshService) runSSOValidationRecords(ctx context.Context, records []AccountRecord) ([]RefreshResult, error) {
-	concurrency := maxInt(s.validationConcurrency(), 1)
+	concurrency := max(s.validationConcurrency(), 1)
 	if concurrency > len(records) {
 		concurrency = len(records)
 	}

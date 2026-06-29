@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -132,7 +132,7 @@ func normalizedQuery(values url.Values) string {
 	for key := range values {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	pairs := make(url.Values, len(values))
 	for _, key := range keys {
 		pairs[key] = values[key]

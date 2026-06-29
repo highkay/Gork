@@ -3,6 +3,7 @@ package reverse
 import (
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
+	"slices"
 )
 
 type ResultCategory int
@@ -71,7 +72,7 @@ func NewReversePlan(endpoint string, transportKind TransportKind, poolCandidates
 	return ReversePlan{
 		Endpoint:       endpoint,
 		TransportKind:  transportKind,
-		PoolCandidates: append([]int(nil), poolCandidates...),
+		PoolCandidates: slices.Clone(poolCandidates),
 		ModeID:         modeID,
 		TimeoutS:       120.0,
 		ContentType:    "application/json",

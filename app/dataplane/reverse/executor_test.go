@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"testing"
 
 	controlmodel "github.com/dslzl/gork/app/control/model"
@@ -252,7 +253,7 @@ type fakeAccountDirectory struct {
 }
 
 func (d *fakeAccountDirectory) Reserve(_ context.Context, poolCandidates []int, modeID int) (*AccountLease, error) {
-	d.reservePool = append([]int(nil), poolCandidates...)
+	d.reservePool = slices.Clone(poolCandidates)
 	d.reserveMode = modeID
 	return d.lease, nil
 }

@@ -14,7 +14,7 @@ const (
 
 func ApplySuccessQuota(table *AccountRuntimeTable, idx int, modeID int) {
 	quotaCol := table.quotaCol(modeID)
-	quotaCol[idx] = maxInt(0, quotaCol[idx]-1)
+	quotaCol[idx] = max(0, quotaCol[idx]-1)
 	bumpHealth(table, idx)
 }
 
@@ -32,7 +32,7 @@ func ApplyRateLimitedQuota(table *AccountRuntimeTable, idx int, modeID int) {
 func ApplyRateLimitedRandom(table *AccountRuntimeTable, idx int, modeID int, coolingSec int) {
 	if isKnownModeID(modeID) {
 		table.quotaCol(modeID)[idx] = 0
-		ts := int(appruntime.NowS()) + maxInt(0, coolingSec)
+		ts := int(appruntime.NowS()) + max(0, coolingSec)
 		resetCol := table.resetCol(modeID)
 		if ts > resetCol[idx] {
 			resetCol[idx] = ts
@@ -96,11 +96,11 @@ func ApplyQuotaUpdate(table *AccountRuntimeTable, idx int, modeID int, remaining
 }
 
 func IncrementInflight(table *AccountRuntimeTable, idx int) {
-	table.InflightByIdx[idx] = minInt(table.InflightByIdx[idx]+1, 65535)
+	table.InflightByIdx[idx] = min(table.InflightByIdx[idx]+1, 65535)
 }
 
 func DecrementInflight(table *AccountRuntimeTable, idx int) {
-	table.InflightByIdx[idx] = maxInt(0, table.InflightByIdx[idx]-1)
+	table.InflightByIdx[idx] = max(0, table.InflightByIdx[idx]-1)
 }
 
 func UpdateLastUse(table *AccountRuntimeTable, idx int, nowS int) {
@@ -109,15 +109,15 @@ func UpdateLastUse(table *AccountRuntimeTable, idx int, nowS int) {
 
 func UpdateLastFail(table *AccountRuntimeTable, idx int, nowS int) {
 	table.LastFailAtByIdx[idx] = nowS
-	table.FailCountByIdx[idx] = minInt(table.FailCountByIdx[idx]+1, 65535)
+	table.FailCountByIdx[idx] = min(table.FailCountByIdx[idx]+1, 65535)
 }
 
 func bumpHealth(table *AccountRuntimeTable, idx int) {
-	table.HealthByIdx[idx] = minFloat(maxHealth, table.HealthByIdx[idx]+successStep)
+	table.HealthByIdx[idx] = min(maxHealth, table.HealthByIdx[idx]+successStep)
 }
 
 func adjustHealth(table *AccountRuntimeTable, idx int, factor float64) {
-	table.HealthByIdx[idx] = maxFloat(minHealth, table.HealthByIdx[idx]*factor)
+	table.HealthByIdx[idx] = max(minHealth, table.HealthByIdx[idx]*factor)
 }
 
 func clampInt(value int, minimum int, maximum int) int {
@@ -128,25 +128,4 @@ func clampInt(value int, minimum int, maximum int) int {
 		return maximum
 	}
 	return value
-}
-
-func minInt(a int, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func minFloat(a float64, b float64) float64 {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxFloat(a float64, b float64) float64 {
-	if a > b {
-		return a
-	}
-	return b
 }

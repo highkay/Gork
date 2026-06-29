@@ -143,7 +143,7 @@ func extractVideoPromptAndReferences(messages []map[string]any) (string, []map[s
 	if prompt == "" {
 		return "", nil, platform.NewValidationError("Video prompt cannot be empty", "messages", "")
 	}
-	references := make([]map[string]any, 0, minInt(len(referenceURLs), 7))
+	references := make([]map[string]any, 0, min(len(referenceURLs), 7))
 	for index, url := range referenceURLs {
 		if index >= 7 {
 			break
@@ -208,11 +208,4 @@ func mustCompactJSON(value any) string {
 		return "{}"
 	}
 	return string(raw)
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

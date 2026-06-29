@@ -2,7 +2,7 @@ package backends
 
 import (
 	"context"
-	"sort"
+	"slices"
 
 	account "github.com/dslzl/gork/app/control/account"
 )
@@ -163,7 +163,7 @@ func (r *RedisAccountRepository) listAccountsIndexed(
 	if err != nil {
 		return account.AccountPage{}, err
 	}
-	sort.Strings(tokens)
+	slices.Sort(tokens)
 	records, err := r.GetAccounts(ctx, tokens)
 	if err != nil {
 		return account.AccountPage{}, err
@@ -185,7 +185,7 @@ func (r *RedisAccountRepository) pageRedisRecords(
 	sortRedisRecords(records, query.SortBy, query.SortDesc)
 	total := len(records)
 	start := (query.Page - 1) * query.PageSize
-	end := minInt(total, start+query.PageSize)
+	end := min(total, start+query.PageSize)
 	if start > total {
 		start, end = total, total
 	}
@@ -198,7 +198,7 @@ func (r *RedisAccountRepository) pageRedisRecords(
 		Total:      total,
 		Page:       query.Page,
 		PageSize:   query.PageSize,
-		TotalPages: maxInt(1, (total+query.PageSize-1)/query.PageSize),
+		TotalPages: max(1, (total+query.PageSize-1)/query.PageSize),
 		Revision:   revision,
 	}, nil
 }
@@ -224,11 +224,4 @@ func redisMatchesQuery(record account.AccountRecord, query account.ListAccountsQ
 		}
 	}
 	return true
-}
-
-func minInt(a int, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

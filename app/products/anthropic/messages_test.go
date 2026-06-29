@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -378,7 +379,7 @@ type fakeMessagesDirectory struct {
 }
 
 func (d *fakeMessagesDirectory) ReserveMessagesAccount(_ context.Context, _ model.ModelSpec, excluded []string) (messagesAccount, bool, error) {
-	d.excluded = append(d.excluded, append([]string(nil), excluded...))
+	d.excluded = append(d.excluded, slices.Clone(excluded))
 	if len(d.accounts) == 0 {
 		return messagesAccount{}, false, nil
 	}

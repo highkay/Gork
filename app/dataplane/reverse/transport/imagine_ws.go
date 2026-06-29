@@ -90,7 +90,7 @@ func StreamImages(ctx context.Context, token, prompt string, options ImagineOpti
 			return append(events, imagineConnectErrorEvent(err)), nil
 		}
 
-		wsClosed, err := runImagineConnection(ctx, conn, prompt, option, &events, &collected)
+		_, err = runImagineConnection(ctx, conn, prompt, option, &events, &collected)
 		_ = conn.Close()
 		if err != nil {
 			_ = option.ProxyRuntime.Feedback(ctx, lease, controlproxy.ProxyFeedback{Kind: controlproxy.ProxyFeedbackTransportError})
@@ -108,9 +108,6 @@ func StreamImages(ctx context.Context, token, prompt string, options ImagineOpti
 		})
 		if collected >= option.N {
 			return events, nil
-		}
-		if !wsClosed {
-			continue
 		}
 	}
 	return events, nil

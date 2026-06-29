@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	platformconfig "github.com/dslzl/gork/app/platform/config"
@@ -132,15 +131,4 @@ func configEnvValidationValue(entry platformconfig.ConfigSchemaEntry, value stri
 		}
 	}
 	return items
-}
-
-func configCommandEnv() map[string]string {
-	out := map[string]string{}
-	for _, item := range os.Environ() {
-		key, value, ok := strings.Cut(item, "=")
-		if ok {
-			out[key] = value
-		}
-	}
-	return out
 }

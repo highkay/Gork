@@ -37,11 +37,6 @@ func (c netHTTPClient) Delete(ctx context.Context, request HTTPRequest) (HTTPRes
 	return c.do(ctx, http.MethodDelete, request)
 }
 
-func doHTTPRequest(ctx context.Context, method string, request HTTPRequest) (HTTPResponse, error) {
-	client := netHTTPClient{}
-	return client.do(ctx, method, request)
-}
-
 func (c netHTTPClient) do(ctx context.Context, method string, request HTTPRequest) (HTTPResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, request.Timeout)
 	rawRequest, err := http.NewRequestWithContext(ctx, method, httpRequestURL(request), bytes.NewReader(request.Payload))

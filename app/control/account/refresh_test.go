@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -24,8 +25,8 @@ type fakeRefreshRepo struct {
 func (r *fakeRefreshRepo) GetAccounts(_ context.Context, tokens []string) ([]AccountRecord, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.getCalls = append(r.getCalls, append([]string(nil), tokens...))
-	return append([]AccountRecord(nil), r.records...), nil
+	r.getCalls = append(r.getCalls, slices.Clone(tokens))
+	return slices.Clone(r.records), nil
 }
 
 func (r *fakeRefreshRepo) PatchAccounts(_ context.Context, patches []AccountPatch) (AccountMutationResult, error) {
@@ -50,7 +51,7 @@ func (r *fakeRefreshRepo) ListAccounts(_ context.Context, query ListAccountsQuer
 		return r.listPage, nil
 	}
 	page := AccountPage{
-		Items:      append([]AccountRecord(nil), r.records...),
+		Items:      slices.Clone(r.records),
 		Total:      len(r.records),
 		Page:       query.Page,
 		PageSize:   query.PageSize,

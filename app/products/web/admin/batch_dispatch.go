@@ -52,7 +52,7 @@ func runAdminBatchTask(task *runtimepkg.AsyncTask, tokens []string, handler admi
 	}()
 	results := make([]adminBatchItemResult, len(tokens))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, maxAdminBatchInt(1, concurrency))
+	sem := make(chan struct{}, max(1, concurrency))
 	ctx := task.Context()
 loop:
 	for i, token := range tokens {

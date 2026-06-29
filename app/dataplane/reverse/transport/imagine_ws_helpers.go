@@ -112,13 +112,6 @@ func imagineProgress(value any) int {
 	return progress
 }
 
-func minImagineDuration(left, right time.Duration) time.Duration {
-	if left < right {
-		return left
-	}
-	return right
-}
-
 func imaginePrefix(value string, length int) string {
 	if len(value) < length {
 		return value

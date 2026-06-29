@@ -105,7 +105,7 @@ func defaultChatDirectoryProvider() chatDirectory {
 
 func (d chatDataDirectory) ReserveChatAccount(ctx context.Context, spec model.ModelSpec, excluded []string) (chatAccount, bool, error) {
 	nowS := appruntime.NowS()
-	lease, result, err := products.ReserveAccountDetailed(ctx, chatReserveDirectory{directory: d.directory}, spec, products.ReserveAccountOptions{
+	lease, result, err := products.ReserveAccountDetailed(ctx, chatReserveDirectory(d), spec, products.ReserveAccountOptions{
 		ExcludeTokens: excluded,
 		NowSOverride:  &nowS,
 	})

@@ -1,9 +1,10 @@
 package backends
 
 import (
+	"cmp"
 	"context"
 	"errors"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -145,7 +146,7 @@ func TestRedisAccountRepositoryIndexedListAndReplacePool(t *testing.T) {
 	for _, item := range snapshot.Items {
 		tokens = append(tokens, item.Token)
 	}
-	sort.Strings(tokens)
+	slices.Sort(tokens)
 	if strings.Join(tokens, ",") != "basic-new,super-a" {
 		t.Fatalf("snapshot tokens after replace = %#v", tokens)
 	}
@@ -280,7 +281,7 @@ func (s *fakeRedisAccountStore) ScanKeys(_ context.Context, pattern string) ([]s
 			keys = append(keys, key)
 		}
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys, nil
 }
 
@@ -339,7 +340,7 @@ func (s *fakeRedisAccountStore) ZRangeByScore(_ context.Context, key string, min
 			items = append(items, item{member, score})
 		}
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].score < items[j].score })
+	slices.SortFunc(items, func(left, right item) int { return cmp.Compare(left.score, right.score) })
 	out := []string{}
 	for _, item := range items {
 		out = append(out, item.member)
@@ -379,7 +380,7 @@ func (s *fakeRedisAccountStore) SMembers(_ context.Context, key string) ([]strin
 	for member := range s.sets[key] {
 		members = append(members, member)
 	}
-	sort.Strings(members)
+	slices.Sort(members)
 	return members, nil
 }
 

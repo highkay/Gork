@@ -62,7 +62,7 @@ func NewRedisRuntimeLease(client RedisRuntimeClient, key, owner string, ttlMS in
 		client: client,
 		Key:    key,
 		Owner:  owner,
-		TTLMS:  maxRuntimeInt(1, ttlMS),
+		TTLMS:  max(1, ttlMS),
 	}
 }
 
@@ -113,7 +113,7 @@ func (s *RedisRuntimeStore) AcquireLock(ctx context.Context, name string, option
 	if ttlMS == 0 {
 		ttlMS = defaultRedisRuntimeLockTTLMS
 	}
-	ttlMS = maxRuntimeInt(1, ttlMS)
+	ttlMS = max(1, ttlMS)
 	key := s.Key("lock", name)
 	acquired, err := s.Redis.SetNX(ctx, key, owner, ttlMS)
 	if err != nil {
@@ -169,12 +169,19 @@ func (c *goRedisRuntimeClient) Get(ctx context.Context, key string) (any, error)
 }
 
 func (c *goRedisRuntimeClient) SetNX(ctx context.Context, key, value string, ttlMS int) (bool, error) {
-	ttl := time.Duration(maxRuntimeInt(1, ttlMS)) * time.Millisecond
-	return c.client.SetNX(ctx, key, value, ttl).Result()
+	ttl := time.Duration(max(1, ttlMS)) * time.Millisecond
+	result, err := c.client.SetArgs(ctx, key, value, redis.SetArgs{Mode: "nx", TTL: ttl}).Result()
+	if err == redis.Nil {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return result == "OK", nil
 }
 
 func (c *goRedisRuntimeClient) Expire(ctx context.Context, key string, ttlSeconds int) error {
-	ttl := time.Duration(maxRuntimeInt(1, ttlSeconds)) * time.Second
+	ttl := time.Duration(max(1, ttlSeconds)) * time.Second
 	return c.client.Expire(ctx, key, ttl).Err()
 }
 
@@ -188,7 +195,7 @@ if redis.call("GET", KEYS[1]) == ARGV[1] then
   return redis.call("PEXPIRE", KEYS[1], ARGV[2])
 end
 return 0
-`, []string{key}, owner, maxRuntimeInt(1, ttlMS)).Int()
+`, []string{key}, owner, max(1, ttlMS)).Int()
 	return result == 1, err
 }
 
@@ -249,11 +256,4 @@ func runtimeOwner() string {
 		host = "localhost"
 	}
 	return fmt.Sprintf("%s:%d:%s", host, os.Getpid(), NextHex(32))
-}
-
-func maxRuntimeInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

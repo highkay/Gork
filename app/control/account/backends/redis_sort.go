@@ -1,25 +1,26 @@
 package backends
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	account "github.com/dslzl/gork/app/control/account"
 )
 
 func sortRedisRecords(records []account.AccountRecord, sortBy string, desc bool) {
-	sort.Slice(records, func(i, j int) bool {
-		left := redisSortValue(records[i], sortBy)
-		right := redisSortValue(records[j], sortBy)
+	slices.SortFunc(records, func(leftRecord, rightRecord account.AccountRecord) int {
+		left := redisSortValue(leftRecord, sortBy)
+		right := redisSortValue(rightRecord, sortBy)
 		if left == right {
 			if desc {
-				return records[i].Token > records[j].Token
+				return cmp.Compare(rightRecord.Token, leftRecord.Token)
 			}
-			return records[i].Token < records[j].Token
+			return cmp.Compare(leftRecord.Token, rightRecord.Token)
 		}
 		if desc {
-			return left > right
+			return cmp.Compare(right, left)
 		}
-		return left < right
+		return cmp.Compare(left, right)
 	})
 }
 

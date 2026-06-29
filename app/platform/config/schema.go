@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -53,7 +53,7 @@ func DefaultSchema(defaults map[string]any) []ConfigSchemaEntry {
 	for key := range flat {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	entries := make([]ConfigSchemaEntry, 0, len(keys))
 	for _, key := range keys {
 		entry := ConfigSchemaEntry{

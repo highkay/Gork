@@ -2,6 +2,8 @@ package accountfixtures
 
 import (
 	"context"
+	"maps"
+	"slices"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 )
@@ -83,7 +85,7 @@ func (r *Repository) Close(context.Context) error {
 func cloneRecords(records []accountcontrol.AccountRecord) []accountcontrol.AccountRecord {
 	out := make([]accountcontrol.AccountRecord, 0, len(records))
 	for _, record := range records {
-		record.Tags = append([]string(nil), record.Tags...)
+		record.Tags = slices.Clone(record.Tags)
 		record.Quota = cloneMap(record.Quota)
 		record.Ext = cloneMap(record.Ext)
 		out = append(out, record)
@@ -92,12 +94,5 @@ func cloneRecords(records []accountcontrol.AccountRecord) []accountcontrol.Accou
 }
 
 func cloneMap(input map[string]any) map[string]any {
-	if input == nil {
-		return nil
-	}
-	out := make(map[string]any, len(input))
-	for key, value := range input {
-		out[key] = value
-	}
-	return out
+	return maps.Clone(input)
 }

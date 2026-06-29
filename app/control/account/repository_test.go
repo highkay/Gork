@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"slices"
 	"testing"
 )
 
@@ -58,12 +59,12 @@ func (r *observedAccountRepository) PatchAccounts(_ context.Context, patches []A
 }
 
 func (r *observedAccountRepository) DeleteAccounts(_ context.Context, tokens []string) (AccountMutationResult, error) {
-	r.deleteTokens = append([]string(nil), tokens...)
+	r.deleteTokens = slices.Clone(tokens)
 	return AccountMutationResult{Deleted: 1, Revision: 4}, nil
 }
 
 func (r *observedAccountRepository) GetAccounts(_ context.Context, tokens []string) ([]AccountRecord, error) {
-	r.getTokens = append([]string(nil), tokens...)
+	r.getTokens = slices.Clone(tokens)
 	return []AccountRecord{{Token: tokens[0]}}, nil
 }
 

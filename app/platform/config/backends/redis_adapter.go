@@ -2,7 +2,7 @@ package backends
 
 import (
 	"context"
-	"sort"
+	"slices"
 
 	redis "github.com/redis/go-redis/v9"
 )
@@ -71,7 +71,7 @@ func redisConfigHashArgs(mapping map[string]string) []any {
 	for key := range mapping {
 		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	args := make([]any, 0, len(keys)*2)
 	for _, key := range keys {
 		args = append(args, key, mapping[key])

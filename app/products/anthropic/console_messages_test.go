@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -248,7 +249,7 @@ type fakeConsoleMessagesDirectory struct {
 }
 
 func (d *fakeConsoleMessagesDirectory) ReserveConsoleMessagesAccount(_ context.Context, _ model.ModelSpec, excluded []string) (consoleMessagesAccount, bool, error) {
-	d.excluded = append(d.excluded, append([]string(nil), excluded...))
+	d.excluded = append(d.excluded, slices.Clone(excluded))
 	if len(d.accounts) == 0 {
 		return consoleMessagesAccount{}, false, nil
 	}

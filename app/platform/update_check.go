@@ -1,13 +1,14 @@
 package platform
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -159,8 +160,8 @@ func selectLatestRelease(releases []githubRelease) *githubRelease {
 	if len(candidates) == 0 {
 		return nil
 	}
-	sort.Slice(candidates, func(i, j int) bool {
-		return compareVersionKeys(candidates[i].key, candidates[j].key) > 0
+	slices.SortFunc(candidates, func(left, right candidate) int {
+		return cmp.Compare(0, compareVersionKeys(left.key, right.key))
 	})
 	return &candidates[0].release
 }

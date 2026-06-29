@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -467,7 +468,7 @@ type fakeAssetHTTPClient struct {
 }
 
 func (c *fakeAssetHTTPClient) Post(_ context.Context, url string, headers map[string]string, body []byte, timeout time.Duration) (AssetHTTPResponse, error) {
-	c.posts = append(c.posts, assetHTTPCall{url: url, headers: headers, body: append([]byte(nil), body...), timeout: timeout})
+	c.posts = append(c.posts, assetHTTPCall{url: url, headers: headers, body: slices.Clone(body), timeout: timeout})
 	if c.postErr != nil {
 		return AssetHTTPResponse{}, c.postErr
 	}
