@@ -20,7 +20,7 @@ docker compose logs -f gork
 docker compose -f docker-compose.warp.yml up -d
 ```
 
-防封版额外启动 WARP、Privoxy、FlareSolverr，适合出口 IP 被 Cloudflare 风控或需要自动刷新 clearance 的环境。防封版复杂度更高，应在标准版出现 403 或 challenge 后再启用。
+防封版额外启动 MicroWARP、Privoxy、Byparr，适合出口 IP 被 Cloudflare 风控或需要自动刷新 clearance 的环境。防封版复杂度更高，应在标准版出现 403 或 challenge 后再启用；FlareSolverr 可作为显式 fallback 手动启用。
 
 ## Redis Runtime vs Redis Account Storage
 
@@ -115,4 +115,3 @@ SQL 模式：
 - `/meta/update` 会检查 GitHub release，并缓存结果。
 - 更新检查失败不会影响主服务请求。
 - 如需完全固定版本，生产部署使用镜像 tag、`sha-<commit>` tag 或 digest。
-

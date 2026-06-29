@@ -23,10 +23,11 @@ services:
       RUNTIME_REDIS_URL: ${RUNTIME_REDIS_URL:-}
       RUNTIME_TASK_TTL_S: ${RUNTIME_TASK_TTL_S:-300}
       RUNTIME_REDIS_LOCK_TTL_MS: ${RUNTIME_REDIS_LOCK_TTL_MS:-300000}
-      # 启用 CF 自动刷新: 取消以下三行注释，并取消底部 flaresolverr 服务的注释
-      # FLARESOLVERR_URL: http://flaresolverr:8191
-      # CF_REFRESH_INTERVAL: "600"
-      # CF_TIMEOUT: "60"
+      # 启用 CF 自动刷新: 配置 proxy.clearance.mode=byparr，并取消底部 byparr 服务的注释
+      # GROK_PROXY_CLEARANCE_MODE: byparr
+      # GROK_PROXY_CLEARANCE_BYPARR_URL: http://byparr:8191
+      # GROK_PROXY_CLEARANCE_REFRESH_INTERVAL: "600"
+      # GROK_PROXY_CLEARANCE_TIMEOUT_SEC: "60"
 
       # ACCOUNT_STORAGE: local | redis | mysql | postgresql
       # ACCOUNT_LOCAL_PATH: SQLite path when ACCOUNT_STORAGE=local
@@ -61,30 +62,28 @@ services:
     mem_limit: ${REDIS_MEM_LIMIT:-256m}
     cpus: ${REDIS_CPUS:-0.5}
 
-  # 如果出口 IP 不干净，可取消以下注释使用 Warp 作为落地代理
-  # 启用后将 proxy.base_proxy_url 设为 socks5://warp:1080
+  # 如果出口 IP 不干净，可取消以下注释使用 MicroWARP 作为落地代理
+  # 启用后将 proxy.egress.proxy_url 设为 socks5://warp:1080
   # warp:
   #   container_name: warp
-  #   image: ${WARP_IMAGE:-caomingjun/warp@sha256:905b91c3fe197a625611064ef0664f27e9ecdd0a30a91c4ae7046e06a2bf2643}
+  #   image: ${WARP_IMAGE:-ghcr.io/ccbkkb/microwarp:latest}
   #   restart: unless-stopped
   #   mem_limit: ${WARP_MEM_LIMIT:-256m}
   #   cpus: ${WARP_CPUS:-0.5}
   #   ports:
   #     - "127.0.0.1:1080:1080"
   #   environment:
-  #     - WARP_SLEEP=2
+  #     - SOCKS_PORT=1080
   #   cap_add:
   #     - NET_ADMIN
 
   # 启用 CF 自动刷新时取消以下注释
-  # flaresolverr:
-  #   container_name: flaresolverr
-  #   image: ${FLARESOLVERR_IMAGE:-ghcr.io/flaresolverr/flaresolverr@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47}
-  #   ports:
-  #     - "127.0.0.1:8191:8191"
+  # byparr:
+  #   container_name: byparr
+  #   image: ${BYPARR_IMAGE:-ghcr.io/thephaseless/byparr:latest}
   #   environment:
   #     TZ: Asia/Shanghai
   #     LOG_LEVEL: info
   #   restart: unless-stopped
-  #   mem_limit: ${FLARESOLVERR_MEM_LIMIT:-512m}
-  #   cpus: ${FLARESOLVERR_CPUS:-1.0}
+  #   mem_limit: ${BYPARR_MEM_LIMIT:-1g}
+  #   cpus: ${BYPARR_CPUS:-1.0}

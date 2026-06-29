@@ -395,7 +395,8 @@
         "clearanceMode": {
           "none": "关闭",
           "manual": "手动",
-          "flaresolverr": "FlareSolverr"
+          "flaresolverr": "FlareSolverr",
+          "byparr": "Byparr"
         }
       },
       "fields": {
@@ -593,9 +594,13 @@
           "label": "FlareSolverr URL",
           "desc": "FlareSolverr 实例的 HTTP 服务地址。"
         },
+        "byparrUrl": {
+          "label": "Byparr URL",
+          "desc": "Byparr 实例的 HTTP 服务地址。"
+        },
         "challengeTimeout": {
           "label": "挑战超时（秒）",
-          "desc": "FlareSolverr 完成 Cloudflare 挑战允许的最长等待时长。"
+          "desc": "Clearance Provider 完成 Cloudflare 挑战允许的最长等待时长。"
         },
         "refreshInterval": {
           "label": "刷新间隔（秒）",

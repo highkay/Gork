@@ -46,6 +46,9 @@ func TestRuntimeConfigSchemaMetadata(t *testing.T) {
 	if entry := entries["proxy.clearance.flaresolverr_url"]; entry.HotReload {
 		t.Fatalf("proxy.clearance.flaresolverr_url HotReload = true, want false")
 	}
+	if entry := entries["proxy.clearance.byparr_url"]; entry.HotReload {
+		t.Fatalf("proxy.clearance.byparr_url HotReload = true, want false")
+	}
 	if entry := entries["proxy.clearance.mode"]; entry.Sensitive {
 		t.Fatalf("proxy.clearance.mode Sensitive = true, want false")
 	}

@@ -209,6 +209,7 @@ func TestAdminConfigRedactsOnlySensitiveLeaves(t *testing.T) {
 				"mode":             "flaresolverr",
 				"cf_cookies":       "cf_clearance=secret",
 				"flaresolverr_url": "http://flaresolverr:8191",
+				"byparr_url":       "http://byparr:8191",
 				"timeout_sec":      float64(60),
 			},
 		},
@@ -225,6 +226,7 @@ func TestAdminConfigRedactsOnlySensitiveLeaves(t *testing.T) {
 	assertAdminBodyValue(t, body, "proxy.clearance.mode", "flaresolverr")
 	assertAdminBodyValue(t, body, "proxy.clearance.cf_cookies", "<redacted>")
 	assertAdminBodyValue(t, body, "proxy.clearance.flaresolverr_url", "http://flaresolverr:8191")
+	assertAdminBodyValue(t, body, "proxy.clearance.byparr_url", "http://byparr:8191")
 	assertAdminBodyValue(t, body, "proxy.clearance.timeout_sec", float64(60))
 }
 

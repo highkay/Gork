@@ -82,7 +82,7 @@ docker compose logs -f gork
 
 > The included `docker-compose.yml` uses `GORK_IMAGE`, defaulting to `ghcr.io/dslzl/gork:latest`. For production, set `GORK_IMAGE=ghcr.io/dslzl/gork:<version-or-sha-tag>` or pin a digest.
 
-### Option 2: WARP + FlareSolverr stack
+### Option 2: MicroWARP + Byparr stack
 
 Use this only when the standard stack is blocked by Cloudflare or proxy quality problems.
 
@@ -98,7 +98,7 @@ The stack starts:
 | :-- | :-- |
 | `warp-proxy` | Cloudflare WARP egress proxy |
 | `privoxy` | HTTP proxy forwarding to WARP |
-| `flaresolverr` | Cloudflare challenge solver |
+| `byparr` | Cloudflare challenge solver |
 | `gork` | Main service |
 
 ### Option 3: Plain Docker

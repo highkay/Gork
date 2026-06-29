@@ -62,9 +62,9 @@ Gork 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 OpenA
 | :-- | :-- |
 | 默认镜像 | Compose 默认固定到 digest，可通过 `PRIVOXY_WARP_IMAGE` 覆盖 |
 | 架构 | `linux/amd64`, `linux/arm64` |
-| 说明 | 预配置好 WARP SOCKS5 转发规则的 Privoxy，与 `caomingjun/warp` 配合使用 |
+| 说明 | 预配置好 WARP SOCKS5 转发规则的 Privoxy，与 `ghcr.io/ccbkkb/microwarp:latest` 配合使用 |
 
-Compose 示例中的第三方镜像默认 pin 到 digest，并保留 `WARP_IMAGE`、`PRIVOXY_WARP_IMAGE`、`FLARESOLVERR_IMAGE`、`REDIS_IMAGE` 等环境变量用于显式升级。
+Compose 示例保留 `WARP_IMAGE`、`PRIVOXY_WARP_IMAGE`、`BYPARR_IMAGE`、`FLARESOLVERR_IMAGE`、`REDIS_IMAGE` 等环境变量用于显式升级；MicroWARP 与 Byparr 默认使用 `latest`。
 
 <br>
 
@@ -75,14 +75,14 @@ Compose 示例中的第三方镜像默认 pin 到 digest，并保留 `WARP_IMAGE
 | 方式 | 说明 | 适用场景 |
 | :-- | :-- | :-- |
 | **标准版** | 仅 gork，直连 Grok | IP 干净、无 Cloudflare 拦截问题 |
-| **防封版** | gork + WARP + Privoxy + FlareSolverr | IP 被 Cloudflare 拦截、需要稳定访问 |
+| **防封版** | gork + MicroWARP + Privoxy + Byparr | IP 被 Cloudflare 拦截、需要稳定访问 |
 
 决策树：
 
 1. 先部署标准版并完成 `/health`、`/v1/models` 和一次最小 chat smoke。
 2. 如果标准版可用，保持标准版；它的组件少、排障成本低、升级风险小。
 3. 如果频繁出现 403、Cloudflare challenge、clearance 失效或代理出口不可控，再切换防封版。
-4. 如果只需要自带 Redis，不需要 WARP/FlareSolverr，使用标准版 Compose 的 Redis profile，不要上防封版。
+4. 如果只需要自带 Redis，不需要 WARP/Byparr，使用标准版 Compose 的 Redis profile，不要上防封版。
 
 > [!TIP]
 > 当前版本已内置针对 `grok.com` 常见 403 问题的兼容修复，标准版可直接部署验证，无需额外浏览器签名服务。
@@ -107,7 +107,7 @@ docker compose logs -f gork
 
 Compose 默认开启 `read_only: true` 与 `no-new-privileges`。容器内只有 `/app/data`、`/app/logs` 可写，临时文件写入 `/app/data/tmp`；如果自定义挂载目录，需要确保这两个目录对容器内运行用户可写。
 
-### 方式二：防封版（WARP + FlareSolverr 一键部署）
+### 方式二：防封版（MicroWARP + Byparr 一键部署）
 
 > **前置要求**：服务器需支持 `NET_ADMIN` + `SYS_MODULE` 权限（KVM/XEN 虚拟化均支持，OpenVZ/LXC 不支持）。
 
@@ -131,7 +131,7 @@ sh scripts/smoke_warp_clearance.sh
 | :-- | :-- |
 | `warp-proxy` | Cloudflare WARP 出口代理，提供干净的 Cloudflare IP |
 | `privoxy` | HTTP 代理，将流量转发到 WARP（已预配置，无需手动操作） |
-| `flaresolverr` | 自动解 Cloudflare 挑战，获取 cf_clearance |
+| `byparr` | 自动解 Cloudflare 挑战，获取 cf_clearance |
 | `gork` | 主服务，代理配置由 init 容器自动写入 |
 
 启动后代理配置已自动完成，进入 Admin 后台添加账号即可使用。
@@ -196,7 +196,7 @@ go build -o gork ./cmd/gork
 
 ## 升级与回滚
 
-无论标准版还是防封版，升级时只需要更新 `gork` 主镜像即可。WARP、Privoxy、FlareSolverr 等防封组件基本不需要更新。
+无论标准版还是防封版，升级时只需要更新 `gork` 主镜像即可。MicroWARP、Privoxy、Byparr 等防封组件通常不需要同步更新；如需回滚 clearance provider，可改回 FlareSolverr fallback。
 
 ### 标准版升级
 
@@ -214,11 +214,11 @@ docker pull "$GORK_IMAGE"
 docker compose -f docker-compose.warp.yml up -d --no-deps gork
 ```
 
-> `--no-deps` 参数确保只重启 gork 容器，WARP、Privoxy、FlareSolverr 不受影响，继续运行。
+> `--no-deps` 参数确保只重启 gork 容器，MicroWARP、Privoxy、Byparr 不受影响，继续运行。
 
 > `./data/` 目录中的配置文件（`config.toml`）和账号数据库（`accounts.db`）挂载在 volume 中，升级不会覆盖。
 
-若使用 digest pinning，升级时先更新 `.env` 中的 `GORK_IMAGE` 或第三方镜像变量，再执行对应 compose up 命令。第三方镜像默认固定 digest，不会因为上游 `latest` 移动而自动变化。
+若使用 digest pinning，升级时先更新 `.env` 中的 `GORK_IMAGE` 或第三方镜像变量，再执行对应 compose up 命令。MicroWARP 与 Byparr 默认使用 `latest`，可通过 `WARP_IMAGE`、`BYPARR_IMAGE` 显式固定版本。
 
 ### 回滚到指定版本
 
@@ -241,13 +241,13 @@ docker stop gork && docker rm gork
 # 2. 进入项目目录（与标准版相同目录）
 cd gork
 
-# 3. 用防封版 compose 启动（会自动启动 WARP、Privoxy、FlareSolverr）
+# 3. 用防封版 compose 启动（会自动启动 MicroWARP、Privoxy、Byparr）
 docker compose -f docker-compose.warp.yml up -d
 ```
 
 > 防封版的 `init-config` 容器会检测 `data/config.toml` 是否已有代理配置：
 > - 若已有配置（如之前手动配过代理）：跳过，不覆盖
-> - 若无代理配置：自动写入 WARP + FlareSolverr 配置
+> - 若无代理配置：自动写入 MicroWARP + Byparr 配置
 
 迁移完成后，进入 Admin 后台确认代理配置已生效即可。
 
@@ -438,7 +438,7 @@ ACCOUNT_POSTGRESQL_URL=postgres://user:password@db.example.com:5432/gork?sslmode
 
 云数据库通常要求 `sslmode=require` / `verify-full` 或 MySQL TLS 配置。升级、回滚前应先备份 SQL 数据和 schema version 表；如果新版本已执行 schema 迁移，回滚镜像时应同步回滚到同一时间点的数据快照。
 
-Compose 样例为 gork、Redis、WARP、Privoxy、FlareSolverr 和 demo reset 设置了基础 `mem_limit` / `cpus`，可通过 `GORK_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`WARP_MEM_LIMIT` 等环境变量覆盖。资源限制只作为单机部署默认保护，生产环境应按账号数量、并发和代理负载调高。
+Compose 样例为 gork、Redis、MicroWARP、Privoxy、Byparr 和 demo reset 设置了基础 `mem_limit` / `cpus`，可通过 `GORK_MEM_LIMIT`、`REDIS_MEM_LIMIT`、`WARP_MEM_LIMIT`、`BYPARR_MEM_LIMIT` 等环境变量覆盖。资源限制只作为单机部署默认保护，生产环境应按账号数量、并发和代理负载调高。
 
 ### Demo reset 保护
 
@@ -632,7 +632,7 @@ curl http://localhost:8000/v1/videos \
 没有正确设置 `app.app_url`。该字段必须是用户能访问的公网地址（含协议），例如 `https://api.example.com`。
 
 **Q: 提示 Cloudflare 拦截？**
-在 Admin 后台 → 配置管理 → 代理配置，将 `proxy.clearance.mode` 设为 `manual` 并填入有效 `cf_cookies` + `user_agent`，或部署 FlareSolverr 后切到 `flaresolverr` 模式。
+在 Admin 后台 → 配置管理 → 代理配置，将 `proxy.clearance.mode` 设为 `byparr` 并配置 Byparr，或设为 `manual` 后填入有效 `cf_cookies` + `user_agent`。需要回滚时可部署 FlareSolverr 后切到 `flaresolverr` 模式。
 
 **Q: 当前版本是否已经修复 grok.com 403？**
 A: 是。当前版本已内置 `x-statsig-id` 兼容修复，普通场景下无需额外浏览器 sidecar。若仍遇到 403，更多是出口 IP、Cloudflare 风控或 clearance 失效导致，建议优先尝试防封版部署。

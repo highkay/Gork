@@ -8,7 +8,7 @@
 | :-- | :-- |
 | `warp-proxy` | Cloudflare WARP 出口代理。 |
 | `privoxy` | HTTP proxy，转发到 WARP。 |
-| `flaresolverr` | 自动处理 Cloudflare challenge。 |
+| `byparr` | 自动处理 Cloudflare challenge。 |
 | `gork` | 主服务。 |
 | `demo-reset` | 周期性清理 demo 数据。 |
 
@@ -37,4 +37,3 @@
 - 本地开发使用 `docker-compose.yml`。
 - 需要防封能力使用 `docker-compose.warp.yml`。
 - 公开演示使用独立云数据库、独立 Redis DB、短期账号和限流反代。
-

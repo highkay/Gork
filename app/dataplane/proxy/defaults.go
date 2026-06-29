@@ -42,8 +42,9 @@ func (globalDirectoryConfig) GetInt(key string, defaultValue int) int {
 func ProductionDirectoryOptions() controlproxy.DirectoryOptions {
 	cfg := globalDirectoryConfig{}
 	return controlproxy.DirectoryOptions{
-		Config:        cfg,
-		FlareProvider: providers.FlareSolverrClearanceProvider{Config: cfg},
+		Config:         cfg,
+		FlareProvider:  providers.FlareSolverrClearanceProvider{Config: cfg},
+		ByparrProvider: providers.ByparrClearanceProvider{Config: cfg},
 	}
 }
 

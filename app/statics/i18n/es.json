@@ -395,7 +395,8 @@
         "clearanceMode": {
           "none": "Desactivado",
           "manual": "Manual",
-          "flaresolverr": "FlareSolverr"
+          "flaresolverr": "FlareSolverr",
+          "byparr": "Byparr"
         }
       },
       "fields": {
@@ -593,9 +594,13 @@
           "label": "URL de FlareSolverr",
           "desc": "HTTP endpoint for the FlareSolverr instance."
         },
+        "byparrUrl": {
+          "label": "Byparr URL",
+          "desc": "HTTP endpoint Byparr instance."
+        },
         "challengeTimeout": {
           "label": "Tiempo de espera del desafío (s)",
-          "desc": "Maximum time allowed for FlareSolverr to complete the Cloudflare challenge."
+          "desc": "Maximum time allowed Clearance Provider complete Cloudflare challenge."
         },
         "refreshInterval": {
           "label": "Intervalo de actualización (s)",

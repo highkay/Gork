@@ -1,19 +1,21 @@
 services:
   # ── WARP: Cloudflare 出口代理 ─────────────────────────────────────────────
   warp-proxy:
-    image: ${WARP_IMAGE:-caomingjun/warp@sha256:905b91c3fe197a625611064ef0664f27e9ecdd0a30a91c4ae7046e06a2bf2643}
+    image: ${WARP_IMAGE:-ghcr.io/ccbkkb/microwarp:latest}
     container_name: warp-proxy
     restart: unless-stopped
     mem_limit: ${WARP_MEM_LIMIT:-256m}
     cpus: ${WARP_CPUS:-0.5}
     environment:
-      - WARP_SLEEP=2
+      - SOCKS_PORT=1080
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=0
       - net.ipv4.conf.all.src_valid_mark=1
+    volumes:
+      - warp-data:/etc/wireguard
 
   # ── Privoxy: HTTP 代理，转发到 WARP SOCKS5 ───────────────────────────────
   privoxy:
@@ -27,16 +29,19 @@ services:
     depends_on:
       - warp-proxy
 
-  # ── FlareSolverr: 自动解 Cloudflare 挑战 ────────────────────────────────
-  flaresolverr:
-    image: ${FLARESOLVERR_IMAGE:-ghcr.io/flaresolverr/flaresolverr@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47}
-    container_name: flaresolverr
+  # ── Byparr: 自动解 Cloudflare 挑战 ─────────────────────────────────────
+  byparr:
+    image: ${BYPARR_IMAGE:-ghcr.io/thephaseless/byparr:latest}
+    container_name: byparr
     restart: unless-stopped
-    mem_limit: ${FLARESOLVERR_MEM_LIMIT:-512m}
-    cpus: ${FLARESOLVERR_CPUS:-1.0}
+    mem_limit: ${BYPARR_MEM_LIMIT:-1g}
+    cpus: ${BYPARR_CPUS:-1.0}
     environment:
       TZ: Asia/Shanghai
       LOG_LEVEL: info
+    depends_on:
+      privoxy:
+        condition: service_started
 
   # ── gork ──────────────────────────────────────────────────────────────
   gork:
@@ -82,5 +87,19 @@ services:
         condition: service_started
       privoxy:
         condition: service_started
-      flaresolverr:
+      byparr:
         condition: service_started
+
+  # ── FlareSolverr fallback: 将 proxy.clearance.mode 改回 flaresolverr 时启用 ──
+  # flaresolverr:
+  #   image: ${FLARESOLVERR_IMAGE:-ghcr.io/flaresolverr/flaresolverr@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47}
+  #   container_name: flaresolverr
+  #   restart: unless-stopped
+  #   mem_limit: ${FLARESOLVERR_MEM_LIMIT:-512m}
+  #   cpus: ${FLARESOLVERR_CPUS:-1.0}
+  #   environment:
+  #     TZ: Asia/Shanghai
+  #     LOG_LEVEL: info
+
+volumes:
+  warp-data:

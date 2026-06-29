@@ -35,7 +35,7 @@ func (f fakeProductionConfigBackend) Close(context.Context) error {
 	return nil
 }
 
-func TestProductionDirectoryOptionsUseGlobalConfigAndFlareSolverr(t *testing.T) {
+func TestProductionDirectoryOptionsUseGlobalConfigAndClearanceProviders(t *testing.T) {
 	previous := platformconfig.GlobalConfig
 	t.Cleanup(func() { platformconfig.GlobalConfig = previous })
 
@@ -51,7 +51,8 @@ func TestProductionDirectoryOptionsUseGlobalConfigAndFlareSolverr(t *testing.T) 
 					"proxy_url": "http://proxy:8080",
 				},
 				"clearance": map[string]any{
-					"mode":             "flaresolverr",
+					"mode":             "byparr",
+					"byparr_url":       "http://byparr:8191",
 					"flaresolverr_url": "http://solver:8191",
 				},
 			},
@@ -65,11 +66,14 @@ func TestProductionDirectoryOptionsUseGlobalConfigAndFlareSolverr(t *testing.T) 
 	if _, ok := options.FlareProvider.(providers.FlareSolverrClearanceProvider); !ok {
 		t.Fatalf("FlareProvider = %T, want FlareSolverrClearanceProvider", options.FlareProvider)
 	}
+	if _, ok := options.ByparrProvider.(providers.ByparrClearanceProvider); !ok {
+		t.Fatalf("ByparrProvider = %T, want ByparrClearanceProvider", options.ByparrProvider)
+	}
 	directory := controlproxy.NewProxyDirectory(options)
 	if err := directory.Load(context.Background()); err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if directory.EgressMode() != controlproxy.EgressModeSingleProxy || directory.ClearanceMode() != controlproxy.ClearanceModeFlareSolverr {
+	if directory.EgressMode() != controlproxy.EgressModeSingleProxy || directory.ClearanceMode() != controlproxy.ClearanceModeByparr {
 		t.Fatalf("directory modes = %s/%s", directory.EgressMode(), directory.ClearanceMode())
 	}
 	if directory.NodeCount() != 1 {

@@ -34,6 +34,7 @@ const (
 	ClearanceModeNone         ClearanceMode = "none"
 	ClearanceModeManual       ClearanceMode = "manual"
 	ClearanceModeFlareSolverr ClearanceMode = "flaresolverr"
+	ClearanceModeByparr       ClearanceMode = "byparr"
 )
 
 func ParseClearanceMode(value any) (ClearanceMode, error) {
@@ -59,7 +60,7 @@ func parseClearanceModeString(value string) (ClearanceMode, error) {
 
 func validateClearanceMode(mode ClearanceMode) (ClearanceMode, error) {
 	switch mode {
-	case ClearanceModeNone, ClearanceModeManual, ClearanceModeFlareSolverr:
+	case ClearanceModeNone, ClearanceModeManual, ClearanceModeFlareSolverr, ClearanceModeByparr:
 		return mode, nil
 	default:
 		return "", fmt.Errorf("invalid ClearanceMode: %q", mode)

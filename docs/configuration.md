@@ -1,9 +1,3 @@
-# Configuration Reference
-
-This file is generated from `config.defaults.toml` through `gork config docs`. Do not hand-edit the table without updating the schema in `app/platform/config`.
-
-Runtime config keys can be set in TOML or overridden by the listed `GROK_` environment names. Startup-only storage variables `ACCOUNT_STORAGE`, `ACCOUNT_REDIS_URL`, `ACCOUNT_MYSQL_URL`, `ACCOUNT_POSTGRESQL_URL`, `CONFIG_LOCAL_PATH`, `DATA_DIR`, and `RUNTIME_REDIS_URL` remain documented in README and operations docs because they are read before the hot-reload config snapshot is created.
-
 | Key | Type | Default | Env | Hot reload | Sensitive | Description |
 | :-- | :-- | :-- | :-- | :-- | :-- | :-- |
 | `account.invalid_credentials.max_failures` | `int` | `3` | `GROK_ACCOUNT_INVALID_CREDENTIALS_MAX_FAILURES` | `true` | `false` | Consecutive invalid-credential failures before an account is expired. |
@@ -64,9 +58,10 @@ Runtime config keys can be set in TOML or overridden by the listed `GROK_` envir
 | `observability.metrics_enabled` | `bool` | `false` | `GROK_OBSERVABILITY_METRICS_ENABLED` | `true` | `false` | Exposes Prometheus metrics at /metrics. |
 | `observability.pprof_enabled` | `bool` | `false` | `GROK_OBSERVABILITY_PPROF_ENABLED` | `true` | `false` | Exposes Go pprof endpoints under /debug/pprof. |
 | `proxy.clearance.browser` | `string` | `chrome136` | `GROK_PROXY_CLEARANCE_BROWSER` | `true` | `false` | curl_cffi browser fingerprint used for manual Cloudflare clearance. |
+| `proxy.clearance.byparr_url` | `string` | `http://byparr:8191` | `GROK_PROXY_CLEARANCE_BYPARR_URL` | `false` | `false` | Byparr service URL used refresh Cloudflare clearance. |
 | `proxy.clearance.cf_cookies` | `string` | `` | `GROK_PROXY_CLEARANCE_CF_COOKIES` | `true` | `true` | Manual Cloudflare Cookie header value. |
 | `proxy.clearance.flaresolverr_url` | `string` | `http://flaresolverr:8191` | `GROK_PROXY_CLEARANCE_FLARESOLVERR_URL` | `false` | `false` | FlareSolverr service URL used to refresh Cloudflare clearance. |
-| `proxy.clearance.mode` | `string` | `flaresolverr` | `GROK_PROXY_CLEARANCE_MODE` | `true` | `false` | Cloudflare clearance mode: none, manual, or flaresolverr. |
+| `proxy.clearance.mode` | `string` | `byparr` | `GROK_PROXY_CLEARANCE_MODE` | `true` | `false` | Cloudflare clearance mode: none, manual, flaresolverr, or byparr. |
 | `proxy.clearance.refresh_interval` | `int` | `3600` | `GROK_PROXY_CLEARANCE_REFRESH_INTERVAL` | `true` | `false` | Cloudflare clearance refresh interval in seconds. |
 | `proxy.clearance.timeout_sec` | `int` | `60` | `GROK_PROXY_CLEARANCE_TIMEOUT_SEC` | `true` | `false` | Cloudflare challenge wait timeout in seconds. |
 | `proxy.clearance.user_agent` | `string` | `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36` | `GROK_PROXY_CLEARANCE_USER_AGENT` | `true` | `false` | User-Agent that must match the clearance cookie source browser. |

@@ -20,11 +20,12 @@ resource_proxy_pool = []
 skip_ssl_verify = false
 
 [proxy.clearance]
-mode = "flaresolverr"
+mode = "byparr"
 cf_cookies = ""
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 browser = "chrome136"
 flaresolverr_url = "http://flaresolverr:8191"
+byparr_url = "http://byparr:8191"
 timeout_sec = 60
 refresh_interval = 3600
 `

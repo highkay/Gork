@@ -52,7 +52,7 @@
 可能原因：
 
 - 上游 Grok 临时失败。
-- 代理或 FlareSolverr 不可用。
+- 代理或 Byparr 不可用。
 - 本地数据库、Redis 或文件系统异常。
 
 处理：
@@ -66,12 +66,12 @@
 
 表现：
 
-- 403、challenge 页面、clearance 刷新失败、FlareSolverr 超时。
+- 403、challenge 页面、clearance 刷新失败、Byparr 超时。
 
 处理：
 
 1. 标准版优先确认是否真的需要防封版。
-2. 防封版检查 `warp-proxy`、`privoxy`、`flaresolverr` 三个容器是否 healthy。
+2. 防封版检查 `warp-proxy`、`privoxy`、`byparr` 三个容器是否已启动。
 3. 调高 `proxy.clearance.timeout_sec`。
 4. 手动模式下重新采集 `cf_clearance` 与 User-Agent。
 
@@ -104,4 +104,3 @@
 2. 降低 `batch.asset_upload_concurrency`。
 3. 调整 `asset.upload_timeout`、`asset.list_timeout`、`asset.delete_timeout`。
 4. 在 Admin 缓存页清理异常缓存项。
-

@@ -209,3 +209,9 @@ type noopFlareClearanceProvider struct{}
 func (noopFlareClearanceProvider) RefreshBundle(context.Context, string, string, ...string) (ClearanceBundle, bool, error) {
 	return ClearanceBundle{}, false, nil
 }
+
+type noopByparrClearanceProvider struct{}
+
+func (noopByparrClearanceProvider) RefreshBundle(context.Context, string, string, ...string) (ClearanceBundle, bool, error) {
+	return ClearanceBundle{}, false, nil
+}
