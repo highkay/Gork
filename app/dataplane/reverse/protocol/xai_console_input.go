@@ -32,14 +32,6 @@ func consoleInputItems(message map[string]any) []map[string]any {
 	return items
 }
 
-func consoleInputItem(message map[string]any) map[string]any {
-	items := consoleInputItems(message)
-	if len(items) == 0 {
-		return nil
-	}
-	return items[0]
-}
-
 func assistantToolCallsToConsole(raw any) []map[string]any {
 	calls := toolCallMaps(raw)
 	items := make([]map[string]any, 0, len(calls))

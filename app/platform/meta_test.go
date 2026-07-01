@@ -1,9 +1,6 @@
 package platform
 
-import (
-	"strings"
-	"testing"
-)
+import "testing"
 
 func TestGetProjectMetaReturnsGoRuntimeMetadata(t *testing.T) {
 	meta := GetProjectMeta()
@@ -53,29 +50,4 @@ version = "ignored"
 	if _, ok := values["description"]; ok {
 		t.Fatalf("description should not be captured: %#v", values)
 	}
-}
-
-func findTomlStringValue(t *testing.T, content, key string) string {
-	t.Helper()
-	inProject := false
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "[project]" {
-			inProject = true
-			continue
-		}
-		if strings.HasPrefix(line, "[") && line != "[project]" {
-			inProject = false
-		}
-		if !inProject || !strings.HasPrefix(line, key+" ") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			t.Fatalf("invalid TOML line for %s: %q", key, line)
-		}
-		return strings.Trim(strings.TrimSpace(parts[1]), "\"")
-	}
-	t.Fatalf("missing [project].%s in pyproject.toml", key)
-	return ""
 }

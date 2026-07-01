@@ -6,10 +6,6 @@ import (
 	"testing"
 )
 
-func int64Ptr(value int64) *int64 {
-	return &value
-}
-
 func TestQuotaWindowRoundTripAndState(t *testing.T) {
 	window, err := QuotaWindowFromDict(map[string]any{
 		"remaining":      "0",

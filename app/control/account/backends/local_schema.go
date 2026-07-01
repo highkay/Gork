@@ -69,15 +69,6 @@ func setLocalSchemaVersion(ctx context.Context, db localSQLRunner, name string, 
 	return err
 }
 
-func getLocalSchemaVersion(ctx context.Context, db localSQLRunner, name string) (int, error) {
-	var version int
-	err := db.QueryRowContext(ctx, "SELECT version FROM "+localSchemaVersionTable+" WHERE name = ?", name).Scan(&version)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	return version, err
-}
-
 func bumpLocalRevision(ctx context.Context, db localSQLRunner) (int, error) {
 	_, err := db.ExecContext(
 		ctx,

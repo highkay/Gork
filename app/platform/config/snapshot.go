@@ -328,25 +328,3 @@ var GlobalConfig = NewConfigSnapshot(nil, ConfigSnapshotOptions{})
 func GetConfig(key string, defaultValue any) any {
 	return GlobalConfig.Get(key, defaultValue)
 }
-
-type noopConfigBackend struct{}
-
-func (noopConfigBackend) Load(context.Context) (map[string]any, error) {
-	return map[string]any{}, nil
-}
-
-func (noopConfigBackend) ApplyPatch(context.Context, map[string]any) error {
-	return nil
-}
-
-func (noopConfigBackend) Clear(context.Context) error {
-	return nil
-}
-
-func (noopConfigBackend) Version(context.Context) (any, error) {
-	return nil, nil
-}
-
-func (noopConfigBackend) Close(context.Context) error {
-	return nil
-}

@@ -16,11 +16,6 @@ func sqlPlaceholders(dialect SQLDialect, start int, count int) string {
 	return strings.Join(items, ",")
 }
 
-func sqlScanChangesQuery(dialect SQLDialect) string {
-	return "SELECT " + localAccountColumns + " FROM accounts WHERE revision > " +
-		sqlBind(dialect, 1) + " ORDER BY revision LIMIT " + sqlBind(dialect, 2)
-}
-
 func sqlScanRevisionChangesQuery(dialect SQLDialect) string {
 	return "SELECT " + localAccountColumns + " FROM accounts WHERE revision = " +
 		sqlBind(dialect, 1) + " ORDER BY token"

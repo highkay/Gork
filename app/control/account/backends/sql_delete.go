@@ -53,28 +53,6 @@ func deleteSQLAccounts(
 	return affectedRows(result)
 }
 
-func (r *SQLAccountRepository) deletePoolForReplace(ctx context.Context, pool string) (int, error) {
-	r.mutationMux.Lock()
-	defer r.mutationMux.Unlock()
-	tx, err := r.beginSQLMutation(ctx)
-	if err != nil {
-		return 0, err
-	}
-	defer tx.Rollback()
-	revision, err := bumpSQLRevision(ctx, tx, r.dialect)
-	if err != nil {
-		return 0, err
-	}
-	deleted, err := deleteSQLPool(ctx, tx, r.dialect, pool, revision)
-	if err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return deleted, nil
-}
-
 func deleteSQLPool(
 	ctx context.Context,
 	tx localSQLRunner,

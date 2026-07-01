@@ -3,7 +3,6 @@ package backends
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"strings"
 
 	account "github.com/dslzl/gork/app/control/account"
@@ -294,11 +293,4 @@ func placeholders(n int) string {
 		return ""
 	}
 	return strings.TrimRight(strings.Repeat("?,", n), ",")
-}
-
-func localQueryError(name string, err error) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("%s: %w", name, err)
 }

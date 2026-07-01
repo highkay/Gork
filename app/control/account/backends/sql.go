@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"sync"
-
-	account "github.com/dslzl/gork/app/control/account"
 )
 
 type SQLDialect string
@@ -81,8 +79,4 @@ func (r *SQLAccountRepository) ensureInitialized(ctx context.Context) error {
 	}
 	r.initialized = true
 	return nil
-}
-
-func newSQLRepository(db *sql.DB, dialect SQLDialect) account.AccountRepository {
-	return NewSQLAccountRepository(db, dialect, true)
 }

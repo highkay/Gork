@@ -534,19 +534,6 @@ func migrationQueryPools(queries []ListAccountsQuery) []string {
 	return pools
 }
 
-func fakeConfigBool(data map[string]any, keys ...string) bool {
-	var current any = data
-	for _, key := range keys {
-		asMap, ok := current.(map[string]any)
-		if !ok {
-			return false
-		}
-		current = asMap[key]
-	}
-	value, _ := current.(bool)
-	return value
-}
-
 func fakeMigrationCompleted(data map[string]any, name string) bool {
 	startup, _ := data["startup"].(map[string]any)
 	migrations, _ := startup["migrations"].(map[string]any)

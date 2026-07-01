@@ -126,16 +126,6 @@ func setSQLSchemaVersion(ctx context.Context, db localSQLRunner, dialect SQLDial
 	return err
 }
 
-func getSQLSchemaVersion(ctx context.Context, db localSQLRunner, dialect SQLDialect, name string) (int, error) {
-	query := "SELECT version FROM account_schema_versions WHERE name = " + sqlBind(dialect, 1)
-	var version int
-	err := db.QueryRowContext(ctx, query, name).Scan(&version)
-	if err == sql.ErrNoRows {
-		return 0, nil
-	}
-	return version, err
-}
-
 func ensureSQLIndexes(ctx context.Context, db localSQLRunner, dialect SQLDialect) error {
 	if dialect != SQLDialectMySQL {
 		return nil
