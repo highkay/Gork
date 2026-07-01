@@ -2,7 +2,6 @@ package openai
 
 import (
 	"context"
-	"strings"
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 )
@@ -19,65 +18,37 @@ type consumeChatLinesOptions struct {
 }
 
 func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatCompletionState, []string, error) {
-	adapter := protocol.NewStreamAdapter(protocol.StreamAdapterOptions{
+	runState, events, err := consumeTextRunLines(lines, textRunOptions{
+		Context:           options.Context,
+		Token:             options.Token,
+		EmitThinking:      options.EmitThink,
 		ThinkingSummary:   options.EmitThink,
 		ShowSearchSources: true,
+		ToolNames:         options.ToolNames,
+		DisableTools:      options.DisableTools,
+		EnableToolSieve:   options.IsStream,
 	})
-	frames := []string{}
-	ended := false
-	toolCallsEmitted := false
-	var sieve *ToolSieve
-	if options.IsStream && (len(options.ToolNames) > 0 || options.DisableTools) {
-		sieve = NewToolSieve(options.ToolNames)
+	if err != nil {
+		return chatCompletionState{}, nil, err
 	}
 
-	for _, line := range lines {
-		eventType, data := protocol.ClassifyLine(line)
-		if eventType == "done" {
-			ended = true
-			break
-		}
-		if eventType != "data" || data == "" {
-			continue
-		}
-		events, err := adapter.Feed(data)
-		if err != nil {
-			return chatCompletionState{}, nil, err
-		}
-		if !options.IsStream {
-			continue
-		}
+	frames := []string{}
+	toolCallsEmitted := false
+	if options.IsStream {
 		for _, event := range events {
 			if toolCallsEmitted {
 				continue
 			}
 			switch event.Kind {
 			case "text":
-				if event.Content != "" {
-					content := event.Content
-					if sieve != nil {
-						safeText, calls := sieve.Feed(event.Content)
-						if safeText != "" {
-							frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
-								ResponseID: options.ResponseID,
-								Model:      options.Model,
-								Content:    safeText,
-							})))
-						}
-						if calls != nil {
-							if !options.DisableTools {
-								frames = appendToolCallFrames(frames, options.ResponseID, options.Model, calls)
-								toolCallsEmitted = true
-							}
-						}
-						continue
-					}
-					frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
-						ResponseID: options.ResponseID,
-						Model:      options.Model,
-						Content:    content,
-					})))
+				if event.Content == "" {
+					continue
 				}
+				frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
+					ResponseID: options.ResponseID,
+					Model:      options.Model,
+					Content:    event.Content,
+				})))
 			case "thinking":
 				if options.EmitThink && event.Content != "" {
 					frames = append(frames, formatChatDataFrame(MakeThinkingChunk(ThinkingChunkParams{
@@ -86,37 +57,14 @@ func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatComp
 						Content:    event.Content,
 					})))
 				}
+			case "tool_calls":
+				frames = appendToolCallFrames(frames, options.ResponseID, options.Model, event.ToolCalls)
+				toolCallsEmitted = true
 			}
 		}
 	}
 
-	if options.IsStream && !toolCallsEmitted && sieve != nil {
-		if calls := sieve.Flush(); calls != nil {
-			frames = appendToolCallFrames(frames, options.ResponseID, options.Model, calls)
-			toolCallsEmitted = true
-		}
-	}
-
-	state := chatCompletionState{
-		Text:          strings.Join(adapter.TextBuf, ""),
-		Thinking:      strings.Join(adapter.ThinkingBuf, ""),
-		References:    adapter.ReferencesSuffix(),
-		Annotations:   adapter.AnnotationsList(),
-		SearchSources: adapter.SearchSourcesList(),
-	}
-	if options.DisableTools {
-		state.Text = suppressToolSyntax(state.Text)
-	}
-	for _, image := range adapter.ImageURLs {
-		ctx := options.Context
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		resolved, err := resolveImage(ctx, options.Token, image.URL, image.ImageID)
-		if err == nil && resolved != "" {
-			state.ImageTexts = append(state.ImageTexts, resolved)
-		}
-	}
+	state := chatStateFromTextRun(runState)
 
 	if options.IsStream && !toolCallsEmitted {
 		final := MakeStreamChunk(StreamChunkParams{
@@ -131,7 +79,6 @@ func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatComp
 		}
 		frames = append(frames, formatChatDataFrame(final), "data: [DONE]\n\n")
 	}
-	_ = ended
 	return state, frames, nil
 }
 
