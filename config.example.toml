@@ -128,6 +128,8 @@ resource_proxy_url = ""
 resource_proxy_pool = []
 # 跳过代理 SSL 证书验证（代理使用自签名证书时启用）
 skip_ssl_verify = false
+# 使用 surf 传输指纹（可关闭以回退 net/http）
+surf_enabled = true
 
 [proxy.clearance]
 # Cloudflare clearance 模式：none | manual | flaresolverr | byparr

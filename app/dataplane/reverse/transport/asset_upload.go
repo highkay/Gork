@@ -133,7 +133,7 @@ func uploadFileInner(ctx context.Context, token string, filename string, mime st
 		return AssetUploadResult{}, assetTransportError("Asset upload transport error", err)
 	}
 	headers := proxyadapters.BuildHTTPHeaders(token, proxyadapters.HTTPHeaderOptions{Lease: lease})
-	response, err := option.Client.Post(ctx, reverseruntime.GlobalEndpointTable().Resolve("assets_upload"), headers, payload, option.UploadTimeout)
+	response, err := option.Client.Post(withHTTPTransportProfile(ctx, lease), reverseruntime.GlobalEndpointTable().Resolve("assets_upload"), headers, payload, option.UploadTimeout)
 	if err != nil {
 		feedbackAssetTransport(ctx, option.ProxyRuntime, lease)
 		return AssetUploadResult{}, assetTransportError("Asset upload transport error", err)
@@ -151,7 +151,7 @@ func uploadFromURL(ctx context.Context, token string, fileURL string, option Ass
 		return AssetUploadResult{}, err
 	}
 	headers := proxyadapters.BuildHTTPHeaders(token, proxyadapters.HTTPHeaderOptions{Lease: lease})
-	response, err := option.Client.Get(ctx, fileURL, headers, option.FetchTimeout)
+	response, err := option.Client.Get(withHTTPTransportProfile(ctx, lease), fileURL, headers, option.FetchTimeout)
 	if err != nil {
 		feedbackAssetTransport(ctx, option.ProxyRuntime, lease)
 		return AssetUploadResult{}, assetTransportError("Asset fetch transport error", err)

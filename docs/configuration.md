@@ -71,6 +71,7 @@
 | `proxy.egress.resource_proxy_pool` | `string_list` | `[]` | `GROK_PROXY_EGRESS_RESOURCE_PROXY_POOL` | `true` | `false` | Proxy pool for image/video downloads; falls back to proxy_pool. |
 | `proxy.egress.resource_proxy_url` | `string` | `http://privoxy:8118` | `GROK_PROXY_EGRESS_RESOURCE_PROXY_URL` | `false` | `false` | Proxy URL for image/video downloads; falls back to proxy_url. |
 | `proxy.egress.skip_ssl_verify` | `bool` | `false` | `GROK_PROXY_EGRESS_SKIP_SSL_VERIFY` | `true` | `false` | Skips proxy TLS certificate validation for self-signed proxy endpoints. |
+| `proxy.egress.surf_enabled` | `bool` | `true` | `GROK_PROXY_EGRESS_SURF_ENABLED` | `true` | `false` | Enables surf-backed browser TLS/HTTP fingerprinting for HTTP egress. |
 | `retry.max_retries` | `int` | `1` | `GROK_RETRY_MAX_RETRIES` | `true` | `false` | Maximum application-level account-switch retries; 0 disables retries. |
 | `retry.on_codes` | `string` | `429,401,503` | `GROK_RETRY_ON_CODES` | `true` | `false` | Comma-separated HTTP status codes that trigger account-switch retries. |
 | `retry.reset_session_status_codes` | `string_list` | `[403]` | `GROK_RETRY_RESET_SESSION_STATUS_CODES` | `true` | `false` | HTTP status codes that rebuild transport proxy sessions. |

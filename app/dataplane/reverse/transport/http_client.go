@@ -14,7 +14,7 @@ import (
 
 const defaultMaxHTTPBodyBytes int64 = 8 << 20
 
-var defaultNetHTTPDoer HTTPDoer = http.DefaultClient
+var defaultNetHTTPDoer HTTPDoer = newSurfHTTPDoer(http.DefaultClient)
 
 type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
@@ -39,6 +39,7 @@ func (c netHTTPClient) Delete(ctx context.Context, request HTTPRequest) (HTTPRes
 
 func (c netHTTPClient) do(ctx context.Context, method string, request HTTPRequest) (HTTPResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, request.Timeout)
+	ctx = withHTTPTransportProfile(ctx, request.Lease)
 	rawRequest, err := http.NewRequestWithContext(ctx, method, httpRequestURL(request), bytes.NewReader(request.Payload))
 	if err != nil {
 		cancel()

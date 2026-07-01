@@ -33,6 +33,7 @@ func (netHTTPAssetsClient) DeleteJSON(ctx context.Context, request AssetsHTTPReq
 
 func (netHTTPAssetsClient) GetBytesStream(ctx context.Context, request AssetsHTTPRequest) (io.ReadCloser, error) {
 	ctx, cancel := context.WithTimeout(ctx, request.Timeout)
+	ctx = withHTTPTransportProfile(ctx, request.Lease)
 	rawRequest, err := http.NewRequestWithContext(ctx, http.MethodGet, assetsRequestURL(request), nil)
 	if err != nil {
 		cancel()
@@ -55,6 +56,7 @@ func (netHTTPAssetsClient) GetBytesStream(ctx context.Context, request AssetsHTT
 
 func doAssetsHTTPRequest(ctx context.Context, method string, request AssetsHTTPRequest, body []byte) (AssetHTTPResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, request.Timeout)
+	ctx = withHTTPTransportProfile(ctx, request.Lease)
 	defer cancel()
 	rawRequest, err := http.NewRequestWithContext(ctx, method, assetsRequestURL(request), bytes.NewReader(body))
 	if err != nil {

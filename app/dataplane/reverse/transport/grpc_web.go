@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	platform "github.com/dslzl/gork/app/platform"
@@ -30,6 +31,7 @@ type GRPCWebHTTPRequest struct {
 	URL      string
 	Token    string
 	Payload  []byte
+	Lease    *controlproxy.ProxyLease
 	TimeoutS float64
 	Headers  map[string]string
 }
@@ -108,6 +110,7 @@ func PostGRPCWeb(ctx context.Context, request protocol.GRPCWebRequest, options .
 		URL:      request.URL,
 		Token:    request.Token,
 		Payload:  request.Payload,
+		Lease:    request.Lease,
 		TimeoutS: timeoutS,
 		Headers:  headers,
 	})
@@ -252,6 +255,7 @@ type netHTTPGRPCWebClient struct{}
 func (netHTTPGRPCWebClient) Post(ctx context.Context, request GRPCWebHTTPRequest) (GRPCWebHTTPResponse, error) {
 	timeout := time.Duration(request.TimeoutS * float64(time.Second))
 	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx = withHTTPTransportProfile(ctx, request.Lease)
 	defer cancel()
 	rawRequest, err := http.NewRequestWithContext(ctx, http.MethodPost, request.URL, bytes.NewReader(request.Payload))
 	if err != nil {

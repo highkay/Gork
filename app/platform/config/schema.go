@@ -386,6 +386,7 @@ var configDescriptions = map[string]string{
 	"proxy.egress.resource_proxy_pool":           "Proxy pool for image/video downloads; falls back to proxy_pool.",
 	"proxy.egress.resource_proxy_url":            "Proxy URL for image/video downloads; falls back to proxy_url.",
 	"proxy.egress.skip_ssl_verify":               "Skips proxy TLS certificate validation for self-signed proxy endpoints.",
+	"proxy.egress.surf_enabled":                  "Enables surf-backed browser TLS/HTTP fingerprinting for HTTP egress.",
 	"retry.max_retries":                          "Maximum application-level account-switch retries; 0 disables retries.",
 	"retry.on_codes":                             "Comma-separated HTTP status codes that trigger account-switch retries.",
 	"retry.reset_session_status_codes":           "HTTP status codes that rebuild transport proxy sessions.",
