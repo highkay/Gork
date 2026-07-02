@@ -2,10 +2,62 @@ package openai
 
 import (
 	"context"
+	"sync"
 
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/redact"
 )
+
+const chatRefreshQueueCapacity = 16
+
+var chatRefreshEnqueue = newChatRefreshQueue(chatRefreshQueueCapacity).enqueue
+
+type chatRefreshQueue struct {
+	once sync.Once
+	jobs chan func()
+}
+
+func newChatRefreshQueue(capacity int) *chatRefreshQueue {
+	if capacity <= 0 {
+		capacity = 1
+	}
+	return &chatRefreshQueue{jobs: make(chan func(), capacity)}
+}
+
+func (q *chatRefreshQueue) enqueue(job func()) bool {
+	if q == nil || job == nil {
+		return false
+	}
+	q.once.Do(func() {
+		go q.run()
+	})
+	select {
+	case q.jobs <- job:
+		return true
+	default:
+		// ponytail: one bounded worker; drop excess refresh jobs if quota traffic spikes.
+		return false
+	}
+}
+
+func (q *chatRefreshQueue) run() {
+	for job := range q.jobs {
+		job()
+	}
+}
+
+func enqueueChatRefresh(ctx context.Context, job func(context.Context)) {
+	if job == nil {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	jobCtx := context.WithoutCancel(ctx)
+	_ = chatRefreshEnqueue(func() {
+		job(jobCtx)
+	})
+}
 
 func upstreamBodyExcerpt(err *platform.UpstreamError, limit int) string {
 	if err == nil {
@@ -48,7 +100,9 @@ func quotaSync(ctx context.Context, token string, modeID int) {
 	if service == nil {
 		return
 	}
-	_ = service.RefreshCall(ctx, token, modeID)
+	enqueueChatRefresh(ctx, func(ctx context.Context) {
+		_ = service.RefreshCall(ctx, token, modeID)
+	})
 }
 
 func failSync(ctx context.Context, token string, modeID int, err error) {
@@ -58,7 +112,9 @@ func failSync(ctx context.Context, token string, modeID int, err error) {
 	}
 	_ = service.RecordFailure(ctx, token, modeID, err)
 	if currentAccountStrategy() == "quota" && upstreamStatus(err) == 429 {
-		_, _ = service.RefreshOnDemand(ctx)
+		enqueueChatRefresh(ctx, func(ctx context.Context) {
+			_, _ = service.RefreshOnDemand(ctx)
+		})
 	}
 }
 

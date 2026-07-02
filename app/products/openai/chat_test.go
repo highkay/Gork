@@ -453,6 +453,110 @@ func TestChatFailSyncRecordsFailureAndRefreshesQuota429(t *testing.T) {
 	}
 }
 
+func TestChatQuotaSyncQueuesRefreshWork(t *testing.T) {
+	resetChatDepsForTest(t)
+	refresh := &blockingChatRefreshService{
+		refreshStarted: make(chan struct{}),
+		refreshRelease: make(chan struct{}),
+		refreshDone:    make(chan struct{}),
+	}
+	chatRefreshService = func() chatRefreshProvider { return refresh }
+	currentAccountStrategy = func() string { return "quota" }
+	chatRefreshEnqueue = newChatRefreshQueue(1).enqueue
+
+	start := time.Now()
+	quotaSync(context.Background(), "tok", 3)
+	if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+		t.Fatalf("quotaSync blocked for %s", elapsed)
+	}
+	select {
+	case <-refresh.refreshStarted:
+	case <-time.After(time.Second):
+		t.Fatal("queued refresh did not start")
+	}
+	close(refresh.refreshRelease)
+	select {
+	case <-refresh.refreshDone:
+	case <-time.After(time.Second):
+		t.Fatal("queued refresh did not finish")
+	}
+}
+
+func TestChatFailSyncRecordsFailureSynchronouslyAndQueuesQuotaRefresh(t *testing.T) {
+	resetChatDepsForTest(t)
+	refresh := &blockingChatRefreshService{
+		onDemandStarted: make(chan struct{}),
+		onDemandRelease: make(chan struct{}),
+		onDemandDone:    make(chan struct{}),
+	}
+	chatRefreshService = func() chatRefreshProvider { return refresh }
+	currentAccountStrategy = func() string { return "quota" }
+	chatRefreshEnqueue = newChatRefreshQueue(1).enqueue
+
+	start := time.Now()
+	failSync(context.Background(), "tok", 3, platform.NewUpstreamError("rate", 429, ""))
+	if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+		t.Fatalf("failSync blocked for %s", elapsed)
+	}
+	if _, recordCalls, _ := refresh.counts(); recordCalls != 1 {
+		t.Fatalf("record failure calls=%d", recordCalls)
+	}
+	select {
+	case <-refresh.onDemandStarted:
+	case <-time.After(time.Second):
+		t.Fatal("queued on-demand refresh did not start")
+	}
+	close(refresh.onDemandRelease)
+	select {
+	case <-refresh.onDemandDone:
+	case <-time.After(time.Second):
+		t.Fatal("queued on-demand refresh did not finish")
+	}
+}
+
+func TestChatRefreshQueueDropsWhenFull(t *testing.T) {
+	queue := newChatRefreshQueue(1)
+	started := make(chan struct{})
+	release := make(chan struct{})
+	if !queue.enqueue(func() {
+		close(started)
+		<-release
+	}) {
+		t.Fatal("first refresh job should enqueue")
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first refresh job did not start")
+	}
+	if !queue.enqueue(func() {}) {
+		t.Fatal("second refresh job should fill queue")
+	}
+	if queue.enqueue(func() {}) {
+		t.Fatal("third refresh job should be dropped when queue is full")
+	}
+	close(release)
+}
+
+func BenchmarkChatQuotaSyncResponsePath(b *testing.B) {
+	oldStrategy := currentAccountStrategy
+	oldRefresh := chatRefreshService
+	oldRefreshEnqueue := chatRefreshEnqueue
+	currentAccountStrategy = func() string { return "quota" }
+	chatRefreshService = func() chatRefreshProvider { return &fakeChatRefreshService{} }
+	chatRefreshEnqueue = func(func()) bool { return true }
+	b.Cleanup(func() {
+		currentAccountStrategy = oldStrategy
+		chatRefreshService = oldRefresh
+		chatRefreshEnqueue = oldRefreshEnqueue
+	})
+
+	b.ReportAllocs()
+	for i := 0; i < b.N; i++ {
+		quotaSync(context.Background(), "tok", 5)
+	}
+}
+
 func TestChatBuildNonStreamResponseReturnsToolCallsWhenParsed(t *testing.T) {
 	resetChatDepsForTest(t)
 	state := chatCompletionState{
@@ -589,11 +693,19 @@ func TestChatProductionDefaultsUseConfigRefreshAndInvalidCredentialsRuntime(t *t
 	oldConfig := platformconfig.GlobalConfig
 	oldStrategy := dataaccount.CurrentStrategy()
 	oldRefresh := controlaccount.GetRefreshService()
+	oldRefreshEnqueue := chatRefreshEnqueue
 	t.Cleanup(func() {
 		platformconfig.GlobalConfig = oldConfig
 		_ = dataaccount.SetStrategy(oldStrategy)
 		controlaccount.SetRefreshService(oldRefresh)
+		chatRefreshEnqueue = oldRefreshEnqueue
 	})
+	chatRefreshEnqueue = func(job func()) bool {
+		if job != nil {
+			job()
+		}
+		return true
+	}
 
 	defaults := filepath.Join(t.TempDir(), "config.defaults.toml")
 	if err := os.WriteFile(defaults, []byte("[features]\nstream = true\nthinking = true\n\n[chat]\ntimeout = 120.0\n\n[retry]\non_codes = \"429,401,503\"\n"), 0o600); err != nil {
@@ -1136,6 +1248,70 @@ func (s *fakeRuntimeChatRefreshService) RefreshOnDemand(context.Context) (contro
 	return controlaccount.RefreshResult{Refreshed: 1}, nil
 }
 
+type blockingChatRefreshService struct {
+	mu              sync.Mutex
+	refreshCalls    int
+	recordCalls     int
+	onDemandCalls   int
+	refreshStarted  chan struct{}
+	refreshRelease  chan struct{}
+	refreshDone     chan struct{}
+	onDemandStarted chan struct{}
+	onDemandRelease chan struct{}
+	onDemandDone    chan struct{}
+}
+
+func (s *blockingChatRefreshService) RefreshCall(ctx context.Context, _ string, _ int) error {
+	s.mu.Lock()
+	s.refreshCalls++
+	s.mu.Unlock()
+	signalChatTest(s.refreshStarted)
+	err := waitChatTest(ctx, s.refreshRelease)
+	signalChatTest(s.refreshDone)
+	return err
+}
+
+func (s *blockingChatRefreshService) RecordFailure(context.Context, string, int, error) error {
+	s.mu.Lock()
+	s.recordCalls++
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *blockingChatRefreshService) RefreshOnDemand(ctx context.Context) (chatRefreshResult, error) {
+	s.mu.Lock()
+	s.onDemandCalls++
+	s.mu.Unlock()
+	signalChatTest(s.onDemandStarted)
+	err := waitChatTest(ctx, s.onDemandRelease)
+	signalChatTest(s.onDemandDone)
+	return chatRefreshResult{Refreshed: 1}, err
+}
+
+func (s *blockingChatRefreshService) counts() (int, int, int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.refreshCalls, s.recordCalls, s.onDemandCalls
+}
+
+func signalChatTest(ch chan struct{}) {
+	if ch != nil {
+		close(ch)
+	}
+}
+
+func waitChatTest(ctx context.Context, release chan struct{}) error {
+	if release == nil {
+		return nil
+	}
+	select {
+	case <-release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 type chatConfigBackend struct {
 	data map[string]any
 }
@@ -1171,6 +1347,7 @@ func resetChatDepsForTest(t *testing.T) {
 	oldPost := streamPost
 	oldStrategy := currentAccountStrategy
 	oldRefresh := chatRefreshService
+	oldRefreshEnqueue := chatRefreshEnqueue
 	oldInvalid := isInvalidCredentials
 	oldFeatureStream := chatFeatureStream
 	oldFeatureThinking := chatFeatureThinking
@@ -1201,6 +1378,12 @@ func resetChatDepsForTest(t *testing.T) {
 	}
 	currentAccountStrategy = func() string { return "quota" }
 	chatRefreshService = func() chatRefreshProvider { return nil }
+	chatRefreshEnqueue = func(job func()) bool {
+		if job != nil {
+			job()
+		}
+		return true
+	}
 	isInvalidCredentials = func(error) bool { return false }
 	chatFeatureStream = func() bool { return true }
 	chatFeatureThinking = func() bool { return true }
@@ -1228,6 +1411,7 @@ func resetChatDepsForTest(t *testing.T) {
 		streamPost = oldPost
 		currentAccountStrategy = oldStrategy
 		chatRefreshService = oldRefresh
+		chatRefreshEnqueue = oldRefreshEnqueue
 		isInvalidCredentials = oldInvalid
 		chatFeatureStream = oldFeatureStream
 		chatFeatureThinking = oldFeatureThinking
