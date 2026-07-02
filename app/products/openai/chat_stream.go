@@ -14,6 +14,27 @@ import (
 )
 
 func streamChat(ctx context.Context, options chatStreamOptions) ([]string, error) {
+	response, err := postChatStream(ctx, options, nil)
+	if err != nil {
+		return nil, err
+	}
+	return append([]string{}, response.Lines...), nil
+}
+
+func streamChatIncremental(ctx context.Context, options chatStreamOptions, handleLine func(string) error) error {
+	response, err := postChatStream(ctx, options, handleLine)
+	if err != nil {
+		return err
+	}
+	for _, line := range response.Lines {
+		if err := handleLine(line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func postChatStream(ctx context.Context, options chatStreamOptions, handleLine func(string) error) (*chatStreamResponse, error) {
 	attachments, err := prepareFileAttachments(ctx, options.Token, options.Files)
 	if err != nil {
 		return nil, err
@@ -43,6 +64,7 @@ func streamChat(ctx context.Context, options chatStreamOptions) ([]string, error
 		},
 		PayloadBytes:   payloadBytes,
 		TimeoutSeconds: options.TimeoutSeconds,
+		HandleLine:     handleLine,
 	})
 	if err != nil {
 		return nil, transportUpstreamError(err, "Chat transport failed")
@@ -57,7 +79,7 @@ func streamChat(ctx context.Context, options chatStreamOptions) ([]string, error
 		}
 		return nil, platform.NewUpstreamError(fmt.Sprintf("Chat upstream returned %d", response.StatusCode), response.StatusCode, body)
 	}
-	return append([]string{}, response.Lines...), nil
+	return response, nil
 }
 
 func defaultStreamPost(ctx context.Context, request chatStreamRequest) (*chatStreamResponse, error) {
@@ -80,6 +102,12 @@ func defaultStreamPost(ctx context.Context, request chatStreamRequest) (*chatStr
 		}
 		if !ok {
 			return &chatStreamResponse{StatusCode: http.StatusOK, Lines: lines}, nil
+		}
+		if request.HandleLine != nil {
+			if err := request.HandleLine(line); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		lines = append(lines, line)
 	}

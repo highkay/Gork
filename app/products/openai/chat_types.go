@@ -62,6 +62,7 @@ type chatStreamRequest struct {
 	Headers        map[string]string
 	PayloadBytes   []byte
 	TimeoutSeconds float64
+	HandleLine     func(string) error
 }
 
 type chatStreamResponse struct {
@@ -98,6 +99,7 @@ type chatCompletionOptions struct {
 	Temperature      float64
 	TopP             float64
 	RequestOverrides map[string]any
+	StreamFrame      func(string) error
 }
 
 type chatCompletionPlan struct {

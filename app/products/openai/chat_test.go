@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -811,6 +812,69 @@ func TestChatCompletionsStreamReturnsDataFrames(t *testing.T) {
 	}
 }
 
+func TestStreamChatResultFlushesDataFrameBeforeUpstreamDone(t *testing.T) {
+	resetChatDepsForTest(t)
+	stream := true
+	dir := &fakeChatDirectory{accounts: []chatAccount{{Token: "tok1", ModeID: model.ModeAuto}}}
+	chatDirectoryProvider = func() chatDirectory { return dir }
+
+	firstLineConsumed := make(chan struct{})
+	releaseDone := make(chan struct{})
+	streamPost = func(ctx context.Context, req chatStreamRequest) (*chatStreamResponse, error) {
+		if req.HandleLine == nil {
+			return nil, errors.New("missing stream line handler")
+		}
+		if err := req.HandleLine(`data: {"result":{"response":{"token":"first","isThinking":false,"messageTag":"final"}}}`); err != nil {
+			return nil, err
+		}
+		close(firstLineConsumed)
+		select {
+		case <-releaseDone:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		if err := req.HandleLine(`data: [DONE]`); err != nil {
+			return nil, err
+		}
+		return &chatStreamResponse{StatusCode: 200}, nil
+	}
+
+	writer := newStreamCaptureResponseWriter(`"content":"first"`)
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	done := make(chan struct{})
+	go func() {
+		streamChatResult(writer, req, ChatCompletionRequest{
+			Model:    "grok-4.20-auto",
+			Messages: []MessageItem{{Role: "user", Content: "hi"}},
+			Stream:   &stream,
+		})
+		close(done)
+	}()
+
+	select {
+	case <-firstLineConsumed:
+	case <-time.After(time.Second):
+		t.Fatal("upstream first line was not consumed")
+	}
+	select {
+	case <-writer.matched:
+	case <-done:
+		t.Fatal("stream returned before upstream completion")
+	case <-time.After(time.Second):
+		t.Fatalf("first data frame was not flushed before upstream completion; body=%s", writer.Body())
+	}
+
+	close(releaseDone)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not finish after upstream done")
+	}
+	if body := writer.Body(); !strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("stream missing done frame: %s", body)
+	}
+}
+
 func TestChatCompletionsRetriesConfiguredUpstreamStatusWithExcludedToken(t *testing.T) {
 	resetChatDepsForTest(t)
 	stream := false
@@ -972,6 +1036,54 @@ func (d *fakeChatDirectory) ReleaseChatAccount(context.Context, chatAccount) err
 func (d *fakeChatDirectory) FeedbackChatAccount(_ context.Context, feedback chatFeedback) error {
 	d.feedbacks = append(d.feedbacks, feedback)
 	return nil
+}
+
+type streamCaptureResponseWriter struct {
+	mu      sync.Mutex
+	header  http.Header
+	body    strings.Builder
+	target  string
+	matched chan struct{}
+	once    sync.Once
+	code    int
+}
+
+func newStreamCaptureResponseWriter(target string) *streamCaptureResponseWriter {
+	return &streamCaptureResponseWriter{
+		header:  http.Header{},
+		target:  target,
+		matched: make(chan struct{}),
+	}
+}
+
+func (w *streamCaptureResponseWriter) Header() http.Header {
+	return w.header
+}
+
+func (w *streamCaptureResponseWriter) WriteHeader(code int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.code == 0 {
+		w.code = code
+	}
+}
+
+func (w *streamCaptureResponseWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.body.Write(p)
+	if strings.Contains(w.body.String(), w.target) {
+		w.once.Do(func() { close(w.matched) })
+	}
+	return n, err
+}
+
+func (w *streamCaptureResponseWriter) Flush() {}
+
+func (w *streamCaptureResponseWriter) Body() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.body.String()
 }
 
 type fakeChatRefreshService struct {

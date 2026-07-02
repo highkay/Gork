@@ -124,7 +124,7 @@ func chatDispatchFeedback(err error) string {
 }
 
 func runChatCompletionAttempt(ctx context.Context, options chatCompletionOptions, plan chatCompletionPlan, account chatAccount) (chatCompletionResult, error) {
-	lines, err := streamChat(ctx, chatStreamOptions{
+	streamOptions := chatStreamOptions{
 		Token:               account.Token,
 		ModeID:              account.ModeID,
 		Message:             plan.Message,
@@ -133,7 +133,40 @@ func runChatCompletionAttempt(ctx context.Context, options chatCompletionOptions
 		ModelConfigOverride: nil,
 		RequestOverrides:    plan.RequestOverrides,
 		TimeoutSeconds:      plan.TimeoutSeconds,
-	})
+	}
+
+	if plan.IsStream && options.StreamFrame != nil {
+		consumer := newChatLineConsumer(consumeChatLinesOptions{
+			Context:      ctx,
+			Token:        account.Token,
+			Model:        options.Model,
+			ResponseID:   plan.ResponseID,
+			EmitThink:    plan.EmitThink,
+			IsStream:     true,
+			ToolNames:    plan.ToolNames,
+			DisableTools: plan.ToolsDisabled,
+		})
+		err := streamChatIncremental(ctx, streamOptions, func(line string) error {
+			frames, err := consumer.Consume(line)
+			if err != nil {
+				return err
+			}
+			return writeChatStreamFrames(options.StreamFrame, frames)
+		})
+		if err != nil {
+			return chatCompletionResult{}, err
+		}
+		_, frames, err := consumer.Finish()
+		if err != nil {
+			return chatCompletionResult{}, err
+		}
+		if err := writeChatStreamFrames(options.StreamFrame, frames); err != nil {
+			return chatCompletionResult{}, err
+		}
+		return chatCompletionResult{IsStream: true}, nil
+	}
+
+	lines, err := streamChat(ctx, streamOptions)
 	if err != nil {
 		return chatCompletionResult{}, err
 	}
@@ -168,6 +201,15 @@ func runChatCompletionAttempt(ctx context.Context, options chatCompletionOptions
 		return chatCompletionResult{}, err
 	}
 	return chatCompletionResult{Response: response}, nil
+}
+
+func writeChatStreamFrames(writeFrame func(string) error, frames []string) error {
+	for _, frame := range frames {
+		if err := writeFrame(frame); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func finishChatAttempt(ctx context.Context, directory chatDirectory, account chatAccount, success bool, err error) {

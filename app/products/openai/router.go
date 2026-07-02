@@ -168,6 +168,11 @@ func writeRouterStreamFrames(w http.ResponseWriter, frames []string) {
 	flushRouterStream(w)
 }
 
+func writeRouterStreamFrame(w http.ResponseWriter, frame string) {
+	_, _ = w.Write([]byte(frame))
+	flushRouterStream(w)
+}
+
 func writeRouterStreamError(w http.ResponseWriter, err error) {
 	_, payload := routerErrorResponse(err)
 	raw, marshalErr := json.Marshal(payload)
