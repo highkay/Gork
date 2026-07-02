@@ -3,6 +3,7 @@ package products
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	controlmodel "github.com/dslzl/gork/app/control/model"
@@ -76,6 +77,49 @@ func TestRunAccountDispatchReturnsReserveError(t *testing.T) {
 	})
 	if err == nil || err.Error() != "reserve failed" {
 		t.Fatalf("reserve error = %v", err)
+	}
+}
+
+func TestRunAccountDispatchUsesCustomRetryable(t *testing.T) {
+	retryErr := errors.New("retry me")
+	directory := &fakeDispatchDirectory{
+		leases: []AccountDispatchLease{
+			{Token: "one", ModeID: 1},
+			{Token: "two", ModeID: 1},
+		},
+	}
+	result, err := RunAccountDispatch(context.Background(), AccountDispatchOptions[string]{
+		Directory: directory,
+		Spec:      controlmodel.ModelSpec{ModelName: "grok"},
+		Retry:     RetryPolicy{MaxAttempts: 2},
+		Retryable: func(err error) bool { return errors.Is(err, retryErr) },
+	}, func(_ context.Context, lease AccountDispatchLease) (string, error) {
+		if lease.Token == "one" {
+			return "", retryErr
+		}
+		return lease.Token, nil
+	})
+	if err != nil {
+		t.Fatalf("dispatch error: %v", err)
+	}
+	if result != "two" {
+		t.Fatalf("result = %q", result)
+	}
+	if got := directory.queries[1].Excluded[0]; got != "one" {
+		t.Fatalf("second attempt excluded token = %q", got)
+	}
+}
+
+func TestRunAccountDispatchUsesNoAccountsMessage(t *testing.T) {
+	_, err := RunAccountDispatch(context.Background(), AccountDispatchOptions[string]{
+		Directory:         &fakeDispatchDirectory{},
+		Spec:              controlmodel.ModelSpec{ModelName: "grok"},
+		NoAccountsMessage: "No available accounts for this model tier",
+	}, func(context.Context, AccountDispatchLease) (string, error) {
+		return "", nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "No available accounts for this model tier") {
+		t.Fatalf("no-account error = %v", err)
 	}
 }
 

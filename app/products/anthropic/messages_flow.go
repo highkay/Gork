@@ -9,6 +9,7 @@ import (
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/products"
 )
 
 func Messages(ctx context.Context, options MessagesOptions) (MessagesResult, error) {
@@ -68,51 +69,82 @@ func messagesConsole(ctx context.Context, options MessagesOptions, plan messages
 }
 
 func runMessagesWithRetries(ctx context.Context, options MessagesOptions, plan messagesPlan, directory messagesDirectory) (MessagesResult, error) {
-	excluded := []string{}
-	for attempt := 0; attempt <= plan.MaxRetries; attempt++ {
-		account, ok, err := directory.ReserveMessagesAccount(ctx, plan.Spec, excluded)
-		if err != nil {
-			return MessagesResult{}, err
-		}
+	dispatchDirectory := newMessagesDispatchDirectory(directory)
+	return products.RunAccountDispatch(ctx, products.AccountDispatchOptions[MessagesResult]{
+		Directory:         dispatchDirectory,
+		Spec:              plan.Spec,
+		Retry:             products.RetryPolicy{MaxAttempts: plan.MaxRetries + 1},
+		Retryable:         func(err error) bool { return shouldRetryMessages(err, plan.RetryCodes) },
+		Feedback:          messagesDispatchFeedback,
+		NoAccountsMessage: "No available accounts for this model tier",
+	}, func(ctx context.Context, lease products.AccountDispatchLease) (MessagesResult, error) {
+		account, ok := dispatchDirectory.account(lease)
 		if !ok {
 			return MessagesResult{}, platform.NewRateLimitError("No available accounts for this model tier")
 		}
-		result, retry, err := runMessagesAttempt(ctx, options, plan, account, directory)
-		if err == nil {
-			return result, nil
-		}
-		if retry && attempt < plan.MaxRetries {
-			excluded = append(excluded, account.Token)
-			continue
-		}
-		return MessagesResult{}, err
-	}
-	return MessagesResult{}, platform.NewRateLimitError("No available accounts after retries")
+		return runMessagesAttempt(ctx, options, plan, account)
+	})
 }
 
-func runMessagesAttempt(ctx context.Context, options MessagesOptions, plan messagesPlan, account messagesAccount, directory messagesDirectory) (MessagesResult, bool, error) {
-	success := false
-	var failErr error
-	defer func() {
-		_ = directory.ReleaseMessagesAccount(ctx, account)
-		kind := messagesFeedbackForError(failErr)
-		if success {
-			kind = messagesFeedbackSuccess
-		}
-		_ = directory.FeedbackMessagesAccount(ctx, messagesFeedback{Token: account.Token, Kind: kind, ModeID: account.ModeID})
-		if success {
-			messagesQuotaSync(ctx, account.Token, int(account.ModeID))
-		} else {
-			messagesFailSync(ctx, account.Token, int(account.ModeID), failErr)
-		}
-	}()
+type messagesDispatchDirectory struct {
+	directory messagesDirectory
+	accounts  map[products.AccountDispatchLease]messagesAccount
+}
+
+func newMessagesDispatchDirectory(directory messagesDirectory) *messagesDispatchDirectory {
+	return &messagesDispatchDirectory{
+		directory: directory,
+		accounts:  map[products.AccountDispatchLease]messagesAccount{},
+	}
+}
+
+func (d *messagesDispatchDirectory) ReserveDispatchAccount(ctx context.Context, query products.AccountDispatchQuery) (products.AccountDispatchLease, bool, error) {
+	account, ok, err := d.directory.ReserveMessagesAccount(ctx, query.Spec, query.Excluded)
+	if err != nil || !ok {
+		return products.AccountDispatchLease{}, ok, err
+	}
+	lease := products.AccountDispatchLease{Token: account.Token, ModeID: int(account.ModeID)}
+	d.accounts[lease] = account
+	return lease, true, nil
+}
+
+func (d *messagesDispatchDirectory) ReleaseDispatchAccount(ctx context.Context, lease products.AccountDispatchLease) error {
+	account, ok := d.accounts[lease]
+	if !ok {
+		return nil
+	}
+	delete(d.accounts, lease)
+	return d.directory.ReleaseMessagesAccount(ctx, account)
+}
+
+func (d *messagesDispatchDirectory) FeedbackDispatchAccount(ctx context.Context, feedback products.AccountDispatchFeedback) error {
+	return d.directory.FeedbackMessagesAccount(ctx, messagesFeedback{
+		Token:  feedback.Token,
+		Kind:   messagesFeedbackKind(feedback.Kind),
+		ModeID: model.ModeID(feedback.ModeID),
+	})
+}
+
+func (d *messagesDispatchDirectory) account(lease products.AccountDispatchLease) (messagesAccount, bool) {
+	account, ok := d.accounts[lease]
+	return account, ok
+}
+
+func messagesDispatchFeedback(err error) string {
+	if err == nil {
+		return string(messagesFeedbackSuccess)
+	}
+	return string(messagesFeedbackForError(err))
+}
+
+func runMessagesAttempt(ctx context.Context, options MessagesOptions, plan messagesPlan, account messagesAccount) (MessagesResult, error) {
 	result, err := messagesFromStream(ctx, options, plan, account)
 	if err != nil {
-		failErr = err
-		return MessagesResult{}, shouldRetryMessages(err, plan.RetryCodes), err
+		messagesFailSync(ctx, account.Token, int(account.ModeID), err)
+		return MessagesResult{}, err
 	}
-	success = true
-	return result, false, nil
+	messagesQuotaSync(ctx, account.Token, int(account.ModeID))
+	return result, nil
 }
 
 func shouldRetryMessages(err error, retryCodes map[int]struct{}) bool {

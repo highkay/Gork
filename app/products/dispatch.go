@@ -31,10 +31,12 @@ type AccountDispatchDirectory interface {
 }
 
 type AccountDispatchOptions[T any] struct {
-	Directory AccountDispatchDirectory
-	Spec      controlmodel.ModelSpec
-	Retry     RetryPolicy
-	Feedback  func(error) string
+	Directory         AccountDispatchDirectory
+	Spec              controlmodel.ModelSpec
+	Retry             RetryPolicy
+	Retryable         func(error) bool
+	Feedback          func(error) string
+	NoAccountsMessage string
 }
 
 func RunAccountDispatch[T any](
@@ -44,17 +46,14 @@ func RunAccountDispatch[T any](
 ) (T, error) {
 	var zero T
 	excluded := []string{}
-	attempts := options.Retry.MaxAttempts
-	if attempts <= 0 {
-		attempts = 1
-	}
+	attempts := options.maxAttempts()
 	for attempt := 0; attempt < attempts; attempt++ {
 		lease, ok, err := options.Directory.ReserveDispatchAccount(ctx, AccountDispatchQuery{Spec: options.Spec, Excluded: slices.Clone(excluded)})
 		if err != nil {
 			return zero, err
 		}
 		if !ok {
-			return zero, platform.NewRateLimitError("No available accounts")
+			return zero, noAccountsError(options.NoAccountsMessage)
 		}
 		result, runErr := run(ctx, lease)
 		_ = options.Directory.ReleaseDispatchAccount(ctx, lease)
@@ -66,10 +65,35 @@ func RunAccountDispatch[T any](
 		if runErr == nil {
 			return result, nil
 		}
-		if !options.Retry.ShouldRetry(runErr, attempt) {
+		if !options.shouldRetry(runErr, attempt) {
 			return zero, runErr
 		}
 		excluded = append(excluded, lease.Token)
 	}
-	return zero, platform.NewRateLimitError("No available accounts")
+	return zero, noAccountsError(options.NoAccountsMessage)
+}
+
+func (options AccountDispatchOptions[T]) shouldRetry(err error, attempt int) bool {
+	if err == nil || attempt+1 >= options.maxAttempts() {
+		return false
+	}
+	if options.Retryable != nil {
+		return options.Retryable(err)
+	}
+	return options.Retry.ShouldRetry(err, attempt)
+}
+
+func (options AccountDispatchOptions[T]) maxAttempts() int {
+	attempts := options.Retry.MaxAttempts
+	if attempts <= 0 {
+		return 1
+	}
+	return attempts
+}
+
+func noAccountsError(message string) error {
+	if message == "" {
+		message = "No available accounts"
+	}
+	return platform.NewRateLimitError(message)
 }
