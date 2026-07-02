@@ -40,7 +40,7 @@ func TestConfigSnapshotLoadMergesBackendEnvAndCachesByVersion(t *testing.T) {
 	if err := snapshot.Load(context.Background(), defaults); err != nil {
 		t.Fatalf("second Load returned error: %v", err)
 	}
-	if backend.loadCalls != 1 || backend.versionCalls != 3 {
+	if backend.loadCalls != 1 || backend.versionCalls != 2 {
 		t.Fatalf("cache calls load=%d version=%d", backend.loadCalls, backend.versionCalls)
 	}
 }
