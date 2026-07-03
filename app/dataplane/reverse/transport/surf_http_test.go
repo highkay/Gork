@@ -91,6 +91,27 @@ func TestSurfHTTPDoerCacheSeparatesBrowserFamilies(t *testing.T) {
 	}
 }
 
+func TestBuildSurfHTTPClientVerifiesTLSCertificates(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	client, err := buildSurfHTTPClient(surfTransportKey{BrowserFamily: "chrome"})
+	if err != nil {
+		t.Fatalf("buildSurfHTTPClient: %v", err)
+	}
+	request, err := http.NewRequest(http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	response, err := client.Do(request)
+	if err == nil {
+		_ = response.Body.Close()
+		t.Fatalf("surf client accepted self-signed TLS certificate")
+	}
+}
+
 func TestSurfKeyIgnoresUnusedOSDetails(t *testing.T) {
 	proxyURL := "socks5h://127.0.0.1:1080"
 	windowsChrome := surfKeyFromProfile(httpTransportProfile{
