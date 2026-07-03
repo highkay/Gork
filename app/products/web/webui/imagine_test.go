@@ -93,7 +93,7 @@ func TestWebUIImagineWebSocketNoAccountAndStop(t *testing.T) {
 		return nil, true, ctx.Err()
 	}
 
-	client := newWebUIWSTestClient(t, "")
+	client := newWebUIWSTestClient(t, "Bearer web")
 	defer client.Close()
 	client.SendJSON(map[string]any{"type": "start", "prompt": "slow"})
 	_ = client.ReadJSON()
@@ -134,6 +134,21 @@ func TestWebUIImagineWebSocketRejectsInvalidToken(t *testing.T) {
 	status := webUIWSDialStatus(t, server.URL, "Bearer wrong")
 	if status != http.StatusForbidden {
 		t.Fatalf("invalid token status = %d", status)
+	}
+}
+
+func TestWebUIImagineWebSocketAcceptsURLAccessTokenForBrowserCompatibility(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	server := httptest.NewServer(NewRouter())
+	defer server.Close()
+
+	conn, _, status := webUIWSDial(t, server.URL, "/webui/api/imagine/ws?access_token=web", "")
+	if conn != nil {
+		_ = conn.Close()
+	}
+	if status != http.StatusSwitchingProtocols {
+		t.Fatalf("access_token query websocket status = %d", status)
 	}
 }
 
