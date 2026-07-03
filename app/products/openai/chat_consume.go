@@ -42,6 +42,7 @@ type chatLineConsumer struct {
 	options          consumeChatLinesOptions
 	text             *textRunLineConsumer
 	toolCallsEmitted bool
+	eventCursor      int
 	done             bool
 }
 
@@ -67,7 +68,9 @@ func (c *chatLineConsumer) Consume(line string) ([]string, error) {
 		return nil, err
 	}
 	c.done = c.text.Done()
-	return c.framesForEvents(events), nil
+	frames := c.framesForEvents(events)
+	c.eventCursor += len(events)
+	return frames, nil
 }
 
 func (c *chatLineConsumer) Finish() (chatCompletionState, []string, error) {
@@ -76,7 +79,10 @@ func (c *chatLineConsumer) Finish() (chatCompletionState, []string, error) {
 		return chatCompletionState{}, nil, err
 	}
 
-	frames := c.framesForEvents(events)
+	frames := []string{}
+	if c.eventCursor < len(events) {
+		frames = c.framesForEvents(events[c.eventCursor:])
+	}
 	state := chatStateFromTextRun(runState)
 
 	if c.options.IsStream && !c.toolCallsEmitted {

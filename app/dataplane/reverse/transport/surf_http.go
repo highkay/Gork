@@ -113,7 +113,7 @@ func buildSurfHTTPClient(key surfTransportKey) (HTTPDoer, error) {
 	if key.ProxyURL != "" {
 		builder = builder.Proxy(g.String(key.ProxyURL))
 	}
-	result := builder.DisableCompression().Build()
+	result := builder.SecureTLS().DisableCompression().Build()
 	if result.IsErr() {
 		return nil, result.Err()
 	}

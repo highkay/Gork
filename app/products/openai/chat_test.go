@@ -945,6 +945,31 @@ func TestChatCompletionsStreamReturnsDataFrames(t *testing.T) {
 	}
 }
 
+func TestConsumeChatLinesStreamDoesNotReplayDeltasOnFinish(t *testing.T) {
+	_, frames, err := consumeChatLines([]string{
+		`data: {"result":{"response":{"token":"hi","isThinking":false,"messageTag":"final"}}}`,
+		`data: {"result":{"response":{"token":" there","isThinking":false,"messageTag":"final"}}}`,
+		`data: [DONE]`,
+	}, consumeChatLinesOptions{
+		Model:      "grok-4.20-auto",
+		ResponseID: "chatcmpl-test",
+		IsStream:   true,
+	})
+	if err != nil {
+		t.Fatalf("consumeChatLines err=%v", err)
+	}
+	joined := strings.Join(frames, "")
+	if got := strings.Count(joined, `"content":"hi"`); got != 1 {
+		t.Fatalf("hi frame count=%d frames=%s", got, joined)
+	}
+	if got := strings.Count(joined, `"content":" there"`); got != 1 {
+		t.Fatalf("there frame count=%d frames=%s", got, joined)
+	}
+	if got := strings.Count(joined, "data: [DONE]"); got != 1 {
+		t.Fatalf("done frame count=%d frames=%s", got, joined)
+	}
+}
+
 func TestStreamChatResultFlushesDataFrameBeforeUpstreamDone(t *testing.T) {
 	resetChatDepsForTest(t)
 	stream := true
