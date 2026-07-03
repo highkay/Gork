@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
+	accountcontrol "github.com/dslzl/gork/app/control/account"
+	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/config"
@@ -31,7 +34,11 @@ type adminDirectory interface {
 
 var (
 	adminRouterAuthSettings = func() auth.AuthSettings {
-		return auth.AuthSettings{AdminKey: config.GetConfig("app.admin_key", nil)}
+		adminKey := config.GetConfig("app.app_key", nil)
+		if adminKey == nil || adminKey == "" {
+			adminKey = config.GetConfig("app.admin_key", nil)
+		}
+		return auth.AuthSettings{AdminKey: adminKey}
 	}
 	adminRouterConfig      = adminConfigStore(config.GlobalConfig)
 	adminReloadFileLogging = func(level string, maxFiles int) error {
@@ -40,9 +47,13 @@ var (
 	adminReconcileLocalMediaCache = func(context.Context) error {
 		return storage.ReconcileLocalMediaCache()
 	}
-	adminReconcileRefreshRuntime = func() string { return "" }
-	adminAccountDirectory        = func() adminDirectory { return nil }
-	adminStorageBackend          = func() string {
+	adminReconcileRefreshRuntime = func() string {
+		strategy := accountcontrol.ReconcileRefreshRuntime()
+		_ = accountdataplane.SetStrategy(strategy)
+		return strategy
+	}
+	adminAccountDirectory = func() adminDirectory { return nil }
+	adminStorageBackend   = func() string {
 		return fmt.Sprint(config.GetConfig("account.storage", "local"))
 	}
 )
@@ -99,8 +110,18 @@ func adminProtectedAny(handlers map[string]http.HandlerFunc) http.HandlerFunc {
 			writeAdminError(w, err)
 			return
 		}
+		if r.URL.Query().Get("app_key") != "" && adminBatchStreamQueryAuth(r) {
+			writeAdminError(w, platform.NewAppError("Admin batch streams require Authorization header", platform.ErrorKindAuthentication, "invalid_api_key", http.StatusUnauthorized, nil))
+			return
+		}
 		handler(w, r)
 	}
+}
+
+func adminBatchStreamQueryAuth(r *http.Request) bool {
+	return r.Method == http.MethodGet &&
+		strings.HasPrefix(r.URL.Path, "/admin/api/batch/") &&
+		strings.HasSuffix(r.URL.Path, "/stream")
 }
 
 func handleAdminVerify(w http.ResponseWriter, _ *http.Request) {

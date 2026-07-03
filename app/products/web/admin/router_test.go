@@ -278,7 +278,7 @@ func resetAdminRouterDepsForTest(t *testing.T) {
 	oldTokensRefresh := adminTokensRefreshServiceProvider
 	oldTokensRunner := adminTokensAsyncRunner
 	oldTokensNow := adminTokensNowMS
-	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{} }
+	adminRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{AdminKey: "gork"} }
 	adminRouterConfig = &fakeAdminConfig{}
 	adminReconcileRefreshRuntime = func() string { return "" }
 	adminReloadFileLogging = func(string, int) error { return nil }

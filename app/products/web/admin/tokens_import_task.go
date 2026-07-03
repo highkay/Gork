@@ -12,7 +12,7 @@ func adminTokensRunAddImport(ctx context.Context, repo adminTokensRepository, re
 	saved, skipped := 0, 0
 	refreshTokens := []string{}
 	for start := 0; start < len(tokens); start += adminTokensImportChunkSize {
-		if task.Cancelled {
+		if task.IsCancelled() {
 			task.FinishCancelled()
 			return
 		}
@@ -42,7 +42,7 @@ func adminTokensRunReplaceImport(ctx context.Context, repo adminTokensRepository
 	saved := 0
 	refreshTokens := []string{}
 	for pool, upserts := range payload {
-		if task.Cancelled {
+		if task.IsCancelled() {
 			task.FinishCancelled()
 			return
 		}

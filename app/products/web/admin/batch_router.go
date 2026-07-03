@@ -34,7 +34,7 @@ func handleAdminBatchNSFW(w http.ResponseWriter, r *http.Request) {
 	handler := func(ctx context.Context, token string) (map[string]any, error) {
 		return adminBatchNSFWOne(ctx, repo, token, enabled)
 	}
-	adminBatchDispatch(w, tokens, handler, options)
+	adminBatchDispatch(r.Context(), w, tokens, handler, options)
 }
 
 func handleAdminBatchRefresh(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +66,7 @@ func handleAdminBatchRefresh(w http.ResponseWriter, r *http.Request) {
 	handler := func(ctx context.Context, token string) (map[string]any, error) {
 		return adminBatchRefreshOne(ctx, service, token)
 	}
-	adminBatchDispatch(w, tokens, handler, options)
+	adminBatchDispatch(r.Context(), w, tokens, handler, options)
 }
 
 func handleAdminBatchCacheClear(w http.ResponseWriter, r *http.Request) {
@@ -88,7 +88,7 @@ func handleAdminBatchCacheClear(w http.ResponseWriter, r *http.Request) {
 	handler := func(ctx context.Context, token string) (map[string]any, error) {
 		return adminBatchCacheClearOne(ctx, repo, token)
 	}
-	adminBatchDispatch(w, tokens, handler, options)
+	adminBatchDispatch(r.Context(), w, tokens, handler, options)
 }
 
 type adminBatchOptions struct {

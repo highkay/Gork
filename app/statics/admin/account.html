@@ -1215,6 +1215,44 @@ async function _api(method, path, body) {
   return r.json();
 }
 
+async function _streamAdminSSE(path, onEvent, signal) {
+  const key = await adminKey.get();
+  const r = await fetch(ADMIN_API + path, {
+    method: 'GET',
+    headers: { Accept: 'text/event-stream', Authorization: `Bearer ${key}` },
+    signal,
+  });
+  if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.detail || r.status); }
+  if (!r.body) throw new Error('Streaming response is not readable');
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      buffer = _drainSSE(buffer, onEvent);
+    }
+    buffer += decoder.decode();
+    _drainSSE(`${buffer}\n\n`, onEvent);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function _drainSSE(buffer, onEvent) {
+  let next = buffer.indexOf('\n\n');
+  while (next !== -1) {
+    const chunk = buffer.slice(0, next);
+    buffer = buffer.slice(next + 2);
+    const data = chunk.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n').trim();
+    if (data) onEvent(JSON.parse(data));
+    next = buffer.indexOf('\n\n');
+  }
+  return buffer;
+}
+
 // Selection strategy reported by /status — "quota" | "random".
 // Controls whether quota columns / stats are rendered (hidden in random mode).
 let selectionStrategy = 'quota';
@@ -1906,12 +1944,11 @@ async function _runTask(starter, label, onDone, totalFallback = 0) {
     _batchTaskId = d.task_id;
     const total = d.total || totalFallback;
 
-    const key = await adminKey.get();
-    const es = new EventSource(`${ADMIN_API}/batch/${_batchTaskId}/stream?app_key=${encodeURIComponent(key)}`);
+    const controller = new AbortController();
+    const es = { close: () => controller.abort() };
     _batchEs = es;
 
-    es.onmessage = (e) => {
-      const ev = JSON.parse(e.data);
+    const onStreamEvent = (ev) => {
       if (ev.type === 'snapshot' || ev.type === 'progress') {
         progress.update(ev.processed || 0, total);
       }
@@ -1930,16 +1967,18 @@ async function _runTask(starter, label, onDone, totalFallback = 0) {
         }
       }
     };
-    es.onerror = function() {
-      if (_finalReceived) { _batchEs = null; return; }
-      // readyState CLOSED (2) = server rejected reconnect (e.g. 401/404), give up
-      if (this.readyState === EventSource.CLOSED) {
+    _streamAdminSSE(`/batch/${_batchTaskId}/stream`, onStreamEvent, controller.signal).then(() => {
+      if (!_finalReceived) {
         _batchEs = null;
         _cleanup();
         progress.finish('连接中断', 'error');
       }
-      // readyState CONNECTING (0) = browser is auto-reconnecting, let it
-    };
+    }).catch((error) => {
+      if (_finalReceived || controller.signal.aborted) { _batchEs = null; return; }
+      _batchEs = null;
+      _cleanup();
+      progress.finish(error?.message || '连接中断', 'error');
+    });
   } catch (e) {
     _cleanup();
     progress.finish(`启动失败: ${e.message}`, 'error');

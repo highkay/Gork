@@ -683,6 +683,47 @@ async function _api(method, path, body) {
   return r.json();
 }
 
+async function _streamAdminSSE(path, onEvent, signal) {
+  const key = await adminKey.get();
+  const r = await fetch(ADMIN_API + path, {
+    method: 'GET',
+    headers: { Accept: 'text/event-stream', Authorization: `Bearer ${key}` },
+    signal,
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail || r.status);
+  }
+  if (!r.body) throw new Error('Streaming response is not readable');
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  try {
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      buffer = _drainSSE(buffer, onEvent);
+    }
+    buffer += decoder.decode();
+    _drainSSE(`${buffer}\n\n`, onEvent);
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function _drainSSE(buffer, onEvent) {
+  let next = buffer.indexOf('\n\n');
+  while (next !== -1) {
+    const chunk = buffer.slice(0, next);
+    buffer = buffer.slice(next + 2);
+    const data = chunk.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n').trim();
+    if (data) onEvent(JSON.parse(data));
+    next = buffer.indexOf('\n\n');
+  }
+  return buffer;
+}
+
 async function loadStats() {
   try {
     const d = await _api('GET', '/cache');
@@ -1166,12 +1207,11 @@ async function runAssetClear(tokens) {
     const d = await _api('POST', '/batch/cache-clear?async=true', { tokens });
     _assetTaskId = d.task_id;
     const total = d.total || tokens.length;
-    const key = await adminKey.get();
-    const es = new EventSource(`${ADMIN_API}/batch/${_assetTaskId}/stream?app_key=${encodeURIComponent(key)}`);
+    const controller = new AbortController();
+    const es = { close: () => controller.abort() };
     _assetEs = es;
 
-    es.onmessage = (event) => {
-      const ev = JSON.parse(event.data);
+    const onStreamEvent = (ev) => {
       if (ev.type === 'snapshot' || ev.type === 'progress') {
         progress.update(ev.processed || 0, total);
       }
@@ -1195,17 +1235,18 @@ async function runAssetClear(tokens) {
       }
     };
 
-    es.onerror = function() {
-      if (finalReceived) {
-        _assetEs = null;
-        return;
-      }
-      if (this.readyState === EventSource.CLOSED) {
+    _streamAdminSSE(`/batch/${_assetTaskId}/stream`, onStreamEvent, controller.signal).then(() => {
+      if (!finalReceived) {
         _assetEs = null;
         cleanup();
         progress.finish(tr('cache.connectionInterrupted', null, '连接中断'), 'error');
       }
-    };
+    }).catch((error) => {
+      if (finalReceived || controller.signal.aborted) { _assetEs = null; return; }
+      _assetEs = null;
+      cleanup();
+      progress.finish(error?.message || tr('cache.connectionInterrupted', null, '连接中断'), 'error');
+    });
   } catch (e) {
     cleanup();
     progress.finish(tr('cache.startFailed', { message: e.message }, `启动失败: ${e.message}`), 'error');

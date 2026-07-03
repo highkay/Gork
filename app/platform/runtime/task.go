@@ -27,6 +27,8 @@ type TaskRecordOptions struct {
 
 type AsyncTask struct {
 	mu            sync.Mutex
+	ctx           context.Context
+	cancel        context.CancelFunc
 	ID            string
 	Total         int
 	Processed     int
@@ -48,13 +50,31 @@ func NewAsyncTask(total int, options AsyncTaskOptions) *AsyncTask {
 	if id == "" {
 		id = randomTaskID()
 	}
+	ctx, cancel := context.WithCancel(context.Background())
 	return &AsyncTask{
 		ID:            id,
+		ctx:           ctx,
+		cancel:        cancel,
 		Total:         total,
 		Status:        "running",
 		CreatedAt:     float64(time.Now().UnixNano()) / 1e9,
 		snapshotStore: options.SnapshotStore,
 	}
+}
+
+func (t *AsyncTask) Context() context.Context {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.ctx == nil {
+		return context.Background()
+	}
+	return t.ctx
+}
+
+func (t *AsyncTask) IsCancelled() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.Cancelled
 }
 
 func (t *AsyncTask) Attach() chan map[string]any {
@@ -130,7 +150,11 @@ func (t *AsyncTask) FailTask(message string) {
 func (t *AsyncTask) Cancel() {
 	t.mu.Lock()
 	t.Cancelled = true
+	cancel := t.cancel
 	t.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func (t *AsyncTask) FinishCancelled() {
