@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	controlaccount "github.com/dslzl/gork/app/control/account"
-	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func TestAccountDirectoryBootstrapSyncAndDiagnosticsMatchPython(t *testing.T) {
@@ -265,9 +264,8 @@ func TestAccountDirectoryFeedbackDispatchMatchesPython(t *testing.T) {
 	t.Cleanup(func() { directoryConfigSource = oldConfig })
 	table, idx = feedbackTable()
 	directory = accountDirectoryWithTable(table)
-	before := int(appruntime.NowS())
 	directory.Feedback("tok", controlaccount.FeedbackKindRateLimited, 1, FeedbackOptions{NowS: intPtr(now)})
-	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] < before+17 || table.QuotaConsoleByIdx[idx] != 1 || table.LastFailAtByIdx[idx] != now {
+	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] != now+17 || table.QuotaConsoleByIdx[idx] != 1 || table.LastFailAtByIdx[idx] != now {
 		t.Fatalf("random rate-limit state cooling=%d fast=%d reset=%d console=%d lastFail=%d",
 			table.CoolingUntilSByIdx[idx],
 			table.QuotaFastByIdx[idx],

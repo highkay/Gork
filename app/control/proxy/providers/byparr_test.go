@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
 func TestByparrProviderReturnsFalseUnlessEnabled(t *testing.T) {
@@ -18,6 +22,63 @@ func TestByparrProviderReturnsFalseUnlessEnabled(t *testing.T) {
 
 	if _, ok, err := provider.RefreshBundle(context.Background(), "node-1", "http://proxy:8080"); err != nil || ok {
 		t.Fatalf("RefreshBundle ok=%v err=%v, want false nil", ok, err)
+	}
+}
+
+func TestByparrProviderNilConfigUsesGlobalConfig(t *testing.T) {
+	var requestSeen bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestSeen = true
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request payload: %v", err)
+		}
+		if payload["cmd"] != "request.get" || payload["url"] != "https://grok.com/global" || payload["max_timeout"] != float64(5) {
+			t.Fatalf("payload = %#v", payload)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"status": "ok",
+			"solution": {
+				"cookies": [{"name": "cf_clearance", "value": "global", "domain": ".grok.com"}],
+				"user_agent": "Global-Byparr-UA",
+				"url": "https://grok.com/global"
+			}
+		}`))
+	}))
+	defer server.Close()
+
+	defaultsPath := filepath.Join(t.TempDir(), "config.defaults.toml")
+	if err := os.WriteFile(defaultsPath, []byte(""), 0o600); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	previous := platformconfig.GlobalConfig
+	t.Cleanup(func() { platformconfig.GlobalConfig = previous })
+	platformconfig.GlobalConfig = platformconfig.NewConfigSnapshot(fakeFlareSolverrGlobalConfigBackend{
+		data: map[string]any{
+			"proxy": map[string]any{
+				"clearance": map[string]any{
+					"mode":        "byparr",
+					"byparr_url":  server.URL,
+					"timeout_sec": 5,
+				},
+			},
+		},
+	}, platformconfig.ConfigSnapshotOptions{})
+	if err := platformconfig.GlobalConfig.Load(context.Background(), defaultsPath); err != nil {
+		t.Fatalf("load global config: %v", err)
+	}
+
+	provider := ByparrClearanceProvider{Client: server.Client()}
+	bundle, ok, err := provider.RefreshBundle(context.Background(), "node-global", "", "https://grok.com/global")
+	if err != nil {
+		t.Fatalf("RefreshBundle returned error: %v", err)
+	}
+	if !ok || !requestSeen {
+		t.Fatalf("RefreshBundle ok=%v requestSeen=%v", ok, requestSeen)
+	}
+	if bundle.BundleID != "byparr:node-global@grok.com" || bundle.CFCookies != "cf_clearance=global" || bundle.UserAgent != "Global-Byparr-UA" || bundle.AffinityKey != "node-global" || bundle.ClearanceHost != "grok.com" {
+		t.Fatalf("bundle = %#v", bundle)
 	}
 }
 

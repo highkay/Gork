@@ -169,7 +169,22 @@ func iterPatchPaths(value any, prefix string) []string {
 func cloneAdminMap(value map[string]any) map[string]any {
 	out := make(map[string]any, len(value))
 	for key, item := range value {
-		out[key] = item
+		out[key] = cloneAdminValue(item)
 	}
 	return out
+}
+
+func cloneAdminValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneAdminMap(typed)
+	case []any:
+		out := make([]any, len(typed))
+		for index, item := range typed {
+			out[index] = cloneAdminValue(item)
+		}
+		return out
+	default:
+		return value
+	}
 }

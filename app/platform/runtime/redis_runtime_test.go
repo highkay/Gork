@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"sync"
 	"testing"
 )
 
@@ -118,6 +119,35 @@ func TestRedisRuntimeLeaseReleaseMismatchMarksReleased(t *testing.T) {
 	}
 	if released {
 		t.Fatalf("mismatch release should mark lease released")
+	}
+}
+
+func TestRedisRuntimeLeaseConcurrentRenewAndRelease(t *testing.T) {
+	client := &fakeRuntimeRedis{value: "owner-1"}
+	lease := NewRedisRuntimeLease(client, "runtime:lock:leader", "owner-1", 300000)
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 40)
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, err := lease.Renew(context.Background())
+			errs <- err
+		}()
+		go func() {
+			defer wg.Done()
+			_, err := lease.Release(context.Background())
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("lease operation returned error: %v", err)
+		}
 	}
 }
 

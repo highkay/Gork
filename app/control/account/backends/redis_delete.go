@@ -59,5 +59,5 @@ func (r *RedisAccountRepository) deleteRedisAccount(
 	if err := r.addRecordIndexes(ctx, record); err != nil {
 		return 0, err
 	}
-	return 1, r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int{token: revision})
+	return 1, r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int64{token: int64(revision)})
 }

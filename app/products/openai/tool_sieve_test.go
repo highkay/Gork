@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
@@ -68,6 +69,18 @@ func TestToolSieveMatchesToolCallsTagsCaseInsensitively(t *testing.T) {
 		t.Fatalf("safe=%q", safe)
 	}
 	assertOneSearchCall(t, calls)
+}
+
+func TestToolSieveCapsUnclosedToolBlockBuffer(t *testing.T) {
+	sieve := NewToolSieve([]string{"search"})
+
+	safe, calls := sieve.Feed("prefix <tool_calls>" + strings.Repeat("x", maxToolSieveBufferBytes+1))
+	if safe != "prefix " || calls != nil {
+		t.Fatalf("feed safe=%q calls=%#v", safe, calls)
+	}
+	if calls := sieve.Flush(); calls != nil {
+		t.Fatalf("flush calls=%#v", calls)
+	}
 }
 
 func assertOneSearchCall(t *testing.T, calls []protocol.ParsedToolCall) {

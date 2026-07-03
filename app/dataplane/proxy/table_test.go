@@ -67,3 +67,39 @@ func TestSnapshotFromDirectoryMatchesPython(t *testing.T) {
 		t.Fatalf("SnapshotFromDirectory = %#v", table)
 	}
 }
+
+func TestSnapshotFromDirectoryClonesMutableState(t *testing.T) {
+	proxyURL := "http://proxy.local:8080"
+	lastUsed := int64(111)
+	lastRefresh := int64(222)
+	refreshError := "old"
+	node := controlproxy.NewEgressNode("node-1")
+	node.ProxyURL = &proxyURL
+	node.LastUsed = &lastUsed
+	key := BundleKey{AffinityKey: "node-1", ClearanceHost: "grok.com"}
+	bundle := controlproxy.NewClearanceBundle("bundle-1")
+	bundle.LastRefreshAt = &lastRefresh
+	bundle.LastRefreshError = refreshError
+	directory := fakeDirectorySnapshot{
+		egressMode:    controlproxy.EgressModeProxyPool,
+		clearanceMode: controlproxy.ClearanceModeManual,
+		nodes:         []controlproxy.EgressNode{node},
+		bundles:       map[BundleKey]controlproxy.ClearanceBundle{key: bundle},
+	}
+
+	table := SnapshotFromDirectory(directory)
+	*table.Nodes[0].ProxyURL = "http://changed.local:8080"
+	*table.Nodes[0].LastUsed = 999
+	copiedBundle := table.Bundles[key]
+	*copiedBundle.LastRefreshAt = 999
+	copiedBundle.LastRefreshError = "changed"
+	table.Bundles[key] = copiedBundle
+
+	if *directory.nodes[0].ProxyURL != proxyURL || *directory.nodes[0].LastUsed != lastUsed {
+		t.Fatalf("directory node was mutated: %#v", directory.nodes[0])
+	}
+	originalBundle := directory.bundles[key]
+	if *originalBundle.LastRefreshAt != lastRefresh || originalBundle.LastRefreshError != refreshError {
+		t.Fatalf("directory bundle was mutated: %#v", originalBundle)
+	}
+}

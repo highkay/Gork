@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/dslzl/gork/app/platform/config"
 )
 
 func TestValidatePublicUnauthenticatedListenRequiresExplicitOverride(t *testing.T) {
@@ -50,5 +55,52 @@ func TestNewGorkHTTPServerAppliesSecurityOptions(t *testing.T) {
 	}
 	if server.WriteTimeout != 0 {
 		t.Fatalf("stream endpoints require no global write timeout, got %s", server.WriteTimeout)
+	}
+}
+
+func TestBuildGorkHTTPServerOptionsUsesEnvAndConfig(t *testing.T) {
+	defaults := filepath.Join(t.TempDir(), "defaults.toml")
+	if err := os.WriteFile(defaults, []byte(`
+[app]
+api_key = "secret"
+
+[server]
+read_timeout_seconds = 2
+read_header_timeout_seconds = 3
+idle_timeout_seconds = 4
+max_header_bytes = 8192
+`), 0o600); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	if err := config.GlobalConfig.Load(context.Background(), defaults); err != nil {
+		t.Fatalf("load defaults: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = config.GlobalConfig.Load(context.Background(), "")
+	})
+	t.Setenv("HOST", "127.0.0.1")
+	t.Setenv("PORT", "19090")
+	t.Setenv("ALLOW_UNAUTHENTICATED_API", "YES")
+	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+
+	options := buildGorkHTTPServerOptions(handler)
+
+	if options.Address != "127.0.0.1:19090" {
+		t.Fatalf("Address = %q", options.Address)
+	}
+	if options.Handler == nil {
+		t.Fatal("Handler is nil")
+	}
+	if len(options.APIKeys) != 1 || options.APIKeys[0] != "secret" {
+		t.Fatalf("APIKeys = %#v", options.APIKeys)
+	}
+	if !options.AllowUnauth {
+		t.Fatal("AllowUnauth = false")
+	}
+	if options.ReadTimeout != 2*time.Second ||
+		options.ReadHeaderTimeout != 3*time.Second ||
+		options.IdleTimeout != 4*time.Second ||
+		options.MaxHeaderBytes != 8192 {
+		t.Fatalf("timeouts/header = %#v", options)
 	}
 }

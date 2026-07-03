@@ -11,6 +11,23 @@ import (
 	account "github.com/dslzl/gork/app/control/account"
 )
 
+func TestSortRedisRecordsUsesInt64Timestamps(t *testing.T) {
+	records := []account.AccountRecord{
+		{Token: "older", UpdatedAt: 1<<32 + 10},
+		{Token: "newer", UpdatedAt: 1<<32 + 20},
+	}
+
+	sortRedisRecords(records, "updated_at", false)
+	if got := []string{records[0].Token, records[1].Token}; !slices.Equal(got, []string{"older", "newer"}) {
+		t.Fatalf("ascending updated_at sort = %#v", got)
+	}
+
+	sortRedisRecords(records, "updated_at", true)
+	if got := []string{records[0].Token, records[1].Token}; !slices.Equal(got, []string{"newer", "older"}) {
+		t.Fatalf("descending updated_at sort = %#v", got)
+	}
+}
+
 func TestRedisAccountRepositoryLifecycle(t *testing.T) {
 	ctx := context.Background()
 	store := newFakeRedisAccountStore()
@@ -226,14 +243,62 @@ func TestRedisAccountRepositoryInitializeRebuildsMissingIndexesForExistingRecord
 	}
 }
 
+func TestRedisAccountRepositoryInitializeRetriesAfterFailedIndexRebuild(t *testing.T) {
+	ctx := context.Background()
+	store := newFakeRedisAccountStore()
+	store.strings[redisKeyRevision] = "1"
+	repo := NewRedisAccountRepository(store)
+	record, err := account.NewAccountRecord(account.AccountRecord{Token: "tok-old", Pool: "basic", Tags: []string{"legacy"}})
+	if err != nil {
+		t.Fatalf("NewAccountRecord returned error: %v", err)
+	}
+	record.CreatedAt = 1
+	record.UpdatedAt = 1
+	hash, err := redisHashFromRecord(record, 1)
+	if err != nil {
+		t.Fatalf("redisHashFromRecord returned error: %v", err)
+	}
+	store.hashes[redisRecordKey("tok-old")] = hash
+	store.failSAddKey = redisKeyIndexAll
+
+	if err := repo.Initialize(ctx); err == nil {
+		t.Fatal("Initialize succeeded despite forced index rebuild failure")
+	}
+	if _, ready := store.strings[redisKeyIndexReady]; ready {
+		t.Fatalf("index ready marker was written after failed rebuild")
+	}
+
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize retry returned error: %v", err)
+	}
+	if store.strings[redisKeyIndexReady] != "1" {
+		t.Fatalf("index ready marker after retry = %q", store.strings[redisKeyIndexReady])
+	}
+	store.failScan = true
+	page, err := repo.ListAccounts(ctx, account.ListAccountsQuery{
+		Tags:     []string{"legacy"},
+		Page:     1,
+		PageSize: 10,
+		SortBy:   "token",
+	})
+	if err != nil {
+		t.Fatalf("ListAccounts after retry returned error: %v", err)
+	}
+	if len(page.Items) != 1 || page.Items[0].Token != "tok-old" {
+		t.Fatalf("rebuilt index page after retry = %#v", page)
+	}
+}
+
 type fakeRedisAccountStore struct {
 	strings     map[string]string
 	hashes      map[string]map[string]string
 	sets        map[string]map[string]struct{}
-	zsets       map[string]map[string]int
+	zsets       map[string]map[string]int64
 	closed      bool
 	failScan    bool
 	failHSetKey string
+	failSAddKey string
+	failZAddKey string
 }
 
 var errFakeRedisScanForbidden = errors.New("scan should not be used")
@@ -243,7 +308,7 @@ func newFakeRedisAccountStore() *fakeRedisAccountStore {
 		strings: map[string]string{},
 		hashes:  map[string]map[string]string{},
 		sets:    map[string]map[string]struct{}{},
-		zsets:   map[string]map[string]int{},
+		zsets:   map[string]map[string]int64{},
 	}
 }
 
@@ -319,9 +384,13 @@ func (s *fakeRedisAccountStore) HSet(_ context.Context, key string, mapping map[
 	return nil
 }
 
-func (s *fakeRedisAccountStore) ZAdd(_ context.Context, key string, members map[string]int) error {
+func (s *fakeRedisAccountStore) ZAdd(_ context.Context, key string, members map[string]int64) error {
+	if s.failZAddKey == key {
+		s.failZAddKey = ""
+		return errors.New("forced zadd failure")
+	}
 	if s.zsets[key] == nil {
-		s.zsets[key] = map[string]int{}
+		s.zsets[key] = map[string]int64{}
 	}
 	for member, score := range members {
 		s.zsets[key][member] = score
@@ -332,11 +401,11 @@ func (s *fakeRedisAccountStore) ZAdd(_ context.Context, key string, members map[
 func (s *fakeRedisAccountStore) ZRangeByScore(_ context.Context, key string, minExclusive int, limit int) ([]string, error) {
 	type item struct {
 		member string
-		score  int
+		score  int64
 	}
 	items := []item{}
 	for member, score := range s.zsets[key] {
-		if score > minExclusive {
+		if score > int64(minExclusive) {
 			items = append(items, item{member, score})
 		}
 	}
@@ -359,6 +428,10 @@ func (s *fakeRedisAccountStore) ZRem(_ context.Context, key string, members ...s
 }
 
 func (s *fakeRedisAccountStore) SAdd(_ context.Context, key string, members ...string) error {
+	if s.failSAddKey == key {
+		s.failSAddKey = ""
+		return errors.New("forced sadd failure")
+	}
 	if s.sets[key] == nil {
 		s.sets[key] = map[string]struct{}{}
 	}

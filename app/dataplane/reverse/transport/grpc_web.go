@@ -91,6 +91,9 @@ func ParseGRPCWebResponse(body []byte, contentType string, headers map[string]st
 			continue
 		}
 		if flag&0x01 != 0 {
+			// Compressed grpc-web frames require negotiated per-message
+			// decompression. Browser responses used by this transport are
+			// expected to be uncompressed.
 			return GRPCWebTransportResponse{}, errors.New("grpc-web compressed frame is not supported")
 		}
 		messages = append(messages, slices.Clone(payload))
@@ -162,7 +165,7 @@ func maybeDecodeGRPCWebBase64(body []byte, contentType string) ([]byte, error) {
 		}
 		return decoded, nil
 	}
-	if looksLikeBase64(body) {
+	if strings.TrimSpace(contentType) == "" && looksLikeBase64(body) {
 		if decoded, err := base64.StdEncoding.DecodeString(string(compact)); err == nil {
 			return decoded, nil
 		}

@@ -38,16 +38,7 @@ func main() {
 		}
 	}()
 
-	server, err := newGorkHTTPServer(gorkHTTPServerOptions{
-		Address:           listenAddress(),
-		Handler:           application.Handler(),
-		APIKeys:           auth.GetAPIKeys(auth.AuthSettings{APIKey: config.GlobalConfig.Get("app.api_key", "")}),
-		AllowUnauth:       allowUnauthenticatedAPI(),
-		ReadTimeout:       configSeconds("server.read_timeout_seconds", 0),
-		ReadHeaderTimeout: configSeconds("server.read_header_timeout_seconds", 15),
-		IdleTimeout:       configSeconds("server.idle_timeout_seconds", 0),
-		MaxHeaderBytes:    config.GlobalConfig.GetInt("server.max_header_bytes", 0),
-	})
+	server, err := newGorkHTTPServer(buildGorkHTTPServerOptions(application.Handler()))
 	if err != nil {
 		log.Fatalf("server configuration failed: %v", err)
 	}
@@ -60,6 +51,19 @@ func main() {
 	log.Printf("gork listening on %s", server.Addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("server failed: %v", err)
+	}
+}
+
+func buildGorkHTTPServerOptions(handler http.Handler) gorkHTTPServerOptions {
+	return gorkHTTPServerOptions{
+		Address:           listenAddress(),
+		Handler:           handler,
+		APIKeys:           auth.GetAPIKeys(auth.AuthSettings{APIKey: config.GlobalConfig.Get("app.api_key", "")}),
+		AllowUnauth:       allowUnauthenticatedAPI(),
+		ReadTimeout:       configSeconds("server.read_timeout_seconds", 0),
+		ReadHeaderTimeout: configSeconds("server.read_header_timeout_seconds", 15),
+		IdleTimeout:       configSeconds("server.idle_timeout_seconds", 0),
+		MaxHeaderBytes:    config.GlobalConfig.GetInt("server.max_header_bytes", 0),
 	}
 }
 

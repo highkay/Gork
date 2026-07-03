@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dslzl/gork/app/platform"
@@ -69,10 +70,13 @@ var currentState = LoggingState{
 	ConsoleLevel: "INFO",
 	FileLogging:  true,
 }
+var loggingMu sync.Mutex
 var nextSinkID int
 var fileHandle *os.File
 
 func SetupLogging(options LoggingOptions) error {
+	loggingMu.Lock()
+	defer loggingMu.Unlock()
 	resetLoggingSinks()
 
 	resolvedLevel := normalizeLevel(defaultString(options.Level, "INFO"))
@@ -123,12 +127,15 @@ func ReloadLogging(options ReloadLoggingOptions) error {
 }
 
 func ReloadFileLogging(options ReloadFileLoggingOptions) error {
+	loggingMu.Lock()
 	if !currentState.Configured {
+		loggingMu.Unlock()
 		return ReloadLogging(ReloadLoggingOptions{
 			FileLevel: options.FileLevel,
 			MaxFiles:  options.MaxFiles,
 		})
 	}
+	defer loggingMu.Unlock()
 
 	removeFileSink()
 	currentState.FileLogging = envBool("LOG_FILE_ENABLED", true)
@@ -146,6 +153,8 @@ func ReloadFileLogging(options ReloadFileLoggingOptions) error {
 }
 
 func CurrentLoggingState() LoggingState {
+	loggingMu.Lock()
+	defer loggingMu.Unlock()
 	state := currentState
 	state.ConsoleSink = cloneSink(currentState.ConsoleSink)
 	state.FileSink = cloneSink(currentState.FileSink)

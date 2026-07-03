@@ -1,7 +1,5 @@
 package account
 
-import appruntime "github.com/dslzl/gork/app/platform/runtime"
-
 const (
 	successStep       = 0.12
 	authFactor        = 0.55
@@ -29,10 +27,10 @@ func ApplyRateLimitedQuota(table *AccountRuntimeTable, idx int, modeID int) {
 	adjustHealth(table, idx, rateLimitFactor)
 }
 
-func ApplyRateLimitedRandom(table *AccountRuntimeTable, idx int, modeID int, coolingSec int) {
+func ApplyRateLimitedRandom(table *AccountRuntimeTable, idx int, modeID int, nowS int, coolingSec int) {
 	if isKnownModeID(modeID) {
 		table.quotaCol(modeID)[idx] = 0
-		ts := int(appruntime.NowS()) + max(0, coolingSec)
+		ts := nowS + max(0, coolingSec)
 		resetCol := table.resetCol(modeID)
 		if ts > resetCol[idx] {
 			resetCol[idx] = ts

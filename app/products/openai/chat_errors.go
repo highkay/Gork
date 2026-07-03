@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/redact"
@@ -10,7 +11,10 @@ import (
 
 const chatRefreshQueueCapacity = 16
 
-var chatRefreshEnqueue = newChatRefreshQueue(chatRefreshQueueCapacity).enqueue
+var (
+	chatRefreshEnqueue = newChatRefreshQueue(chatRefreshQueueCapacity).enqueue
+	chatRefreshDrops   atomic.Uint64
+)
 
 type chatRefreshQueue struct {
 	once sync.Once
@@ -54,9 +58,11 @@ func enqueueChatRefresh(ctx context.Context, job func(context.Context)) {
 		ctx = context.Background()
 	}
 	jobCtx := context.WithoutCancel(ctx)
-	_ = chatRefreshEnqueue(func() {
+	if !chatRefreshEnqueue(func() {
 		job(jobCtx)
-	})
+	}) {
+		chatRefreshDrops.Add(1)
+	}
 }
 
 func upstreamBodyExcerpt(err *platform.UpstreamError, limit int) string {

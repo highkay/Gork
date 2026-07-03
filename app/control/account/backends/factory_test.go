@@ -97,6 +97,38 @@ func TestDescribeRepositoryTargetAndRedaction(t *testing.T) {
 	}
 }
 
+func TestRepositoryFactoryRequiresSQLURLs(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		storage     string
+		missingName string
+	}{
+		{name: "mysql", storage: "mysql", missingName: "ACCOUNT_MYSQL_URL"},
+		{name: "postgresql", storage: "postgresql", missingName: "ACCOUNT_POSTGRESQL_URL"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			env := map[string]string{"ACCOUNT_STORAGE": tt.storage}
+			if _, _, err := DescribeRepositoryTarget(env); err == nil || err.Error() != "Missing required env: "+tt.missingName {
+				t.Fatalf("DescribeRepositoryTarget error = %v, want missing %s", err, tt.missingName)
+			}
+
+			constructors := RepositoryConstructors{
+				MySQL: func(string) (account.AccountRepository, error) {
+					t.Fatal("mysql constructor should not be called without URL")
+					return nil, nil
+				},
+				PostgreSQL: func(string) (account.AccountRepository, error) {
+					t.Fatal("postgresql constructor should not be called without URL")
+					return nil, nil
+				},
+			}
+			if _, err := CreateRepository(env, constructors); err == nil || err.Error() != "Missing required env: "+tt.missingName {
+				t.Fatalf("CreateRepository error = %v, want missing %s", err, tt.missingName)
+			}
+		})
+	}
+}
+
 func TestResolveLocalDBPathHonorsDataDirAndAccountLocalPath(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("DATA_DIR", dataDir)

@@ -27,6 +27,10 @@ func Bootstrap(ctx context.Context, repository controlaccount.AccountRepository)
 		}
 		slot.Token = record.Token
 		slot.Tags = tags
+		if existing, ok := table.IdxByToken[record.Token]; ok {
+			table.UpdateSlot(existing, slot, oldTagsFor(table, existing))
+			continue
+		}
 		table.AppendSlot(slot)
 	}
 	table.Revision = snapshot.Revision

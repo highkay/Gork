@@ -22,5 +22,8 @@ func FuzzBuildSSOCookie(f *testing.F) {
 		if !hasCookiePair(cookie, "sso") {
 			t.Fatalf("cookie missing sso pair: %q", cookie)
 		}
+		if !hasCookiePair(cookie, "sso-rw") {
+			t.Fatalf("cookie missing sso-rw pair: %q", cookie)
+		}
 	})
 }

@@ -9,14 +9,14 @@ func BuildWSHeaders(token string, options ...WSHeaderOptions) map[string]string 
 	}
 	profile := resolveProfile(opts.Lease)
 	rawUA := profile.UserAgent
-	ua := sanitize(&rawUA, "user_agent", false)
+	ua := sanitize(&rawUA, false)
 	browser := profile.Browser
 	table := reverseruntime.GlobalEndpointTable()
 	origin := opts.Origin
 	if origin == "" {
 		origin = table.Resolve("base")
 	}
-	origin = sanitize(&origin, "origin", false)
+	origin = sanitize(&origin, false)
 
 	headers := map[string]string{
 		"Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",

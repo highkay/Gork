@@ -25,8 +25,6 @@ type BrowserProfileData struct {
 	Chromium bool
 }
 
-var supportedBrowserProfiles = map[string]struct{}{}
-
 const DefaultConsoleUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36"
 
 func ExtractCookieValue(cookieHeader, name string) string {
@@ -42,23 +40,7 @@ func ExtractCookieValue(cookieHeader, name string) string {
 }
 
 func supportedBrowser(candidate string) string {
-	if candidate == "" {
-		return ""
-	}
-	if len(supportedBrowserProfiles) == 0 {
-		return candidate
-	}
-	if _, ok := supportedBrowserProfiles[candidate]; ok {
-		return candidate
-	}
-	family := regexp.MustCompile(`^[a-z_]+`).FindString(candidate)
-	if family == "" {
-		return ""
-	}
-	if _, ok := supportedBrowserProfiles[family]; ok {
-		return family
-	}
-	return ""
+	return strings.TrimSpace(candidate)
 }
 
 func BrowserFromUserAgent(userAgent string) string {

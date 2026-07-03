@@ -31,12 +31,11 @@ type ConsoleHeaderOptions struct {
 	ContentType string
 }
 
-func sanitize(value *string, field string, stripSpaces bool) string {
+func sanitize(value *string, stripSpaces bool) string {
 	raw := ""
 	if value != nil {
 		raw = *value
 	}
-	_ = field
 
 	translated := strings.Map(normalizeHeaderRune, raw)
 	if stripSpaces {

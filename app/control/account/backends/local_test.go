@@ -90,6 +90,78 @@ func TestLocalAccountRepositoryLifecycle(t *testing.T) {
 	}
 }
 
+func TestLocalAccountRepositoryUpsertRefreshesAllQuotaDefaults(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "accounts.db")
+	repo := NewLocalAccountRepository(dbPath)
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+	if _, err := repo.UpsertAccounts(ctx, []account.AccountUpsert{{Token: "tok-quota", Pool: "super"}}); err != nil {
+		t.Fatalf("initial UpsertAccounts returned error: %v", err)
+	}
+	records, err := repo.GetAccounts(ctx, []string{"tok-quota"})
+	if err != nil || len(records) != 1 {
+		t.Fatalf("GetAccounts after initial upsert = %#v/%v", records, err)
+	}
+	superQuota, err := records[0].QuotaSet()
+	if err != nil {
+		t.Fatalf("super QuotaSet returned error: %v", err)
+	}
+	if superQuota.Auto.Total != 50 || superQuota.Fast.Total != 140 || superQuota.Expert.Total != 50 || superQuota.Grok43 == nil {
+		t.Fatalf("initial super quota = %#v", superQuota)
+	}
+
+	if _, err := repo.UpsertAccounts(ctx, []account.AccountUpsert{{Token: "tok-quota", Pool: "basic"}}); err != nil {
+		t.Fatalf("second UpsertAccounts returned error: %v", err)
+	}
+	records, err = repo.GetAccounts(ctx, []string{"tok-quota"})
+	if err != nil || len(records) != 1 {
+		t.Fatalf("GetAccounts after repeated upsert = %#v/%v", records, err)
+	}
+	basicQuota, err := records[0].QuotaSet()
+	if err != nil {
+		t.Fatalf("basic QuotaSet returned error: %v", err)
+	}
+	if records[0].Pool != "basic" ||
+		basicQuota.Auto.Total != 0 ||
+		basicQuota.Fast.Total != 30 ||
+		basicQuota.Expert.Total != 0 ||
+		basicQuota.Heavy != nil ||
+		basicQuota.Grok43 != nil ||
+		basicQuota.Console == nil ||
+		basicQuota.Console.Total != 20 {
+		t.Fatalf("repeated upsert basic quota = pool %q quota %#v", records[0].Pool, basicQuota)
+	}
+}
+
+func TestLocalAccountRepositoryDeleteReportsTouchedRows(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "accounts.db")
+	repo := NewLocalAccountRepository(dbPath)
+	if err := repo.Initialize(ctx); err != nil {
+		t.Fatalf("Initialize returned error: %v", err)
+	}
+	if _, err := repo.UpsertAccounts(ctx, []account.AccountUpsert{
+		{Token: "tok-live-a", Pool: "basic"},
+		{Token: "tok-live-b", Pool: "basic"},
+	}); err != nil {
+		t.Fatalf("initial UpsertAccounts returned error: %v", err)
+	}
+	deleted, err := repo.DeleteAccounts(ctx, []string{"tok-live-a", "tok-live-b"})
+	if err != nil || deleted.Deleted != 2 || deleted.Revision != 2 {
+		t.Fatalf("DeleteAccounts two live tokens = %#v/%v, want 2 deleted rev 2", deleted, err)
+	}
+
+	if _, err := repo.UpsertAccounts(ctx, []account.AccountUpsert{{Token: "tok-live-c", Pool: "basic"}}); err != nil {
+		t.Fatalf("second UpsertAccounts returned error: %v", err)
+	}
+	deleted, err = repo.DeleteAccounts(ctx, []string{"tok-live-c", "tok-missing"})
+	if err != nil || deleted.Deleted != 1 || deleted.Revision != 4 {
+		t.Fatalf("DeleteAccounts live+missing tokens = %#v/%v, want 1 deleted rev 4", deleted, err)
+	}
+}
+
 func TestLocalAccountRepositoryListAndReplacePool(t *testing.T) {
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "accounts.db")

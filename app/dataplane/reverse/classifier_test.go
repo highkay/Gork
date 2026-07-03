@@ -30,9 +30,23 @@ func TestClassifyResultMatchesPythonStatusMapping(t *testing.T) {
 	}
 }
 
-func TestClassifyResultIgnoresPayloadLikePython(t *testing.T) {
-	got := ClassifyResult(418, "teapot", ClassifyOptions{Payload: map[string]any{"error": "ignored"}})
-	if got != ResultCategoryUnknown {
-		t.Fatalf("ClassifyResult with payload = %v, want %v", got, ResultCategoryUnknown)
+func TestClassifyResultHandlesBodyEdges(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		body   string
+		want   ResultCategory
+	}{
+		{name: "invalid credentials JSON", status: 400, body: `{"error":{"code":"INVALID-CREDENTIALS"}}`, want: ResultCategoryAuthFailure},
+		{name: "uppercase token expired", status: 403, body: "TOKEN EXPIRED", want: ResultCategoryAuthFailure},
+		{name: "empty forbidden body", status: 403, body: "", want: ResultCategoryForbidden},
+		{name: "empty bad request body", status: 400, body: "", want: ResultCategoryUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ClassifyResult(tt.status, tt.body); got != tt.want {
+				t.Fatalf("ClassifyResult(%d, %q) = %v, want %v", tt.status, tt.body, got, tt.want)
+			}
+		})
 	}
 }

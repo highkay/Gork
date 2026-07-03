@@ -168,6 +168,42 @@ func TestAdminAssetsClearTokenDeletesKnownIDs(t *testing.T) {
 	}
 }
 
+func TestAdminAssetsClearTokenReportsTransientDeleteFailure(t *testing.T) {
+	resetAdminRouterDepsForTest(t)
+	repo := &fakeAdminAssetsRepo{}
+	adminAssetsRepoProvider = func() adminAssetsRepository { return repo }
+	adminListAssets = func(context.Context, string) (map[string]any, error) {
+		return map[string]any{"assets": []any{
+			map[string]any{"id": "ok"},
+			map[string]any{"id": "transient"},
+		}}, nil
+	}
+	var attempts []string
+	adminDeleteAsset = func(_ context.Context, token string, assetID string) error {
+		attempts = append(attempts, token+"|"+assetID)
+		if assetID == "transient" {
+			return errors.New("temporary upstream failure")
+		}
+		return nil
+	}
+	adminMarkInvalidCredentials = func(context.Context, adminAssetsRepository, string, error, string) bool {
+		return false
+	}
+
+	rec := adminRequest(http.MethodPost, "/admin/api/assets/clear-token", `{"token":"tok"}`, "Bearer gork")
+	body := decodeAdminBody(t, rec)
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status/body=%d/%#v", rec.Code, body)
+	}
+	errBody := body["error"].(map[string]any)
+	if errBody["message"] != "temporary upstream failure" {
+		t.Fatalf("error body = %#v", errBody)
+	}
+	if len(attempts) != 2 || attempts[0] != "tok|ok" || attempts[1] != "tok|transient" {
+		t.Fatalf("attempts = %#v", attempts)
+	}
+}
+
 func TestAdminAssetsClearTokenContinuesUntilInvalidCredentialMarked(t *testing.T) {
 	resetAdminRouterDepsForTest(t)
 	repo := &fakeAdminAssetsRepo{}

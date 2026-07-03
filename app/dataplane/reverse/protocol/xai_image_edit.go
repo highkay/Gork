@@ -20,6 +20,7 @@ func BuildImageEditPayload(options ImageEditPayloadOptions) map[string]any {
 	if options.Temporary != nil {
 		temporary = *options.Temporary
 	}
+	imageReferences := append([]string(nil), options.ImageReferences...)
 	return map[string]any{
 		"temporary":                 temporary,
 		"modelName":                 ImageEditModelName,
@@ -39,7 +40,7 @@ func BuildImageEditPayload(options ImageEditPayloadOptions) map[string]any {
 				"modelMap": map[string]any{
 					"imageEditModel": ImageEditModelKind,
 					"imageEditModelConfig": map[string]any{
-						"imageReferences": options.ImageReferences,
+						"imageReferences": imageReferences,
 						"parentPostId":    options.ParentPostID,
 					},
 				},

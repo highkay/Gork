@@ -11,7 +11,7 @@ type RedisAccountStore interface {
 	HGetAll(context.Context, string) (map[string]string, error)
 	HGet(context.Context, string, string) (string, bool, error)
 	HSet(context.Context, string, map[string]string) error
-	ZAdd(context.Context, string, map[string]int) error
+	ZAdd(context.Context, string, map[string]int64) error
 	ZRangeByScore(context.Context, string, int, int) ([]string, error)
 	ZRem(context.Context, string, ...string) error
 	SAdd(context.Context, string, ...string) error

@@ -73,6 +73,48 @@ func TestQuotaSelectResetsBasicWindowFiltersAndPrefersTags(t *testing.T) {
 	}
 }
 
+func TestMaybeResetWindowsOnlyResetsBasicPool(t *testing.T) {
+	tests := []struct {
+		name      string
+		poolID    int
+		wantQuota int
+		wantReset int
+	}{
+		{name: "basic", poolID: 0, wantQuota: 5, wantReset: 110},
+		{name: "super", poolID: 1, wantQuota: 0, wantReset: 90},
+		{name: "heavy", poolID: 2, wantQuota: 0, wantReset: 90},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			table := MakeEmptyTable()
+			idx := table.AppendSlot(AccountSlot{
+				Token:      tc.name,
+				PoolID:     tc.poolID,
+				StatusID:   StatusActive,
+				QuotaFast:  0,
+				TotalFast:  5,
+				WindowFast: 10,
+				ResetFast:  90,
+				Health:     1,
+			})
+			maybeResetWindows(
+				table,
+				map[int]bool{idx: true},
+				1,
+				table.ResetFastAtByIdx,
+				table.QuotaFastByIdx,
+				table.TotalFastByIdx,
+				table.WindowFastByIdx,
+				tc.poolID,
+				100,
+			)
+			if table.QuotaFastByIdx[idx] != tc.wantQuota || table.ResetFastAtByIdx[idx] != tc.wantReset {
+				t.Fatalf("quota/reset = %d/%d, want %d/%d", table.QuotaFastByIdx[idx], table.ResetFastAtByIdx[idx], tc.wantQuota, tc.wantReset)
+			}
+		})
+	}
+}
+
 func TestQuotaSelectScoresAndSelectAnyIgnoresQuota(t *testing.T) {
 	table := MakeEmptyTable()
 	lowHealth := table.AppendSlot(AccountSlot{Token: "quota", PoolID: 1, StatusID: StatusActive, QuotaAuto: 5, WindowAuto: 60, Health: 0.1})

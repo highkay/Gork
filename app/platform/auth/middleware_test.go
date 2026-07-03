@@ -26,7 +26,7 @@ func TestAuthSettingsHelpersMatchPython(t *testing.T) {
 			t.Fatalf("webui enabled value %#v should be true", value)
 		}
 	}
-	for _, value := range []any{false, "0", "false", "", nil} {
+	for _, value := range []any{false, "0", "false", "", nil, struct{ enabled bool }{true}} {
 		if IsWebUIEnabled(AuthSettings{WebUIEnabled: value}) {
 			t.Fatalf("webui enabled value %#v should be false", value)
 		}

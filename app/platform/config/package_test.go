@@ -15,6 +15,8 @@ func TestPackageDocMarksPythonConfigPackageBoundary(t *testing.T) {
 	for _, want := range []string{
 		"Python app.platform.config package boundary",
 		"empty app/platform/config/__init__.py",
+		"ConfigSnapshot snapshots",
+		"persist runtime overrides",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("doc.go missing %q in:\n%s", want, text)

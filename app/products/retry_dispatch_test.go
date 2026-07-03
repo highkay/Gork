@@ -67,6 +67,28 @@ func TestRunAccountDispatchRetriesWithExcludedTokenAndFeedback(t *testing.T) {
 	}
 }
 
+func TestRunAccountDispatchSkipsEmptyFeedback(t *testing.T) {
+	directory := &fakeDispatchDirectory{
+		leases: []AccountDispatchLease{{Token: "one", ModeID: 1}},
+	}
+	result, err := RunAccountDispatch(context.Background(), AccountDispatchOptions[string]{
+		Directory: directory,
+		Spec:      controlmodel.ModelSpec{ModelName: "grok", Capability: controlmodel.CapabilityChat},
+		Feedback:  func(error) string { return "" },
+	}, func(_ context.Context, lease AccountDispatchLease) (string, error) {
+		return "done:" + lease.Token, nil
+	})
+	if err != nil {
+		t.Fatalf("dispatch error: %v", err)
+	}
+	if result != "done:one" {
+		t.Fatalf("result = %q", result)
+	}
+	if len(directory.feedbacks) != 0 {
+		t.Fatalf("feedbacks = %#v, want none", directory.feedbacks)
+	}
+}
+
 func TestRunAccountDispatchReturnsReserveError(t *testing.T) {
 	directory := &fakeDispatchDirectory{err: errors.New("reserve failed")}
 	_, err := RunAccountDispatch(context.Background(), AccountDispatchOptions[string]{

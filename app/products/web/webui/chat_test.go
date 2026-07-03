@@ -115,6 +115,36 @@ func TestWebUIChatCompletionsDelegatesToOpenAIHandler(t *testing.T) {
 	}
 }
 
+func TestWebUIChatCompletionsPassesThroughDelegateError(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	webUIChatCompletions = func(w http.ResponseWriter, r *http.Request) {
+		writeWebUIJSON(w, http.StatusBadGateway, map[string]any{"error": map[string]any{"message": "delegate failed"}})
+	}
+
+	rec := webUIRequest(http.MethodPost, "/webui/api/chat/completions", `{"model":"chat-model","messages":[]}`, "Bearer web")
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "delegate failed") {
+		t.Fatalf("status/body=%d/%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestWebUIChatCompletionsLimitsJSONBody(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	webUIChatCompletions = func(w http.ResponseWriter, r *http.Request) {
+		_, err := io.ReadAll(r.Body)
+		if err == nil {
+			t.Fatal("expected body limit error")
+		}
+		writeWebUIJSON(w, http.StatusRequestEntityTooLarge, map[string]any{"error": map[string]any{"message": err.Error()}})
+	}
+
+	rec := webUIRequest(http.MethodPost, "/webui/api/chat/completions", strings.Repeat("x", 4<<20+1), "Bearer web")
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status/body=%d/%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestWebUIChatRouteGoldenStatusHeadersAndShapes(t *testing.T) {
 	resetWebUITestDeps(t)
 	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
@@ -241,6 +271,7 @@ func resetWebUITestDeps(t *testing.T) {
 	oldImagineNSFW := webUIImagineDefaultNSFW
 	oldImagineNow := webUIImagineNow
 	oldImagineTickets := webUIImagineTickets
+	oldImagineStopTimeout := webUIImagineStopTimeout
 	oldWebSocketOptions := webUIWebSocketOptionsProvider
 	oldWebSocketLimiter := webUIWebSocketLimiter
 	oldVoiceDirectory := webUIVoiceDirectory
@@ -255,6 +286,7 @@ func resetWebUITestDeps(t *testing.T) {
 	webUIImagineDefaultNSFW = defaultWebUIImagineDefaultNSFW
 	webUIImagineNow = time.Now
 	webUIImagineTickets = newWebUIImagineTicketStore()
+	webUIImagineStopTimeout = time.Second
 	webUIWebSocketOptionsProvider = defaultWebUIWebSocketOptions
 	webUIWebSocketLimiter = newWebUIWebSocketConnectionLimiter()
 	webUIVoiceDirectory = defaultWebUIVoiceDirectory
@@ -270,6 +302,7 @@ func resetWebUITestDeps(t *testing.T) {
 		webUIImagineDefaultNSFW = oldImagineNSFW
 		webUIImagineNow = oldImagineNow
 		webUIImagineTickets = oldImagineTickets
+		webUIImagineStopTimeout = oldImagineStopTimeout
 		webUIWebSocketOptionsProvider = oldWebSocketOptions
 		webUIWebSocketLimiter = oldWebSocketLimiter
 		webUIVoiceDirectory = oldVoiceDirectory

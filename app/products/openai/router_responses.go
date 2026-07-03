@@ -58,6 +58,9 @@ func handleResponses(w http.ResponseWriter, r *http.Request) {
 }
 
 func routerRequestExplicitStream(stream *bool) bool {
+	// Responses starts early SSE only when the request explicitly asks for it.
+	// The configured stream default still controls downstream product behavior
+	// for compatibility with existing non-stream route responses.
 	return stream != nil && *stream
 }
 

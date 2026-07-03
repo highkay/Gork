@@ -33,6 +33,7 @@ func (s *LocalMediaCacheStore) Status() (LocalMediaCacheStatus, error) {
 	}
 	s.statsMu.Lock()
 	for mediaType, item := range s.stats {
+		item.LastReconcileReport = cloneMediaCacheReconcileReport(item.LastReconcileReport)
 		status.Media[mediaType] = item
 	}
 	s.statsMu.Unlock()
@@ -57,4 +58,13 @@ func (s *LocalMediaCacheStore) Status() (LocalMediaCacheStatus, error) {
 		status.Media[mediaType] = item
 	}
 	return status, nil
+}
+
+func cloneMediaCacheReconcileReport(report *MediaCacheReconcileReport) *MediaCacheReconcileReport {
+	if report == nil {
+		return nil
+	}
+	cloned := *report
+	cloned.RemovedNames = append([]string(nil), report.RemovedNames...)
+	return &cloned
 }

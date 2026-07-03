@@ -36,3 +36,42 @@ func TestRepositoryCapturesListQueriesAndRuntimeSnapshot(t *testing.T) {
 		t.Fatalf("RuntimeSnapshot = %#v", snapshot)
 	}
 }
+
+func TestRepositoryReturnsDeepClonedRecords(t *testing.T) {
+	page := accountcontrol.AccountPage{
+		Items: []accountcontrol.AccountRecord{{
+			Token: "tok-nested",
+			Quota: map[string]any{
+				"fast": map[string]any{"remaining": float64(3)},
+				"items": []any{
+					map[string]any{"value": "keep"},
+				},
+			},
+			Ext: map[string]any{
+				"nested": map[string]any{"value": "keep"},
+			},
+		}},
+		Total: 1, Page: 1, PageSize: 50, TotalPages: 1, Revision: 9,
+	}
+	repo := NewRepositoryWithPage(page)
+
+	listed, err := repo.ListAccounts(context.Background(), accountcontrol.ListAccountsQuery{})
+	if err != nil {
+		t.Fatalf("ListAccounts returned error: %v", err)
+	}
+	listed.Items[0].Quota["fast"].(map[string]any)["remaining"] = float64(0)
+	listed.Items[0].Quota["items"].([]any)[0].(map[string]any)["value"] = "changed"
+	listed.Items[0].Ext["nested"].(map[string]any)["value"] = "changed"
+
+	snapshot, err := repo.RuntimeSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("RuntimeSnapshot returned error: %v", err)
+	}
+	quota := snapshot.Items[0].Quota
+	ext := snapshot.Items[0].Ext
+	if quota["fast"].(map[string]any)["remaining"] != float64(3) ||
+		quota["items"].([]any)[0].(map[string]any)["value"] != "keep" ||
+		ext["nested"].(map[string]any)["value"] != "keep" {
+		t.Fatalf("repository returned shared nested state: quota=%#v ext=%#v", quota, ext)
+	}
+}

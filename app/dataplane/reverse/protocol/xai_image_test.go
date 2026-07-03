@@ -67,6 +67,14 @@ func TestImagineFrameParsersMatchPythonBehavior(t *testing.T) {
 	if id == "" || ext != "jpg" {
 		t.Fatalf("fallback image url mismatch id=%q ext=%q", id, ext)
 	}
+	again, againExt := ParseImagineImageURL("no-image")
+	if again != id || againExt != "jpg" {
+		t.Fatalf("fallback image url should be stable for non-empty URL: %q/%q then %q/%q", id, ext, again, againExt)
+	}
+	emptyID, emptyExt := ParseImagineImageURL("")
+	if emptyID == "" || emptyExt != "jpg" {
+		t.Fatalf("empty fallback image url mismatch id=%q ext=%q", emptyID, emptyExt)
+	}
 
 	got := ParseImagineJSONFrame(map[string]any{
 		"current_status": "completed",

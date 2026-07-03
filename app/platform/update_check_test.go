@@ -4,6 +4,9 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -66,6 +69,36 @@ func TestGetLatestReleaseInfoBuildsPayloadAndCaches(t *testing.T) {
 	}
 }
 
+func TestGetLatestReleaseInfoSerializesConcurrentCacheAccess(t *testing.T) {
+	resetUpdateCheckForTest(t)
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"tag_name":"v99.0.0","name":"v99.0.0","draft":false}]`))
+	}))
+	defer server.Close()
+	updateReleasesURL = server.URL
+	updateNow = func() time.Time { return time.Date(2026, 6, 6, 1, 2, 3, 0, time.UTC) }
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			info := GetLatestReleaseInfo(context.Background(), false)
+			if info.Status != "ok" || info.LatestVersion != "99.0.0" {
+				t.Errorf("info = %#v", info)
+			}
+		}()
+	}
+	wg.Wait()
+
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("HTTP calls = %d, want 1", got)
+	}
+}
+
 func TestBuildUpdatePayloadUsesPythonTimestampFormat(t *testing.T) {
 	resetUpdateCheckForTest(t)
 	updateNow = func() time.Time { return time.Date(2026, 6, 6, 1, 2, 3, 456000000, time.UTC) }
@@ -105,6 +138,26 @@ func TestGetLatestReleaseInfoIgnoresNonObjectReleases(t *testing.T) {
 	info := GetLatestReleaseInfo(context.Background(), true)
 	if info.Status != "ok" || info.LatestVersion != "7.8.9" {
 		t.Fatalf("info = %#v", info)
+	}
+}
+
+func TestDecodeGithubReleasesSkipsMalformedItemsAndUnknownFields(t *testing.T) {
+	releases, err := decodeGithubReleases(strings.NewReader(`[
+		"not an object",
+		{"tag_name":"v1.2.3","name":"valid","draft":false,"unknown":"ignored"},
+		{"tag_name":{"nested":true},"draft":"truthy"}
+	]`))
+	if err != nil {
+		t.Fatalf("decodeGithubReleases() error = %v", err)
+	}
+	if len(releases) != 2 {
+		t.Fatalf("release count = %d, want 2: %#v", len(releases), releases)
+	}
+	if releases[0].TagName != "v1.2.3" || releases[0].Name != "valid" || releases[0].Draft {
+		t.Fatalf("first release = %#v", releases[0])
+	}
+	if releases[1].TagName == "" || !releases[1].Draft {
+		t.Fatalf("second release = %#v", releases[1])
 	}
 }
 

@@ -18,6 +18,9 @@ func TestXAIAssetConstantsAndDeleteURLMatchPython(t *testing.T) {
 	if got := AssetDeleteURL("asset-1"); got != "https://grok.com/rest/assets-metadata/asset-1" {
 		t.Fatalf("AssetDeleteURL() = %q", got)
 	}
+	if got := AssetDeleteURL("folder/asset 1"); got != "https://grok.com/rest/assets-metadata/folder%2Fasset%201" {
+		t.Fatalf("AssetDeleteURL() escaped = %q", got)
+	}
 }
 
 func TestResolveDownloadURLMatchesPython(t *testing.T) {
@@ -94,11 +97,32 @@ func TestResolveAssetReferenceMatchesPython(t *testing.T) {
 	if got := ResolveAssetReference("file-id", "", "user-1"); got == nil || *got != "https://assets.grok.com/users/user-1/file-id/content" {
 		t.Fatalf("file id reference = %#v", got)
 	}
+	if got := ResolveAssetReference("file/id 1", "", "user/1"); got == nil || *got != "https://assets.grok.com/users/user%2F1/file%2Fid%201/content" {
+		t.Fatalf("escaped file id reference = %#v", got)
+	}
 	if got := ResolveAssetReference("file-id", "", ""); got != nil {
 		t.Fatalf("missing user reference = %#v, want nil", got)
 	}
 	if got := ResolveAssetReference("", "", "user-1"); got != nil {
 		t.Fatalf("missing file id reference = %#v, want nil", got)
+	}
+}
+
+func TestAssetsUseConfiguredEndpointsAndEscapedPathParts(t *testing.T) {
+	useProtocolGlobalConfig(t, map[string]any{
+		"assets_cdn":    "https://assets.test",
+		"assets_delete": "https://api.test/assets-delete",
+	})
+
+	if got := AssetDeleteURL("folder/asset 1"); got != "https://api.test/assets-delete/folder%2Fasset%201" {
+		t.Fatalf("configured AssetDeleteURL() = %q", got)
+	}
+	assetURL, origin, referer := ResolveDownloadURL("path/file.png")
+	if assetURL != "https://assets.test/path/file.png" || origin != "https://assets.test" || referer != "https://assets.test/" {
+		t.Fatalf("configured ResolveDownloadURL = %q/%q/%q", assetURL, origin, referer)
+	}
+	if got := ResolveAssetReference("file/id 1", "", "user/1"); got == nil || *got != "https://assets.test/users/user%2F1/file%2Fid%201/content" {
+		t.Fatalf("configured ResolveAssetReference = %#v", got)
 	}
 }
 

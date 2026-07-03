@@ -9,7 +9,10 @@ import (
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 )
 
-const maxLiteDiagnosticText = 160
+const (
+	maxLiteDiagnosticText     = 160
+	maxLiteDiagnosticSnippets = 3
+)
 
 type liteStreamDiagnostic struct {
 	dataFrames   int
@@ -93,7 +96,7 @@ func (d *liteStreamDiagnostic) addText(value string) {
 			return
 		}
 	}
-	if len(d.textSnippets) < 3 {
+	if len(d.textSnippets) < maxLiteDiagnosticSnippets {
 		d.textSnippets = append(d.textSnippets, text)
 	}
 }

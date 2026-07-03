@@ -2,6 +2,8 @@ package protocol
 
 import "strings"
 
+// ParseSSEEventLines is a minimal parser for the event/data subset consumed by
+// the current xAI/Grok adapters. It trims data payloads and ignores id/retry.
 func ParseSSEEventLines(lines []string) (string, string, bool) {
 	event := "message"
 	dataLines := []string{}

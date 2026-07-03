@@ -61,7 +61,7 @@ func TestBuildPlanMatchesPythonPlannerByCapability(t *testing.T) {
 			},
 			endpoint:  reverseruntime.MediaPost,
 			transport: TransportKindHTTPJSON,
-			timeout:   30.0,
+			timeout:   60.0,
 			content:   "application/json",
 		},
 		{
@@ -121,7 +121,7 @@ func TestBuildPlanMatchesPythonPlannerChatPriority(t *testing.T) {
 		Capability: controlmodel.CapabilityChat | controlmodel.CapabilityImage | controlmodel.CapabilityVideo,
 	}
 
-	plan := BuildPlan(spec, BuildPlanOptions{Request: map[string]any{"prompt": "hi"}})
+	plan := BuildPlan(spec)
 
 	if plan.Endpoint != reverseruntime.Chat || plan.TransportKind != TransportKindHTTPSSE {
 		t.Fatalf("endpoint/transport = %q/%v, want chat/http_sse", plan.Endpoint, plan.TransportKind)
@@ -138,12 +138,76 @@ func TestBuildPlanMatchesPythonReversePlanDefaults(t *testing.T) {
 		Capability: controlmodel.CapabilityImage,
 	}
 
-	plan := BuildPlan(spec, BuildPlanOptions{Request: map[string]any{"ignored": true}})
+	plan := BuildPlan(spec)
 
 	if plan.Origin != "https://grok.com" || plan.Referer != "https://grok.com/" {
 		t.Fatalf("origin/referer = %q/%q", plan.Origin, plan.Referer)
 	}
 	if plan.Extra == nil || len(plan.Extra) != 0 {
 		t.Fatalf("extra = %#v, want empty map", plan.Extra)
+	}
+}
+
+func TestBuildPlanTimeoutsMatchRuntimeProfiles(t *testing.T) {
+	tests := []struct {
+		name    string
+		spec    controlmodel.ModelSpec
+		profile string
+	}{
+		{
+			name: "chat",
+			spec: controlmodel.ModelSpec{
+				ModeID:     controlmodel.ModeExpert,
+				Tier:       controlmodel.TierSuper,
+				Capability: controlmodel.CapabilityChat,
+			},
+			profile: "chat",
+		},
+		{
+			name: "image",
+			spec: controlmodel.ModelSpec{
+				ModeID:     controlmodel.ModeFast,
+				Tier:       controlmodel.TierBasic,
+				Capability: controlmodel.CapabilityImage,
+			},
+			profile: "image",
+		},
+		{
+			name: "image edit",
+			spec: controlmodel.ModelSpec{
+				ModeID:     controlmodel.ModeAuto,
+				Tier:       controlmodel.TierBasic,
+				Capability: controlmodel.CapabilityImageEdit,
+			},
+			profile: "image_edit",
+		},
+		{
+			name: "video",
+			spec: controlmodel.ModelSpec{
+				ModeID:     controlmodel.ModeHeavy,
+				Tier:       controlmodel.TierHeavy,
+				Capability: controlmodel.CapabilityVideo,
+			},
+			profile: "video",
+		},
+		{
+			name: "voice",
+			spec: controlmodel.ModelSpec{
+				ModeID:     controlmodel.ModeAuto,
+				Tier:       controlmodel.TierBasic,
+				Capability: controlmodel.CapabilityVoice,
+			},
+			profile: "voice",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := BuildPlan(tt.spec)
+			profile := reverseruntime.Profiles[tt.profile]
+			if plan.TimeoutS != profile.TimeoutS {
+				t.Fatalf("plan timeout = %v, want profile %q timeout %v", plan.TimeoutS, tt.profile, profile.TimeoutS)
+			}
+		})
 	}
 }

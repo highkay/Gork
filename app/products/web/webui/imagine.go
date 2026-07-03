@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"time"
 )
+
+var webUIImagineStopTimeout = time.Second
 
 type webUIImagineOptions struct {
 	AspectRatio string
@@ -103,7 +106,11 @@ func (s *webUIImagineSession) stopRun() {
 	current := s.current
 	s.current = nil
 	current.cancel()
-	<-current.done
+	select {
+	case <-current.done:
+	case <-time.After(webUIImagineStopTimeout):
+		_ = s.ws.WriteJSON(map[string]any{"type": "status", "status": "stopped", "run_id": current.id})
+	}
 }
 
 func (s *webUIImagineSession) runImagine(ctx context.Context, run *webUIImagineRun, start webUIImagineStart) {

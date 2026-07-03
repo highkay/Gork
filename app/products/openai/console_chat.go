@@ -24,6 +24,9 @@ func consoleReasoningEffort(emitThink *bool) string {
 	return "low"
 }
 
+// ConsoleCompletions consumes console responses-style stream events and emits
+// OpenAI chat completion shapes. Account feedback and retry behavior match the
+// normal chat path, but event interpretation stays local to the console adapter.
 func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (chatCompletionResult, error) {
 	spec, err := model.Resolve(options.Model)
 	if err != nil {

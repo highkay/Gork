@@ -44,8 +44,8 @@ func TestImageEditPayloadMatchesPythonShape(t *testing.T) {
 		t.Fatalf("image edit config mismatch: %#v", config)
 	}
 	refs[0] = "asset-mutated"
-	if !reflect.DeepEqual([]string{"asset-mutated", "asset-2"}, config["imageReferences"]) {
-		t.Fatalf("Python payload keeps image_references list identity, got %#v", config["imageReferences"])
+	if !reflect.DeepEqual([]string{"asset-1", "asset-2"}, config["imageReferences"]) {
+		t.Fatalf("image references should be cloned, got %#v", config["imageReferences"])
 	}
 
 	temporary := false

@@ -12,6 +12,10 @@ import (
 )
 
 func webUIProtected(method string, handler http.HandlerFunc) http.HandlerFunc {
+	return webUIProtectedWithAuth(method, webUIAuthSettings, handler)
+}
+
+func webUIProtectedWithAuth(method string, settings func() auth.AuthSettings, handler http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != method {
 			writeWebUIJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": map[string]any{"message": "Method not allowed"}})
@@ -25,7 +29,10 @@ func webUIProtected(method string, handler http.HandlerFunc) http.HandlerFunc {
 			writeWebUIJSON(w, http.StatusTooManyRequests, map[string]any{"error": map[string]any{"message": "Too many authentication attempts"}})
 			return
 		}
-		if err := auth.VerifyWebUIKey(r.Header.Get("Authorization"), webUIAuthSettings()); err != nil {
+		if settings == nil {
+			settings = webUIAuthSettings
+		}
+		if err := auth.VerifyWebUIKey(r.Header.Get("Authorization"), settings()); err != nil {
 			webUIAuthRateLimiter.Fail(rateLimitKey)
 			writeWebUIError(w, err)
 			return
@@ -33,6 +40,14 @@ func webUIProtected(method string, handler http.HandlerFunc) http.HandlerFunc {
 		webUIAuthRateLimiter.Success(rateLimitKey)
 		handler(w, r)
 	}
+}
+
+// VerifyHandler returns the WebUI key verification endpoint using the same
+// auth and rate-limit path as protected WebUI API endpoints.
+func VerifyHandler(settings func() auth.AuthSettings) http.HandlerFunc {
+	return webUIProtectedWithAuth(http.MethodGet, settings, func(w http.ResponseWriter, r *http.Request) {
+		writeWebUIJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
 }
 
 func webUIAuthRateLimitKey(r *http.Request) string {

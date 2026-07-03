@@ -60,15 +60,15 @@ func TestHTTPTransportProfileUsesLeaseProxyAndBrowserFamily(t *testing.T) {
 	if key.ProxyURL != "socks5h://127.0.0.1:1080" {
 		t.Fatalf("proxy URL = %q, want socks5h://127.0.0.1:1080", key.ProxyURL)
 	}
-	if key.BrowserFamily != "firefox" || key.OS != "linux" || !key.HTTP3Disabled {
-		t.Fatalf("key = %#v, want firefox/linux with HTTP3 disabled", key)
+	if key.BrowserFamily != "firefox" {
+		t.Fatalf("key = %#v, want firefox browser family", key)
 	}
 }
 
 func TestSurfHTTPDoerCacheSeparatesBrowserFamilies(t *testing.T) {
 	doer := newSurfHTTPDoer(http.DefaultClient)
-	chromeKey := surfTransportKey{BrowserFamily: "chrome", OS: "macos", HTTP3Disabled: true}
-	firefoxKey := surfTransportKey{BrowserFamily: "firefox", OS: "macos", HTTP3Disabled: true}
+	chromeKey := surfTransportKey{BrowserFamily: "chrome"}
+	firefoxKey := surfTransportKey{BrowserFamily: "firefox"}
 
 	chromeA, err := doer.client(chromeKey)
 	if err != nil {
@@ -88,6 +88,24 @@ func TestSurfHTTPDoerCacheSeparatesBrowserFamilies(t *testing.T) {
 	}
 	if chromeA == firefox {
 		t.Fatalf("different browser family reused client")
+	}
+}
+
+func TestSurfKeyIgnoresUnusedOSDetails(t *testing.T) {
+	proxyURL := "socks5h://127.0.0.1:1080"
+	windowsChrome := surfKeyFromProfile(httpTransportProfile{
+		ProxyURL:  proxyURL,
+		Browser:   "chrome",
+		UserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0 Safari/537.36",
+	})
+	androidChrome := surfKeyFromProfile(httpTransportProfile{
+		ProxyURL:  proxyURL,
+		Browser:   "chrome",
+		UserAgent: "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/145.0 Mobile Safari/537.36",
+	})
+
+	if windowsChrome != androidChrome {
+		t.Fatalf("keys differ for OS-only user-agent details: %#v != %#v", windowsChrome, androidChrome)
 	}
 }
 

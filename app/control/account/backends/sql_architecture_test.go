@@ -33,3 +33,27 @@ func TestSQLBackendResponsibilitiesStaySplit(t *testing.T) {
 		})
 	}
 }
+
+func TestSQLSchemaStatementsIncludeAccountColumns(t *testing.T) {
+	columns := strings.Split(localAccountColumns, ",")
+	for _, tc := range []struct {
+		name    string
+		dialect SQLDialect
+	}{
+		{name: "mysql", dialect: SQLDialectMySQL},
+		{name: "postgresql", dialect: SQLDialectPostgreSQL},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			schema := strings.Join(sqlSchemaStatements(tc.dialect), "\n")
+			for _, column := range columns {
+				column = strings.TrimSpace(column)
+				if column == "" {
+					continue
+				}
+				if !strings.Contains(schema, column+" ") {
+					t.Fatalf("%s schema missing account column %q", tc.name, column)
+				}
+			}
+		})
+	}
+}

@@ -5,10 +5,6 @@ import (
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 )
 
-type BuildPlanOptions struct {
-	Request map[string]any
-}
-
 type transportDefaults struct {
 	timeoutS    float64
 	contentType string
@@ -33,23 +29,23 @@ var defaultTransportProfiles = map[TransportKind]transportDefaults{
 	},
 }
 
-func BuildPlan(spec controlmodel.ModelSpec, options ...BuildPlanOptions) ReversePlan {
-	request := map[string]any{}
-	if len(options) > 0 && options[0].Request != nil {
-		request = options[0].Request
-	}
-	endpoint, transportKind := resolveEndpoint(spec, request)
+func BuildPlan(spec controlmodel.ModelSpec) ReversePlan {
+	endpoint, transportKind := resolveEndpoint(spec)
 	defaults, ok := defaultTransportProfiles[transportKind]
 	if !ok {
 		defaults = defaultTransportProfiles[TransportKindHTTPJSON]
 	}
+	timeoutS := defaults.timeoutS
+	if profile, ok := operationProfileForSpec(spec); ok {
+		timeoutS = profile.TimeoutS
+	}
 	plan := NewReversePlan(endpoint, transportKind, spec.PoolCandidates(), int(spec.ModeID))
-	plan.TimeoutS = defaults.timeoutS
+	plan.TimeoutS = timeoutS
 	plan.ContentType = defaults.contentType
 	return plan
 }
 
-func resolveEndpoint(spec controlmodel.ModelSpec, _ map[string]any) (string, TransportKind) {
+func resolveEndpoint(spec controlmodel.ModelSpec) (string, TransportKind) {
 	endpoints := reverseruntime.GlobalEndpointTable()
 	if spec.IsChat() {
 		return endpoints.Resolve("chat"), TransportKindHTTPSSE
@@ -67,4 +63,23 @@ func resolveEndpoint(spec controlmodel.ModelSpec, _ map[string]any) (string, Tra
 		return endpoints.Resolve("chat"), TransportKindHTTPSSE
 	}
 	return endpoints.Resolve("chat"), TransportKindHTTPSSE
+}
+
+func operationProfileForSpec(spec controlmodel.ModelSpec) (reverseruntime.OperationProfile, bool) {
+	if spec.IsChat() {
+		return reverseruntime.Profiles["chat"], true
+	}
+	if spec.IsImage() {
+		return reverseruntime.Profiles["image"], true
+	}
+	if spec.IsImageEdit() {
+		return reverseruntime.Profiles["image_edit"], true
+	}
+	if spec.IsVideo() {
+		return reverseruntime.Profiles["video"], true
+	}
+	if spec.IsVoice() {
+		return reverseruntime.Profiles["voice"], true
+	}
+	return reverseruntime.OperationProfile{}, false
 }

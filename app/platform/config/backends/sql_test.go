@@ -5,7 +5,9 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestSQLConfigBackendLoadEnsuresTableAndUnflattensRows(t *testing.T) {
@@ -43,6 +45,33 @@ func TestSQLConfigBackendLoadEnsuresTableAndUnflattensRows(t *testing.T) {
 	}
 	if engine.ensureCount != 1 {
 		t.Fatalf("ensure should be cached, got %d", engine.ensureCount)
+	}
+}
+
+func TestSQLConfigBackendEnsureTableSerializesConcurrentFirstUse(t *testing.T) {
+	engine := &concurrentEnsureSQLEngine{}
+	backend := NewSQLConfigBackend(engine, SQLConfigOptions{})
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 20)
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := backend.Version(context.Background())
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("Version returned error: %v", err)
+		}
+	}
+	if got := engine.ensureCount(); got != 1 {
+		t.Fatalf("ensureCount = %d, want 1", got)
 	}
 }
 
@@ -175,6 +204,41 @@ func TestSQLConfigBackendContractDocumentsPythonVersionUpsertSemantics(t *testin
 
 func boolPtr(value bool) *bool {
 	return &value
+}
+
+type concurrentEnsureSQLEngine struct {
+	mu     sync.Mutex
+	ensure int
+}
+
+func (e *concurrentEnsureSQLEngine) ensureCount() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.ensure
+}
+
+func (e *concurrentEnsureSQLEngine) EnsureConfigTable(context.Context, SQLConfigTable) error {
+	time.Sleep(10 * time.Millisecond)
+	e.mu.Lock()
+	e.ensure++
+	e.mu.Unlock()
+	return nil
+}
+
+func (e *concurrentEnsureSQLEngine) LoadConfigRows(context.Context, string, string) (map[string]string, error) {
+	return map[string]string{}, nil
+}
+
+func (e *concurrentEnsureSQLEngine) BeginConfigTransaction(context.Context) (SQLConfigTx, error) {
+	return nil, nil
+}
+
+func (e *concurrentEnsureSQLEngine) GetConfigValue(context.Context, string, string) (string, error) {
+	return "", nil
+}
+
+func (e *concurrentEnsureSQLEngine) Dispose(context.Context) error {
+	return nil
 }
 
 type fakeSQLEngine struct {

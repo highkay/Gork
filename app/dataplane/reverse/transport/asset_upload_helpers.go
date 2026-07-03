@@ -3,6 +3,7 @@ package transport
 import (
 	"mime"
 	"net/url"
+	"path"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -37,8 +38,16 @@ func mimeFromName(filename string, fallback string) string {
 
 func filenameFromURL(fileURL string) string {
 	raw := strings.SplitN(fileURL, "?", 2)[0]
-	last := raw[strings.LastIndex(raw, "/")+1:]
-	if last == "" {
+	if parsed, err := url.Parse(fileURL); err == nil {
+		raw = parsed.Path
+	}
+	last := path.Base(raw)
+	if unescaped, err := url.PathUnescape(last); err == nil {
+		last = unescaped
+	}
+	last = path.Base(strings.ReplaceAll(last, "\\", "/"))
+	last = strings.TrimSpace(last)
+	if last == "" || last == "." || last == ".." || last == "/" {
 		return "download"
 	}
 	return last

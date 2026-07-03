@@ -118,6 +118,7 @@ func clearAdminTokenAssets(ctx context.Context, repo adminAssetsRepository, toke
 
 func deleteAdminAssetItems(ctx context.Context, repo adminAssetsRepository, token string, items []map[string]any) (int, error) {
 	deleted := 0
+	var firstErr error
 	var firstMarked error
 	for _, item := range items {
 		assetID := adminAssetString(item, "id", "assetId")
@@ -128,12 +129,17 @@ func deleteAdminAssetItems(ctx context.Context, repo adminAssetsRepository, toke
 			upstream := adminAssetUpstreamError(err)
 			if adminMarkInvalidCredentials(ctx, repo, token, upstream, "asset clear") && firstMarked == nil {
 				firstMarked = upstream
+			} else if firstErr == nil {
+				firstErr = upstream
 			}
 			continue
 		}
 		deleted++
 	}
-	return deleted, firstMarked
+	if firstMarked != nil {
+		return deleted, firstMarked
+	}
+	return deleted, firstErr
 }
 
 func listAdminAssetTokens(ctx context.Context, repo adminAssetsRepository) ([]string, error) {

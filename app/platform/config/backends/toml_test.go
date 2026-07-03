@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -70,6 +71,22 @@ func TestTomlConfigBackendApplyPatchDeepMergesAndCreatesParent(t *testing.T) {
 	meta, ok := version.(TomlConfigVersion)
 	if !ok || meta.Revision <= 0 || meta.Source != "file" || meta.UpdatedAt <= 0 {
 		t.Fatalf("version=%#v", version)
+	}
+}
+
+func TestTomlConfigBackendApplyPatchWithSourceWritesSourceMetadata(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	backend := NewTomlConfigBackend(path)
+
+	if err := backend.ApplyPatchWithSource(context.Background(), map[string]any{"model": map[string]any{"name": "grok-2"}}, "startup"); err != nil {
+		t.Fatalf("ApplyPatchWithSource returned error: %v", err)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(content), `# last_update_source = "startup"`) {
+		t.Fatalf("source metadata missing in:\n%s", string(content))
 	}
 }
 

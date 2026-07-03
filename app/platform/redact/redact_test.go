@@ -26,6 +26,21 @@ api_key="sk-abcdefghijklmnopqrstuvwxyz1234567890"`
 	}
 }
 
+func TestSensitiveTextRedactsJSONSecretsAndEscapesNewlines(t *testing.T) {
+	got := SensitiveText("{\"access_token\":\"abcdefghijklmnopqrstuvwxyz123456\"}\npassword=top-secret")
+	for _, leaked := range []string{"abcdefghijklmnopqrstuvwxyz123456", "top-secret"} {
+		if strings.Contains(got, leaked) {
+			t.Fatalf("redacted text leaked %q: %s", leaked, got)
+		}
+	}
+	if strings.Contains(got, "\n") || !strings.Contains(got, `\n`) {
+		t.Fatalf("newline was not escaped: %q", got)
+	}
+	if !strings.Contains(got, "access_token=<redacted>") || !strings.Contains(got, "password=<redacted>") {
+		t.Fatalf("redacted text missing markers: %s", got)
+	}
+}
+
 func TestExcerptRedactsBeforeTruncating(t *testing.T) {
 	got := Excerpt("prefix password=very-secret-token suffix", 20)
 	if strings.Contains(got, "very-secret-token") {

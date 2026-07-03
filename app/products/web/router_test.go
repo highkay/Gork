@@ -189,6 +189,30 @@ func TestWebRouterVerifyRequiresWebUIKey(t *testing.T) {
 	}
 }
 
+func TestWebRouterVerifyRateLimitsFailedWebUIAuth(t *testing.T) {
+	resetWebRouterDepsForTest(t)
+	webRouterAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web"} }
+	const remoteAddr = "198.51.100.77:1234"
+
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/webui/api/verify", nil)
+		req.RemoteAddr = remoteAddr
+		rec := httptest.NewRecorder()
+		NewRouter().ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d status=%d body=%s", i+1, rec.Code, rec.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/webui/api/verify", nil)
+	req.RemoteAddr = remoteAddr
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, req)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("rate limited status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestWebRouterMountsWebUIAPI(t *testing.T) {
 	resetWebRouterDepsForTest(t)
 	rec := getWeb("/webui/api/models", "")

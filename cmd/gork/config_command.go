@@ -37,24 +37,10 @@ func runConfigValidateCommand(args []string, stdout io.Writer, stderr io.Writer)
 	if flags.NArg() != 0 {
 		return true, 2, fmt.Errorf("unexpected config validate argument: %s", strings.Join(flags.Args(), " "))
 	}
-	defaults, err := platformconfig.LoadTOML(*defaultsPath)
+	issues, err := validateConfigInputs(*defaultsPath, *configPath, "GROK_", commandEnv())
 	if err != nil {
 		return true, 1, err
 	}
-	issues := []platformconfig.ConfigValidationIssue{}
-	if validation := platformconfig.ValidateConfigData(defaults, defaults); validation != nil {
-		issues = append(issues, validation.Issues...)
-	}
-	if strings.TrimSpace(*configPath) != "" {
-		user, err := platformconfig.LoadTOML(*configPath)
-		if err != nil {
-			return true, 1, err
-		}
-		if validation := platformconfig.ValidateConfigPatch(defaults, user); validation != nil {
-			issues = append(issues, validation.Issues...)
-		}
-	}
-	issues = append(issues, validateConfigEnv(defaults, "GROK_", commandEnv())...)
 	if len(issues) > 0 {
 		if *jsonOutput {
 			encoder := json.NewEncoder(stdout)
@@ -75,6 +61,28 @@ func runConfigValidateCommand(args []string, stdout io.Writer, stderr io.Writer)
 		_, _ = fmt.Fprintln(stdout, "ok")
 	}
 	return true, 0, nil
+}
+
+func validateConfigInputs(defaultsPath, configPath, envPrefix string, env map[string]string) ([]platformconfig.ConfigValidationIssue, error) {
+	defaults, err := platformconfig.LoadTOML(defaultsPath)
+	if err != nil {
+		return nil, err
+	}
+	issues := []platformconfig.ConfigValidationIssue{}
+	if validation := platformconfig.ValidateConfigData(defaults, defaults); validation != nil {
+		issues = append(issues, validation.Issues...)
+	}
+	if strings.TrimSpace(configPath) != "" {
+		user, err := platformconfig.LoadTOML(configPath)
+		if err != nil {
+			return nil, err
+		}
+		if validation := platformconfig.ValidateConfigPatch(defaults, user); validation != nil {
+			issues = append(issues, validation.Issues...)
+		}
+	}
+	issues = append(issues, validateConfigEnv(defaults, envPrefix, env)...)
+	return issues, nil
 }
 
 func runConfigDocsCommand(args []string, stdout io.Writer, stderr io.Writer) (bool, int, error) {

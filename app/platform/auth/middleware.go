@@ -3,7 +3,6 @@ package auth
 import (
 	"crypto/subtle"
 	"fmt"
-	"strconv"
 	"strings"
 
 	platform "github.com/dslzl/gork/app/platform"
@@ -167,7 +166,7 @@ func authTruthyNumber(value any) bool {
 	case float32:
 		return typed != 0
 	default:
-		return fmt.Sprint(value) != "" && fmt.Sprint(value) != strconv.Itoa(0)
+		return false
 	}
 }
 

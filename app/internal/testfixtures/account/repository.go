@@ -2,7 +2,6 @@ package accountfixtures
 
 import (
 	"context"
-	"maps"
 	"slices"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
@@ -94,5 +93,27 @@ func cloneRecords(records []accountcontrol.AccountRecord) []accountcontrol.Accou
 }
 
 func cloneMap(input map[string]any) map[string]any {
-	return maps.Clone(input)
+	if input == nil {
+		return nil
+	}
+	out := make(map[string]any, len(input))
+	for key, value := range input {
+		out[key] = cloneValue(value)
+	}
+	return out
+}
+
+func cloneValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		return cloneMap(typed)
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			out[i] = cloneValue(item)
+		}
+		return out
+	default:
+		return value
+	}
 }

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	platform "github.com/dslzl/gork/app/platform"
+	"golang.org/x/sys/windows"
 )
 
 func acquireAppMainSchedulerFileLock(context.Context) (Hook, error) {
@@ -19,7 +20,24 @@ func acquireAppMainSchedulerFileLock(context.Context) (Hook, error) {
 	if err != nil {
 		return func(context.Context) error { return nil }, nil
 	}
+	var overlapped windows.Overlapped
+	err = windows.LockFileEx(
+		windows.Handle(file.Fd()),
+		windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY,
+		0,
+		1,
+		0,
+		&overlapped,
+	)
+	if err != nil {
+		_ = file.Close()
+		return nil, nil
+	}
 	return func(context.Context) error {
-		return file.Close()
+		err := windows.UnlockFileEx(windows.Handle(file.Fd()), 0, 1, 0, &overlapped)
+		if closeErr := file.Close(); err == nil {
+			err = closeErr
+		}
+		return err
 	}, nil
 }

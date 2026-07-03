@@ -42,6 +42,7 @@ type clearanceSolveResult struct {
 	Cookies       string
 	UserAgent     string
 	ClearanceHost string
+	LastError     string
 }
 
 func runClearanceSolve(ctx context.Context, request clearanceSolveRequest) (clearanceSolveResult, bool, error) {
@@ -75,7 +76,10 @@ func runClearanceSolve(ctx context.Context, request clearanceSolveRequest) (clea
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return clearanceSolveResult{}, false, nil
+		return clearanceSolveResult{
+			ClearanceHost: clearanceHost(target),
+			LastError:     fmt.Sprintf("%s request failed: %v", request.Provider, err),
+		}, false, nil
 	}
 	defer resp.Body.Close()
 
@@ -99,6 +103,13 @@ func newClearanceBundle(provider string, affinityKey string, result clearanceSol
 	bundle.UserAgent = result.UserAgent
 	bundle.AffinityKey = affinityKey
 	bundle.ClearanceHost = host
+	return bundle
+}
+
+func newClearanceErrorBundle(provider string, affinityKey string, result clearanceSolveResult) proxy.ClearanceBundle {
+	bundle := newClearanceBundle(provider, affinityKey, result)
+	bundle.State = proxy.ClearanceBundleInvalid
+	bundle.LastRefreshError = result.LastError
 	return bundle
 }
 

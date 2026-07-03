@@ -30,10 +30,7 @@ func TestSelectProxySingleProxyReturnsFirstNodeURL(t *testing.T) {
 	table.EgressMode = controlproxy.EgressModeSingleProxy
 	table.Nodes = []controlproxy.EgressNode{first, second}
 
-	got := SelectProxy(table, SelectProxyOptions{
-		Scope: controlproxy.ProxyScopeAsset,
-		Kind:  controlproxy.RequestKindWebSocket,
-	})
+	got := SelectProxy(table)
 	if got == nil || *got != firstURL {
 		t.Fatalf("SelectProxy single proxy = %v, want first url", got)
 	}
@@ -60,6 +57,25 @@ func TestSelectProxyPoolPicksHealthyLowestInflight(t *testing.T) {
 	got := SelectProxy(table)
 	if got == nil || *got != bestURL {
 		t.Fatalf("SelectProxy pool = %v, want best url", got)
+	}
+}
+
+func TestSelectProxyPoolTieKeepsFirstHealthyNode(t *testing.T) {
+	firstURL := "http://first.local:8080"
+	secondURL := "http://second.local:8080"
+	first := controlproxy.NewEgressNode("first")
+	first.ProxyURL = &firstURL
+	first.Inflight = 1
+	second := controlproxy.NewEgressNode("second")
+	second.ProxyURL = &secondURL
+	second.Inflight = 1
+	table := NewProxyRuntimeTable()
+	table.EgressMode = controlproxy.EgressModeProxyPool
+	table.Nodes = []controlproxy.EgressNode{first, second}
+
+	got := SelectProxy(table)
+	if got == nil || *got != firstURL {
+		t.Fatalf("SelectProxy tie = %v, want first url", got)
 	}
 }
 

@@ -1,4 +1,5 @@
-// Package backends contains account repository backend implementations and
-// storage factory wiring for local SQLite, Redis, MySQL, and PostgreSQL
-// repositories.
+// Package backends contains adapter implementations and storage factory wiring
+// for the account repository interface. External callers should depend on the
+// account package seams while this package owns local SQLite, Redis, MySQL, and
+// PostgreSQL details.
 package backends

@@ -181,7 +181,7 @@ func (r *RedisAccountRepository) upsertRedisAccount(
 		_ = r.rollbackRedisUpsert(ctx, key, oldRecord, oldHash, record)
 		return 0, err
 	}
-	if err := r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int{token: revision}); err != nil {
+	if err := r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int64{token: int64(revision)}); err != nil {
 		_ = r.rollbackRedisUpsert(ctx, key, oldRecord, oldHash, record)
 		return 0, err
 	}
@@ -253,7 +253,7 @@ func (r *RedisAccountRepository) restoreRedisBackup(ctx context.Context, backup 
 	if err := r.addRecordIndexes(ctx, *backup.record); err != nil {
 		return err
 	}
-	return r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int{backup.token: backup.record.Revision})
+	return r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int64{backup.token: int64(backup.record.Revision)})
 }
 
 func cloneRedisHash(input map[string]string) map[string]string {
@@ -278,7 +278,7 @@ func (r *RedisAccountRepository) rollbackRedisUpsert(
 	if err := r.addRecordIndexes(ctx, *oldRecord); err != nil {
 		return err
 	}
-	return r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int{oldRecord.Token: oldRecord.Revision})
+	return r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int64{oldRecord.Token: int64(oldRecord.Revision)})
 }
 
 func (r *RedisAccountRepository) patchRedisAccounts(
@@ -334,7 +334,7 @@ func (r *RedisAccountRepository) patchRedisAccount(
 	if err := r.addRecordIndexes(ctx, updated); err != nil {
 		return 0, err
 	}
-	return 1, r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int{patch.Token: revision})
+	return 1, r.store.ZAdd(ctx, redisKeyRevisionLog, map[string]int64{patch.Token: int64(revision)})
 }
 
 func redisPatchUpdates(

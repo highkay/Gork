@@ -36,6 +36,14 @@ func TestCoerceTokenTextUsesCompactUnescapedJSON(t *testing.T) {
 	}
 }
 
+func TestEstimateTokensMapOrderStable(t *testing.T) {
+	left := map[string]any{"a": 1, "b": []any{"x", "y"}}
+	right := map[string]any{"b": []any{"x", "y"}, "a": 1}
+	if got, want := EstimateTokens(left), EstimateTokens(right); got != want {
+		t.Fatalf("EstimateTokens map order = %d, want %d", got, want)
+	}
+}
+
 func TestEstimatePromptTokensAddsOverheadOnlyForNonEmptyInputs(t *testing.T) {
 	if got := EstimatePromptTokens("", PromptOverhead); got != 0 {
 		t.Fatalf("EstimatePromptTokens(empty) = %d", got)

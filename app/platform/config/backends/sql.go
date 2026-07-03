@@ -3,6 +3,7 @@ package backends
 import (
 	"context"
 	"strconv"
+	"sync"
 )
 
 const (
@@ -49,6 +50,7 @@ type SQLConfigBackend struct {
 	engine        SQLConfigEngine
 	dialect       string
 	disposeEngine bool
+	readyMu       sync.Mutex
 	ready         bool
 }
 
@@ -168,6 +170,8 @@ func (b *SQLConfigBackend) Close(ctx context.Context) error {
 }
 
 func (b *SQLConfigBackend) ensureTable(ctx context.Context) error {
+	b.readyMu.Lock()
+	defer b.readyMu.Unlock()
 	if b.ready {
 		return nil
 	}

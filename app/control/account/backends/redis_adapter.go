@@ -74,7 +74,7 @@ func (s *goRedisAccountStore) HSet(ctx context.Context, key string, mapping map[
 	return s.client.HSet(ctx, key, redisHashArgs(mapping)...).Err()
 }
 
-func (s *goRedisAccountStore) ZAdd(ctx context.Context, key string, members map[string]int) error {
+func (s *goRedisAccountStore) ZAdd(ctx context.Context, key string, members map[string]int64) error {
 	values := make([]redis.Z, 0, len(members))
 	for member, score := range members {
 		values = append(values, redis.Z{Member: member, Score: float64(score)})
