@@ -158,8 +158,8 @@ func TestUploadFilePostsPayloadAndAppliesSuccessFeedback(t *testing.T) {
 	assertAssetFeedback(t, proxyRuntime.feedbacks, 0, controlproxy.ProxyFeedbackSuccess, intPtr(200))
 }
 
-func TestUploadFileClassifiesHTTPFailureAndTruncatesBody(t *testing.T) {
-	body := "Just a Moment " + strings.Repeat("x", 400)
+func TestUploadFileClassifiesHTTPFailureAndRedactsTruncatedBody(t *testing.T) {
+	body := "Just a Moment cf_clearance=cloudflare-secret Bearer abcdefghijklmnop " + strings.Repeat("x", 400)
 	proxyRuntime := newFakeAssetProxyRuntime("lease-1")
 	client := &fakeAssetHTTPClient{
 		postResponses: []AssetHTTPResponse{{StatusCode: 403, Body: []byte(body)}},
@@ -176,8 +176,11 @@ func TestUploadFileClassifiesHTTPFailureAndTruncatesBody(t *testing.T) {
 	if upstream.Status != 403 || upstream.Message != "Asset upload returned 403" {
 		t.Fatalf("upstream error = %#v", upstream)
 	}
-	if len(upstream.Body) != 300 || !strings.HasPrefix(upstream.Body, "Just a Moment") {
+	if len(upstream.Body) > 300 || !strings.HasPrefix(upstream.Body, "Just a Moment") {
 		t.Fatalf("upstream body length/prefix = %d/%q", len(upstream.Body), upstream.Body)
+	}
+	if strings.Contains(upstream.Body, "cloudflare-secret") || strings.Contains(upstream.Body, "abcdefghijklmnop") {
+		t.Fatalf("upstream body leaked secret: %q", upstream.Body)
 	}
 	assertAssetFeedback(t, proxyRuntime.feedbacks, 0, controlproxy.ProxyFeedbackChallenge, intPtr(403))
 }

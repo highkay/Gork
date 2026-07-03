@@ -135,7 +135,8 @@ func handleMediaError(ctx context.Context, runtime MediaProxyRuntime, lease cont
 		return err
 	}
 	_ = runtime.Feedback(ctx, lease, controlproxy.ProxyFeedback{Kind: controlproxy.ProxyFeedbackTransportError})
-	return platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %v", label, err), 502, err.Error())
+	errText := redactedTransportError(err)
+	return platform.NewUpstreamError(fmt.Sprintf("%s: transport error: %s", label, errText), 502, errText)
 }
 
 type netMediaHTTPClient struct{}

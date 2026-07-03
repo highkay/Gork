@@ -146,7 +146,7 @@ func TestPostGRPCWebDefaultsTimeoutLikePython(t *testing.T) {
 }
 
 func TestPostGRPCWebHTTPFailureReturnsUpstreamError(t *testing.T) {
-	body := "grpc down " + strings.Repeat("x", 400)
+	body := "grpc down api_key=secret-token-value " + strings.Repeat("x", 400)
 	client := &fakeGRPCWebHTTPClient{response: GRPCWebHTTPResponse{StatusCode: 503, Body: []byte(body)}}
 	_, err := PostGRPCWeb(context.Background(), protocol.GRPCWebRequest{
 		URL: "https://grok.test/grpc", Token: "token", Payload: []byte("payload"),
@@ -155,13 +155,16 @@ func TestPostGRPCWebHTTPFailureReturnsUpstreamError(t *testing.T) {
 	if !errors.As(err, &upstream) {
 		t.Fatalf("error = %T %v, want UpstreamError", err, err)
 	}
-	if upstream.Status != 503 || upstream.Message != "Upstream returned 503" || len(upstream.Body) != 300 || !strings.HasPrefix(upstream.Body, "grpc down") {
+	if upstream.Status != 503 || upstream.Message != "Upstream returned 503" || len(upstream.Body) > 300 || !strings.HasPrefix(upstream.Body, "grpc down") {
 		t.Fatalf("upstream error = %#v", upstream)
+	}
+	if strings.Contains(upstream.Body, "secret-token-value") {
+		t.Fatalf("upstream body leaked secret: %q", upstream.Body)
 	}
 }
 
 func TestPostGRPCWebTransportErrorMatchesResettableSessionWrapper(t *testing.T) {
-	client := &fakeGRPCWebHTTPClient{err: errors.New("dial failed")}
+	client := &fakeGRPCWebHTTPClient{err: errors.New("dial failed Bearer abcdefghijklmnop")}
 
 	_, err := PostGRPCWeb(context.Background(), protocol.GRPCWebRequest{
 		URL: "https://grok.test/grpc", Token: "token", Payload: []byte("payload"),
@@ -170,8 +173,11 @@ func TestPostGRPCWebTransportErrorMatchesResettableSessionWrapper(t *testing.T) 
 	if !errors.As(err, &upstream) {
 		t.Fatalf("error = %T %v, want UpstreamError", err, err)
 	}
-	if upstream.Status != 502 || !strings.Contains(upstream.Message, "grpc-web post transport error: dial failed") {
+	if upstream.Status != 502 || !strings.Contains(upstream.Message, "grpc-web post transport error: dial failed Bearer <redacted>") {
 		t.Fatalf("upstream error = %#v", upstream)
+	}
+	if strings.Contains(upstream.Body, "abcdefghijklmnop") {
+		t.Fatalf("transport body leaked secret: %q", upstream.Body)
 	}
 }
 

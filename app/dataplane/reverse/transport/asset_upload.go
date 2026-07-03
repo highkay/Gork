@@ -238,7 +238,7 @@ func uploadPayload(filename string, mime string, b64 string) ([]byte, error) {
 }
 
 func handleUploadHTTPFailure(ctx context.Context, runtime AssetProxyRuntime, lease *controlproxy.ProxyLease, response AssetHTTPResponse) error {
-	bodyText := truncateString(string(response.Body), 300)
+	bodyText := redactedTransportExcerpt(string(response.Body))
 	isCloudflare := strings.Contains(strings.ToLower(bodyText), "just a moment")
 	if runtime != nil && lease != nil {
 		_ = runtime.Feedback(ctx, *lease, controlproxy.BuildFeedback(response.StatusCode, controlproxy.BuildFeedbackOptions{IsCloudflare: isCloudflare}))
@@ -294,5 +294,6 @@ func feedbackAssetTransport(ctx context.Context, runtime AssetProxyRuntime, leas
 }
 
 func assetTransportError(label string, err error) *platform.UpstreamError {
-	return platform.NewUpstreamError(fmt.Sprintf("%s: %v", label, err), 502, err.Error())
+	errText := redactedTransportError(err)
+	return platform.NewUpstreamError(fmt.Sprintf("%s: %s", label, errText), 502, errText)
 }

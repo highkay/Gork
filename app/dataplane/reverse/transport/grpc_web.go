@@ -115,7 +115,7 @@ func PostGRPCWeb(ctx context.Context, request protocol.GRPCWebRequest, options .
 		return GRPCWebTransportResponse{}, grpcWebTransportError(err)
 	}
 	if response.StatusCode != 200 {
-		bodyText := truncateString(string(response.Body), 300)
+		bodyText := redactedTransportExcerpt(string(response.Body))
 		return GRPCWebTransportResponse{}, platform.NewUpstreamError(fmt.Sprintf("Upstream returned %d", response.StatusCode), response.StatusCode, bodyText)
 	}
 	return ParseGRPCWebResponse(response.Body, grpcWebHeaderValue(response.Headers, "content-type"), response.Headers)
@@ -243,7 +243,8 @@ func grpcWebTransportError(err error) error {
 	if errors.As(err, &upstream) {
 		return err
 	}
-	return platform.NewUpstreamError(fmt.Sprintf("grpc-web post transport error: %v", err), 502, err.Error())
+	errText := redactedTransportError(err)
+	return platform.NewUpstreamError(fmt.Sprintf("grpc-web post transport error: %s", errText), 502, errText)
 }
 
 type netHTTPGRPCWebClient struct{}
