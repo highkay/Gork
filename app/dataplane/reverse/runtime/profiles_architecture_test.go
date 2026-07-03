@@ -7,6 +7,7 @@ import (
 )
 
 func TestOperationProfilesCoverProductOperations(t *testing.T) {
+	// "grpc" is transport-only for auth/setup helpers, not a product operation.
 	required := []string{"chat", "image", "image_edit", "video", "voice", "asset", "nsfw", "livekit"}
 	for _, name := range required {
 		profile, ok := Profiles[name]

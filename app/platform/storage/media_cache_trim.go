@@ -25,6 +25,7 @@ func (s *LocalMediaCacheStore) enforceLimitLocked(db *sql.DB, mediaType MediaTyp
 	if newest, err := newestName(db, mediaType); err != nil {
 		return err
 	} else if newest != "" {
+		// Keep the newest write even when trimming below the low watermark.
 		protected[newest] = struct{}{}
 	}
 	target := int64(float64(maxBytes) * lowWatermarkRatio)

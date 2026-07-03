@@ -143,7 +143,7 @@ func TestAcceptTOSUsesAccountsOriginAndSuccessFeedback(t *testing.T) {
 	}
 }
 
-func TestSetNSFWReportsGrpcErrorAsUpstream5xxFeedback(t *testing.T) {
+func TestSetNSFWReportsGrpcPermissionDeniedAsChallengeFeedback(t *testing.T) {
 	proxy := &fakeAuthProxy{}
 	grpc := &fakeGRPCPoster{trailers: []map[string]string{{"grpc-status": "7", "grpc-message": "denied"}}}
 	client := NewXAIAuthClient(AuthClientOptions{Proxy: proxy, GRPC: grpc})
@@ -156,11 +156,39 @@ func TestSetNSFWReportsGrpcErrorAsUpstream5xxFeedback(t *testing.T) {
 	if !errors.As(err, &upstream) || upstream.Status != 403 {
 		t.Fatalf("error = %#v, want upstream status 403", err)
 	}
-	if len(proxy.feedbacks) != 1 || proxy.feedbacks[0].Kind != controlproxy.ProxyFeedbackUpstream5xx || proxy.feedbacks[0].StatusCode == nil || *proxy.feedbacks[0].StatusCode != 403 {
+	if len(proxy.feedbacks) != 1 || proxy.feedbacks[0].Kind != controlproxy.ProxyFeedbackChallenge || proxy.feedbacks[0].StatusCode == nil || *proxy.feedbacks[0].StatusCode != 403 {
 		t.Fatalf("feedbacks = %#v", proxy.feedbacks)
 	}
 	if !bytes.Equal(grpc.requests[0].Payload, BuildNSFWMgmtPayload(false)) {
 		t.Fatalf("payload = %x", grpc.requests[0].Payload)
+	}
+}
+
+func TestSetNSFWMapsGrpcStatusFeedbackKinds(t *testing.T) {
+	tests := []struct {
+		name       string
+		grpcStatus string
+		wantHTTP   int
+		wantKind   controlproxy.ProxyFeedbackKind
+	}{
+		{name: "unauthenticated", grpcStatus: "16", wantHTTP: 401, wantKind: controlproxy.ProxyFeedbackUnauthorized},
+		{name: "unavailable", grpcStatus: "14", wantHTTP: 503, wantKind: controlproxy.ProxyFeedbackUpstream5xx},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proxy := &fakeAuthProxy{}
+			grpc := &fakeGRPCPoster{trailers: []map[string]string{{"grpc-status": tt.grpcStatus, "grpc-message": tt.name}}}
+			client := NewXAIAuthClient(AuthClientOptions{Proxy: proxy, GRPC: grpc})
+
+			_, err := client.SetNSFW(context.Background(), "token", false)
+			if err == nil {
+				t.Fatalf("SetNSFW() error = nil, want upstream error")
+			}
+			if len(proxy.feedbacks) != 1 || proxy.feedbacks[0].Kind != tt.wantKind || proxy.feedbacks[0].StatusCode == nil || *proxy.feedbacks[0].StatusCode != tt.wantHTTP {
+				t.Fatalf("feedbacks = %#v, want %v/%d", proxy.feedbacks, tt.wantKind, tt.wantHTTP)
+			}
+		})
 	}
 }
 

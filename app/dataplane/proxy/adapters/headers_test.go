@@ -99,12 +99,12 @@ func TestBuildSSOCookieHardensCFClearanceInputs(t *testing.T) {
 
 func TestSanitizeMatchesPythonNormalization(t *testing.T) {
 	value := "\t\u201chello\u201d\u2014x😀\n"
-	if got := sanitize(&value, "field", false); got != "\"hello\"-x" {
+	if got := sanitize(&value, false); got != "\"hello\"-x" {
 		t.Fatalf("sanitize trim/latin1 = %q", got)
 	}
 
 	spaced := " a\u00a0b\u200bc\t😀 "
-	if got := sanitize(&spaced, "field", true); got != "abc" {
+	if got := sanitize(&spaced, true); got != "abc" {
 		t.Fatalf("sanitize strip spaces = %q", got)
 	}
 }

@@ -55,9 +55,16 @@ func DescribeRepositoryTarget(env map[string]string) (string, string, error) {
 		}
 		return "redis", RedactRepositoryURL(value), nil
 	case "mysql":
-		return "mysql", RedactRepositoryURL(envValue(env, "ACCOUNT_MYSQL_URL", "")), nil
+		value, err := requiredEnv(env, "ACCOUNT_MYSQL_URL")
+		if err != nil {
+			return "", "", err
+		}
+		return "mysql", RedactRepositoryURL(value), nil
 	case "postgresql":
-		value := envValue(env, "ACCOUNT_POSTGRESQL_URL", "")
+		value, err := requiredEnv(env, "ACCOUNT_POSTGRESQL_URL")
+		if err != nil {
+			return "", "", err
+		}
 		return "postgresql", RedactRepositoryURL(value), nil
 	default:
 		return backend, "<unknown>", nil
@@ -123,9 +130,16 @@ func createRepositoryForBackend(
 		}
 		return constructors.Redis(value)
 	case "mysql":
-		return constructors.MySQL(envValue(env, "ACCOUNT_MYSQL_URL", ""))
+		value, err := requiredEnv(env, "ACCOUNT_MYSQL_URL")
+		if err != nil {
+			return nil, err
+		}
+		return constructors.MySQL(value)
 	case "postgresql":
-		value := envValue(env, "ACCOUNT_POSTGRESQL_URL", "")
+		value, err := requiredEnv(env, "ACCOUNT_POSTGRESQL_URL")
+		if err != nil {
+			return nil, err
+		}
 		return constructors.PostgreSQL(value)
 	default:
 		return nil, unknownBackendError(backend)

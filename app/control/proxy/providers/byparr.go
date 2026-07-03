@@ -65,8 +65,14 @@ func (p ByparrClearanceProvider) RefreshBundle(ctx context.Context, affinityKey,
 		PrepareRequest: applyByparrProxyHeaders,
 		Decode:         decodeByparrResponse,
 	})
-	if err != nil || !ok {
+	if err != nil {
 		return proxy.ClearanceBundle{}, false, err
+	}
+	if !ok {
+		if result.LastError != "" {
+			return newClearanceErrorBundle("byparr", affinityKey, result), false, nil
+		}
+		return proxy.ClearanceBundle{}, false, nil
 	}
 	return newClearanceBundle("byparr", affinityKey, result), true, nil
 }

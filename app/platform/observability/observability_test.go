@@ -56,6 +56,24 @@ func TestMiddlewareGeneratesRequestIDWhenMissing(t *testing.T) {
 	}
 }
 
+func TestMiddlewarePreservesFlusher(t *testing.T) {
+	ResetForTest()
+	handler := Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatalf("response writer does not expose http.Flusher")
+		}
+		flusher.Flush()
+		_, _ = w.Write([]byte("ok"))
+	}))
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/stream", nil))
+	if !rec.Flushed {
+		t.Fatalf("underlying recorder was not flushed")
+	}
+}
+
 func TestUpstreamErrorRingAndSnapshot(t *testing.T) {
 	ResetForTest()
 	for i := 0; i < 12; i++ {

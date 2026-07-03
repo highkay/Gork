@@ -3,8 +3,6 @@ package account
 import (
 	"math"
 	"testing"
-
-	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 func TestApplySuccessAndRateLimitFeedbackMatchesPythonStrategies(t *testing.T) {
@@ -32,12 +30,12 @@ func TestApplySuccessAndRateLimitFeedbackMatchesPythonStrategies(t *testing.T) {
 		t.Fatalf("rate quota: quota=%d health=%f", table.QuotaFastByIdx[idx], table.HealthByIdx[idx])
 	}
 
-	before := int(appruntime.NowS())
+	nowS := 777
 	table.HealthByIdx[idx] = 0.8
 	table.QuotaFastByIdx[idx] = 7
-	table.ResetFastAtByIdx[idx] = before + 100
-	ApplyRateLimitedRandom(table, idx, 1, 5)
-	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] != before+100 || !floatClose(table.HealthByIdx[idx], 0.36) {
+	table.ResetFastAtByIdx[idx] = nowS + 100
+	ApplyRateLimitedRandom(table, idx, 1, nowS, 5)
+	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] != nowS+100 || !floatClose(table.HealthByIdx[idx], 0.36) {
 		t.Fatalf("random rate-limit preserved reset mismatch: cooling=%d quota=%d reset=%d health=%f",
 			table.CoolingUntilSByIdx[idx],
 			table.QuotaFastByIdx[idx],
@@ -48,8 +46,8 @@ func TestApplySuccessAndRateLimitFeedbackMatchesPythonStrategies(t *testing.T) {
 	table.HealthByIdx[idx] = 0.8
 	table.QuotaFastByIdx[idx] = 7
 	table.ResetFastAtByIdx[idx] = 0
-	ApplyRateLimitedRandom(table, idx, 1, 5)
-	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] < before+5 || !floatClose(table.HealthByIdx[idx], 0.36) {
+	ApplyRateLimitedRandom(table, idx, 1, nowS, 5)
+	if table.CoolingUntilSByIdx[idx] != 0 || table.QuotaFastByIdx[idx] != 0 || table.ResetFastAtByIdx[idx] != nowS+5 || !floatClose(table.HealthByIdx[idx], 0.36) {
 		t.Fatalf("random rate-limit: cooling=%d quota=%d reset=%d health=%f",
 			table.CoolingUntilSByIdx[idx],
 			table.QuotaFastByIdx[idx],

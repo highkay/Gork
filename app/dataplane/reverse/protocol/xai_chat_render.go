@@ -7,7 +7,8 @@ import (
 	"strings"
 )
 
-var grokRenderRe = regexp.MustCompile(`(?s)<grok:render\s+card_id="([^"]+)"\s+card_type="([^"]+)"\s+type="([^"]+)"[^>]*>.*?</grok:render>`)
+var grokRenderRe = regexp.MustCompile(`(?s)<grok:render\s+([^>]*)>.*?</grok:render>`)
+var grokRenderAttrRe = regexp.MustCompile(`\b([a-zA-Z_][\w:-]*)="([^"]*)"`)
 
 var toolFormat = map[string]struct {
 	emoji string
@@ -97,10 +98,11 @@ func (a *StreamAdapter) cleanToken(token string) (string, []map[string]any) {
 	}
 	cleaned := grokRenderRe.ReplaceAllStringFunc(token, func(match string) string {
 		parts := grokRenderRe.FindStringSubmatch(match)
-		if len(parts) < 4 {
+		if len(parts) < 2 {
 			return ""
 		}
-		return a.renderReplace(parts[1], parts[3])
+		attrs := grokRenderAttrs(parts[1])
+		return a.renderReplace(attrs["card_id"], attrs["type"])
 	})
 	if strings.HasPrefix(cleaned, "\n") && strings.Contains(cleaned, "[[") {
 		cleaned = strings.TrimLeft(cleaned, "\n")
@@ -125,6 +127,16 @@ func (a *StreamAdapter) cleanToken(token string) (string, []map[string]any) {
 		a.pendingCitations = nil
 	}
 	return cleaned, localAnnotations
+}
+
+func grokRenderAttrs(raw string) map[string]string {
+	attrs := map[string]string{}
+	for _, match := range grokRenderAttrRe.FindAllStringSubmatch(raw, -1) {
+		if len(match) == 3 {
+			attrs[match[1]] = match[2]
+		}
+	}
+	return attrs
 }
 
 func (a *StreamAdapter) renderReplace(cardID, renderType string) string {

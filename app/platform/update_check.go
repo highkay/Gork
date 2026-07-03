@@ -59,15 +59,10 @@ type updateCheckCache struct {
 }
 
 func GetLatestReleaseInfo(ctx context.Context, force bool) UpdateInfo {
-	now := updateNow()
-	if !force && updateCache.Valid && updateCache.ExpiresAt.After(now) {
-		return updateCache.Payload
-	}
-
 	updateMutex.Lock()
 	defer updateMutex.Unlock()
 
-	now = updateNow()
+	now := updateNow()
 	if !force && updateCache.Valid && updateCache.ExpiresAt.After(now) {
 		return updateCache.Payload
 	}

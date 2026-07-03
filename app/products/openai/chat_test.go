@@ -538,6 +538,27 @@ func TestChatRefreshQueueDropsWhenFull(t *testing.T) {
 	close(release)
 }
 
+func TestEnqueueChatRefreshCountsDroppedJobs(t *testing.T) {
+	oldRefreshEnqueue := chatRefreshEnqueue
+	chatRefreshDrops.Store(0)
+	chatRefreshEnqueue = func(func()) bool { return false }
+	t.Cleanup(func() {
+		chatRefreshEnqueue = oldRefreshEnqueue
+		chatRefreshDrops.Store(0)
+	})
+
+	ran := false
+	enqueueChatRefresh(context.Background(), func(context.Context) {
+		ran = true
+	})
+	if ran {
+		t.Fatal("dropped refresh job ran")
+	}
+	if got := chatRefreshDrops.Load(); got != 1 {
+		t.Fatalf("drop count = %d, want 1", got)
+	}
+}
+
 func BenchmarkChatQuotaSyncResponsePath(b *testing.B) {
 	oldStrategy := currentAccountStrategy
 	oldRefresh := chatRefreshService

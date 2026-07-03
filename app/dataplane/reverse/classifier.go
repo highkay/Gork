@@ -2,11 +2,7 @@ package reverse
 
 import "strings"
 
-type ClassifyOptions struct {
-	Payload any
-}
-
-func ClassifyResult(statusCode int, body string, _ ...ClassifyOptions) ResultCategory {
+func ClassifyResult(statusCode int, body string) ResultCategory {
 	if statusCode == 200 {
 		return ResultCategorySuccess
 	}

@@ -104,7 +104,7 @@ func Execute(ctx context.Context, spec controlmodel.ModelSpec, request map[strin
 func executorOptions(options ...ExecutorOptions) ExecutorOptions {
 	option := ExecutorOptions{
 		Planner: func(spec controlmodel.ModelSpec, request map[string]any) ReversePlan {
-			return BuildPlan(spec, BuildPlanOptions{Request: request})
+			return BuildPlan(spec)
 		},
 		Clock: platformruntime.NowMS,
 	}
@@ -113,7 +113,7 @@ func executorOptions(options ...ExecutorOptions) ExecutorOptions {
 	}
 	if option.Planner == nil {
 		option.Planner = func(spec controlmodel.ModelSpec, request map[string]any) ReversePlan {
-			return BuildPlan(spec, BuildPlanOptions{Request: request})
+			return BuildPlan(spec)
 		}
 	}
 	if option.Clock == nil {

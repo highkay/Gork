@@ -14,6 +14,8 @@ func TestInternalPackageDependencyBoundaries(t *testing.T) {
 		{root: "./app/platform/...", forbidden: "github.com/dslzl/gork/app/products"},
 		{root: "./app/control/...", forbidden: "github.com/dslzl/gork/app/products"},
 		{root: "./app/dataplane/...", forbidden: "github.com/dslzl/gork/app/products/web"},
+		{root: "./app/products/openai/...", forbidden: "github.com/dslzl/gork/app/products/web"},
+		{root: "./app/products/anthropic/...", forbidden: "github.com/dslzl/gork/app/products/web"},
 	}
 
 	for _, rule := range rules {

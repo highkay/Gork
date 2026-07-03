@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
@@ -245,6 +246,36 @@ func TestResettableSessionResetsAfterConfiguredStatus(t *testing.T) {
 	}
 	if len(created) != 2 || !first.closed {
 		t.Fatalf("sessions created=%d first.closed=%v", len(created), first.closed)
+	}
+}
+
+func TestResettableSessionSerializesConcurrentRequestsAndClose(t *testing.T) {
+	resettable := NewResettableSession(ResettableSessionOptions{
+		Factory: func(SessionKwargs) SessionClient {
+			return &fakeSession{}
+		},
+	})
+	var wg sync.WaitGroup
+	errs := make(chan error, 17)
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := resettable.Get(context.Background(), "https://example.com")
+			errs <- err
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		errs <- resettable.Close(context.Background())
+	}()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent request/close returned error: %v", err)
+		}
 	}
 }
 

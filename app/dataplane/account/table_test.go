@@ -3,6 +3,8 @@ package account
 import (
 	"reflect"
 	"testing"
+
+	"github.com/dslzl/gork/app/dataplane/shared"
 )
 
 func TestMakeEmptyTableMatchesPythonDefaults(t *testing.T) {
@@ -15,6 +17,34 @@ func TestMakeEmptyTableMatchesPythonDefaults(t *testing.T) {
 	}
 	if len(table.ModeAvailable) != 0 || len(table.TagIdx) != 0 {
 		t.Fatalf("non-empty secondary indexes: %#v %#v", table.ModeAvailable, table.TagIdx)
+	}
+}
+
+func TestTableEnumsMatchSharedDataplaneIDs(t *testing.T) {
+	if !reflect.DeepEqual(allModeIDs, shared.AllModeIDs) {
+		t.Fatalf("allModeIDs = %#v, want %#v", allModeIDs, shared.AllModeIDs)
+	}
+	if !reflect.DeepEqual(shared.PoolStringToID, map[string]int{
+		"basic": 0,
+		"super": 1,
+		"heavy": 2,
+	}) {
+		t.Fatalf("PoolStringToID = %#v", shared.PoolStringToID)
+	}
+	if !reflect.DeepEqual(shared.PoolIDToString, map[int]string{
+		0: "basic",
+		1: "super",
+		2: "heavy",
+	}) {
+		t.Fatalf("PoolIDToString = %#v", shared.PoolIDToString)
+	}
+	if !reflect.DeepEqual(shared.StatusStringToID, map[string]int{
+		"active":   StatusActive,
+		"cooling":  StatusCooling,
+		"expired":  StatusExpired,
+		"disabled": StatusDisabled,
+	}) {
+		t.Fatalf("StatusStringToID = %#v", shared.StatusStringToID)
 	}
 }
 

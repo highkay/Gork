@@ -25,7 +25,7 @@ var extensionMIME = map[string]string{
 }
 
 func AssetDeleteURL(assetID string) string {
-	return reverseruntime.GlobalEndpointTable().Resolve("assets_delete") + "/" + assetID
+	return reverseruntime.GlobalEndpointTable().Resolve("assets_delete") + "/" + url.PathEscape(assetID)
 }
 
 func ResolveDownloadURL(filePath string) (string, string, string) {
@@ -60,7 +60,7 @@ func ResolveAssetReference(fileID, fileURI, userID string) *string {
 		return &assetURL
 	}
 	if fileID != "" && userID != "" {
-		assetURL := reverseruntime.GlobalEndpointTable().Resolve("assets_download") + "/users/" + userID + "/" + fileID + "/content"
+		assetURL := reverseruntime.GlobalEndpointTable().Resolve("assets_download") + "/users/" + url.PathEscape(userID) + "/" + url.PathEscape(fileID) + "/content"
 		return &assetURL
 	}
 	return nil

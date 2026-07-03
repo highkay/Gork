@@ -9,7 +9,7 @@ func BuildHTTPHeaders(cookieToken string, options ...HTTPHeaderOptions) map[stri
 	}
 	profile := resolveProfile(opts.Lease)
 	rawUA := profile.UserAgent
-	ua := sanitize(&rawUA, "user_agent", false)
+	ua := sanitize(&rawUA, false)
 	browser := profile.Browser
 	table := reverseruntime.GlobalEndpointTable()
 	origin := opts.Origin
@@ -20,8 +20,8 @@ func BuildHTTPHeaders(cookieToken string, options ...HTTPHeaderOptions) map[stri
 	if referer == "" {
 		referer = table.Resolve("base_referer")
 	}
-	origin = sanitize(&origin, "origin", false)
-	referer = sanitize(&referer, "referer", false)
+	origin = sanitize(&origin, false)
+	referer = sanitize(&referer, false)
 
 	contentType := "application/json"
 	if opts.ContentType != nil && *opts.ContentType != "" {

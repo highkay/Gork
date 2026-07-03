@@ -54,6 +54,17 @@ func TestParseGRPCWebResponseDecodesBase64AndHeaderTrailers(t *testing.T) {
 	}
 }
 
+func TestParseGRPCWebResponseDoesNotGuessBase64ForBinaryContentType(t *testing.T) {
+	body := []byte(base64.StdEncoding.EncodeToString(grpcFrame(0x00, []byte("msg"))))
+	result, err := ParseGRPCWebResponse(body, "application/grpc-web+proto", nil)
+	if err != nil {
+		t.Fatalf("ParseGRPCWebResponse returned error: %v", err)
+	}
+	if len(result.Messages) != 0 {
+		t.Fatalf("messages = %#v, want no decoded messages", result.Messages)
+	}
+}
+
 func TestParseGRPCWebResponseRejectsInvalidBase64TextLikePython(t *testing.T) {
 	_, err := ParseGRPCWebResponse([]byte("not valid!!"), "application/grpc-web-text+proto", nil)
 	if err == nil {

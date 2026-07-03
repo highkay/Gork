@@ -12,7 +12,8 @@ func NextID() int64 {
 	return idCounter.Add(1)
 }
 
-// NextHex returns a zero-padded hex string derived from the monotonic counter.
+// NextHex returns a zero-padded process-local hex string derived from the
+// monotonic counter. It is not a cross-process task ID.
 func NextHex(length ...int) string {
 	width := 12
 	if len(length) > 0 {

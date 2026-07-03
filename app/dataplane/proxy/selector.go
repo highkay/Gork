@@ -2,14 +2,7 @@ package proxy
 
 import controlproxy "github.com/dslzl/gork/app/control/proxy"
 
-type SelectProxyOptions struct {
-	Scope controlproxy.ProxyScope
-	Kind  controlproxy.RequestKind
-}
-
-func SelectProxy(table ProxyRuntimeTable, options ...SelectProxyOptions) *string {
-	_ = options
-
+func SelectProxy(table ProxyRuntimeTable) *string {
 	if table.EgressMode == controlproxy.EgressModeDirect {
 		return nil
 	}

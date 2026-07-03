@@ -15,6 +15,7 @@ func statsigID() string {
 	if platformconfig.GlobalConfig != nil && !platformconfig.GlobalConfig.GetBool("features.dynamic_statsig", true) {
 		return uuidString()
 	}
+	// This mirrors client-side diagnostic noise and is not a security token.
 	if mathrand.Intn(2) == 0 {
 		msg := fmt.Sprintf("x1:TypeError: Cannot read properties of null (reading 'children[\\'%s\\']')", randomString("abcdefghijklmnopqrstuvwxyz0123456789", 5))
 		return base64.StdEncoding.EncodeToString([]byte(msg))

@@ -2,5 +2,6 @@
 // control-plane proxy runtime.
 //
 // The package-level API mirrors Python's app.control.proxy.providers package
-// boundary by exposing ManualClearanceProvider and FlareSolverrClearanceProvider.
+// boundary by exposing ManualClearanceProvider, FlareSolverrClearanceProvider,
+// and ByparrClearanceProvider.
 package providers

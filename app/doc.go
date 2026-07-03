@@ -1,4 +1,4 @@
-// Package app owns the top-level Gork application lifecycle for the Go
-// migration, including startup hook orchestration, HTTP router construction, and
-// shutdown cleanup.
+// Package app owns the top-level Gork application lifecycle and HTTP gateway,
+// including startup hook orchestration, router construction, and shutdown
+// cleanup.
 package app

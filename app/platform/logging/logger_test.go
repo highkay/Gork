@@ -3,6 +3,7 @@ package logging
 import (
 	"log/slog"
 	"path/filepath"
+	"sync"
 	"testing"
 )
 
@@ -144,6 +145,30 @@ func TestReloadFileLoggingPreservesConsoleAndUsesOverrideDir(t *testing.T) {
 		state.FileSink.PathPattern != filepath.Join(dir, "app_{time:YYYY-MM-DD}.log") {
 		t.Fatalf("enabled state = %#v", state)
 	}
+}
+
+func TestLoggingStateConcurrentSetupReloadAndRead(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "logs")
+	t.Setenv("LOG_FILE_ENABLED", "yes")
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(3)
+		go func() {
+			defer wg.Done()
+			_ = SetupLogging(LoggingOptions{Level: "info", FileLevel: "debug", FileLogging: boolPtr(true), LogDir: dir})
+		}()
+		go func() {
+			defer wg.Done()
+			_ = ReloadFileLogging(ReloadFileLoggingOptions{FileLevel: "warning", MaxFiles: 2})
+		}()
+		go func() {
+			defer wg.Done()
+			_ = CurrentLoggingState()
+		}()
+	}
+	wg.Wait()
+	defer func() { _ = SetupLogging(LoggingOptions{FileLogging: boolPtr(false)}) }()
 }
 
 func TestEnvBoolMatchesPythonTruthSet(t *testing.T) {

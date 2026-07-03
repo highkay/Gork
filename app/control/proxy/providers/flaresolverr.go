@@ -61,8 +61,14 @@ func (p FlareSolverrClearanceProvider) RefreshBundle(ctx context.Context, affini
 		Payload:    flareSolverrPayload,
 		Decode:     decodeFlareSolverrResponse,
 	})
-	if err != nil || !ok {
+	if err != nil {
 		return proxy.ClearanceBundle{}, false, err
+	}
+	if !ok {
+		if result.LastError != "" {
+			return newClearanceErrorBundle("flaresolverr", affinityKey, result), false, nil
+		}
+		return proxy.ClearanceBundle{}, false, nil
 	}
 	return newClearanceBundle("flaresolverr", affinityKey, result), true, nil
 }

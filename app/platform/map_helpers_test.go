@@ -47,3 +47,16 @@ func TestMapHelpersReturnZeroValuesForWrongTypes(t *testing.T) {
 		t.Fatalf("Array() should return nil for wrong type")
 	}
 }
+
+func TestMapHelpersReturnZeroValuesForNilMap(t *testing.T) {
+	var payload map[string]any
+	if String(payload, "name") != "" || Bool(payload, "enabled") || Number(payload, "limit") != 0 {
+		t.Fatalf("scalar helpers return zero values for nil map")
+	}
+	if Object(payload, "object") != nil {
+		t.Fatalf("Object() should return nil for nil map")
+	}
+	if Array(payload, "array") != nil {
+		t.Fatalf("Array() should return nil for nil map")
+	}
+}

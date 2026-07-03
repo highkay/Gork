@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"regexp"
 	"strconv"
@@ -68,6 +69,9 @@ func ParseImagineImageURL(url string) (string, string) {
 	if len(match) == 3 {
 		return match[1], strings.ToLower(match[2])
 	}
+	if strings.TrimSpace(url) != "" {
+		return stableImageURLID(url), "jpg"
+	}
 	return randomHexID(), "jpg"
 }
 
@@ -122,4 +126,9 @@ func randomHexID() string {
 		return hex.EncodeToString([]byte(time.Now().Format("20060102150405.000000")))
 	}
 	return hex.EncodeToString(data[:])
+}
+
+func stableImageURLID(rawURL string) string {
+	sum := sha256.Sum256([]byte(rawURL))
+	return hex.EncodeToString(sum[:16])
 }

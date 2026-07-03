@@ -60,6 +60,9 @@ func runLiteBatch(ctx context.Context, options imageLiteBatchOptions) ([]imageOu
 		n = 1
 	}
 	images := make([]imageOutput, 0, n)
+	// Keep lite generation serial: each image owns its account reservation,
+	// retry feedback, and progress index, matching the original compatibility
+	// behavior for large n.
 	for i := 0; i < n; i++ {
 		image, err := runLiteRequest(ctx, options, i)
 		if err != nil {

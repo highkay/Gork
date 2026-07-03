@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,6 +70,36 @@ func TestWebSocketConnectionCloseClosesEndpointSessionAndOnCloseOnce(t *testing.
 	}
 	if endpoint.closeCalls != 1 || calls != 1 {
 		t.Fatalf("second close should not close endpoint/onClose again: endpoint=%d onClose=%d", endpoint.closeCalls, calls)
+	}
+}
+
+func TestWebSocketConnectionCloseIsConcurrentSafe(t *testing.T) {
+	endpoint := &fakeWebSocketEndpoint{}
+	session := &fakeWebSocketSession{}
+	calls := 0
+	conn := NewWebSocketConnection(session, endpoint, func(context.Context) error {
+		calls++
+		return nil
+	})
+
+	var wg sync.WaitGroup
+	errs := make(chan error, 16)
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- conn.Close(context.Background())
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("Close returned error: %v", err)
+		}
+	}
+	if endpoint.closeCalls != 1 || session.closeCalls != 1 || calls != 1 {
+		t.Fatalf("close counts endpoint=%d session=%d onClose=%d, want 1/1/1", endpoint.closeCalls, session.closeCalls, calls)
 	}
 }
 

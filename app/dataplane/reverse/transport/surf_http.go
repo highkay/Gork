@@ -61,8 +61,6 @@ func (globalSurfConfig) GetBool(key string, defaultValue bool) bool {
 type surfTransportKey struct {
 	ProxyURL      string
 	BrowserFamily string
-	OS            string
-	HTTP3Disabled bool
 }
 
 type surfHTTPDoer struct {
@@ -126,8 +124,6 @@ func surfKeyFromProfile(profile httpTransportProfile) surfTransportKey {
 	return surfTransportKey{
 		ProxyURL:      profile.ProxyURL,
 		BrowserFamily: surfBrowserFamily(profile.Browser, profile.UserAgent),
-		OS:            surfOS(profile.UserAgent),
-		HTTP3Disabled: true,
 	}
 }
 
@@ -137,22 +133,4 @@ func surfBrowserFamily(browser, userAgent string) string {
 		return "firefox"
 	}
 	return "chrome"
-}
-
-func surfOS(userAgent string) string {
-	lower := strings.ToLower(userAgent)
-	switch {
-	case strings.Contains(lower, "android"):
-		return "android"
-	case strings.Contains(lower, "iphone") || strings.Contains(lower, "ipad") || strings.Contains(lower, "ios"):
-		return "ios"
-	case strings.Contains(lower, "windows"):
-		return "windows"
-	case strings.Contains(lower, "linux"):
-		return "linux"
-	case strings.Contains(lower, "mac os x") || strings.Contains(lower, "macintosh"):
-		return "macos"
-	default:
-		return ""
-	}
 }

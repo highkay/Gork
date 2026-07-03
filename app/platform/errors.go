@@ -183,6 +183,9 @@ func AdaptErrorResponse(err error) ErrorResponse {
 			Headers: retryHeaderAllowlist(upstream.Headers),
 		}
 	}
+	if appErr := embeddedAppError(err); appErr != nil {
+		return ErrorResponse{Status: appErr.Status, Class: class, Payload: appErr.ToDict()}
+	}
 	var appErr *AppError
 	if errors.As(err, &appErr) && appErr != nil {
 		return ErrorResponse{Status: appErr.Status, Class: class, Payload: appErr.ToDict()}
@@ -194,6 +197,34 @@ func AdaptErrorResponse(err error) ErrorResponse {
 			"code":    "internal_error",
 		},
 	}}
+}
+
+func embeddedAppError(err error) *AppError {
+	var auth *AuthError
+	if errors.As(err, &auth) && auth.AppError != nil {
+		return auth.AppError
+	}
+	var rateLimit *RateLimitError
+	if errors.As(err, &rateLimit) && rateLimit.AppError != nil {
+		return rateLimit.AppError
+	}
+	var streamIdle *StreamIdleTimeout
+	if errors.As(err, &streamIdle) && streamIdle.AppError != nil {
+		return streamIdle.AppError
+	}
+	var storage *StorageError
+	if errors.As(err, &storage) && storage.AppError != nil {
+		return storage.AppError
+	}
+	var config *ConfigError
+	if errors.As(err, &config) && config.AppError != nil {
+		return config.AppError
+	}
+	var transport *TransportError
+	if errors.As(err, &transport) && transport.AppError != nil {
+		return transport.AppError
+	}
+	return nil
 }
 
 func retryHeaderAllowlist(headers map[string]string) map[string]string {

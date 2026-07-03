@@ -91,6 +91,37 @@ func TestNewAppCORSRejectsWildcardCredentialsAndSplitsAPIFallback(t *testing.T) 
 	}
 }
 
+func TestAppCORSHelpers(t *testing.T) {
+	origins := []any{" https://admin.example ", "https://web.example"}
+	if !appOriginInList("https://admin.example", origins) {
+		t.Fatal("appOriginInList did not trim and match configured origin")
+	}
+	if appOriginInList("https://other.example", origins) {
+		t.Fatal("appOriginInList matched unknown origin")
+	}
+
+	tests := []struct {
+		name   string
+		host   string
+		origin string
+		want   bool
+	}{
+		{name: "same host", host: "example.test", origin: "https://example.test", want: true},
+		{name: "same host different case", host: "EXAMPLE.test", origin: "https://example.test", want: true},
+		{name: "different host", host: "example.test", origin: "https://other.test"},
+		{name: "invalid origin", host: "example.test", origin: "://bad"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/admin", nil)
+			req.Host = tt.host
+			if got := appSameOrigin(req, tt.origin); got != tt.want {
+				t.Fatalf("appSameOrigin() = %t, want %t", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNewAppSecurityHeaders(t *testing.T) {
 	stubAppMainRequestMiddleware(t)
 	app := NewApp(AppOptions{OpenAIRouter: textHandler("openai"), WebRouter: textHandler("web")})

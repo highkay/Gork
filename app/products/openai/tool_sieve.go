@@ -12,6 +12,8 @@ var (
 	toolCloseTagRE = regexp.MustCompile(`(?i)</tool_calls\s*>`)
 )
 
+const maxToolSieveBufferBytes = 64 << 10
+
 type ToolSieve struct {
 	toolNames []string
 	buf       string
@@ -77,6 +79,12 @@ func (s *ToolSieve) feedScanning(chunk string) (string, []protocol.ParsedToolCal
 
 func (s *ToolSieve) feedCapturing(chunk string) (string, []protocol.ParsedToolCall) {
 	s.buf += chunk
+	if len(s.buf) > maxToolSieveBufferBytes {
+		s.buf = ""
+		s.capturing = false
+		s.done = true
+		return "", nil
+	}
 	match := toolCloseTagRE.FindStringIndex(s.buf)
 	if match == nil {
 		return "", nil

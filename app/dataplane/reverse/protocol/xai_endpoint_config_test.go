@@ -65,3 +65,21 @@ func TestLiveKitPayloadUsesConfiguredWebSocketEndpoint(t *testing.T) {
 		t.Fatalf("livekitUrl = %#v, want %q", got, want)
 	}
 }
+
+func TestVideoEndpointsUseConfiguredRuntimeTable(t *testing.T) {
+	useProtocolGlobalConfig(t, map[string]any{
+		"media_post":      "https://api.test/media/create",
+		"media_post_link": "https://api.test/media/link",
+		"video_upscale":   "https://api.test/video/upscale",
+	})
+
+	if got := MediaPostEndpoint(); got != "https://api.test/media/create" {
+		t.Fatalf("MediaPostEndpoint = %q", got)
+	}
+	if got := MediaLinkEndpoint(); got != "https://api.test/media/link" {
+		t.Fatalf("MediaLinkEndpoint = %q", got)
+	}
+	if got := VideoUpscaleEndpoint(); got != "https://api.test/video/upscale" {
+		t.Fatalf("VideoUpscaleEndpoint = %q", got)
+	}
+}

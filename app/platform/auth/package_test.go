@@ -15,6 +15,7 @@ func TestPackageDocMarksPythonAuthPackageBoundary(t *testing.T) {
 	for _, want := range []string{
 		"Python app.platform.auth package boundary",
 		"empty app/platform/auth/__init__.py",
+		"authentication helpers",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("doc.go missing %q in:\n%s", want, text)

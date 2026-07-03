@@ -1,4 +1,5 @@
-// Package runtime provides small runtime coordination helpers.
+// Package runtime provides small runtime coordination helpers for task
+// snapshots, Redis locks, IDs, clocks, and batch execution.
 //
 // It preserves the Python app.platform.runtime package boundary represented by
 // the empty app/platform/runtime/__init__.py marker.

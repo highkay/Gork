@@ -52,7 +52,46 @@ func SnapshotFromDirectory(directory ProxyDirectorySnapshot) ProxyRuntimeTable {
 	return ProxyRuntimeTable{
 		EgressMode:    directory.EgressMode(),
 		ClearanceMode: directory.ClearanceMode(),
-		Nodes:         directory.Nodes(),
-		Bundles:       directory.Bundles(),
+		Nodes:         cloneEgressNodes(directory.Nodes()),
+		Bundles:       cloneClearanceBundles(directory.Bundles()),
 	}
+}
+
+func cloneEgressNodes(nodes []controlproxy.EgressNode) []controlproxy.EgressNode {
+	out := make([]controlproxy.EgressNode, len(nodes))
+	copy(out, nodes)
+	for i := range out {
+		out[i].ProxyURL = cloneStringPtr(out[i].ProxyURL)
+		out[i].LastUsed = cloneInt64Ptr(out[i].LastUsed)
+	}
+	return out
+}
+
+func cloneClearanceBundles(bundles map[BundleKey]controlproxy.ClearanceBundle) map[BundleKey]controlproxy.ClearanceBundle {
+	if bundles == nil {
+		return nil
+	}
+	out := make(map[BundleKey]controlproxy.ClearanceBundle, len(bundles))
+	for key, bundle := range bundles {
+		bundle.LastRefreshAt = cloneInt64Ptr(bundle.LastRefreshAt)
+		bundle.ExpiresAt = cloneInt64Ptr(bundle.ExpiresAt)
+		out[key] = bundle
+	}
+	return out
+}
+
+func cloneStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
+func cloneInt64Ptr(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	copied := *value
+	return &copied
 }

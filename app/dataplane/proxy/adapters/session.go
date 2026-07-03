@@ -193,12 +193,7 @@ func (s *ResettableSession) create() SessionClient {
 	return s.factory(s.kwargs)
 }
 
-func (s *ResettableSession) maybeReset(ctx context.Context) {
-	if !s.resetPending {
-		return
-	}
-	s.lock.Lock()
-	defer s.lock.Unlock()
+func (s *ResettableSession) maybeResetLocked(ctx context.Context) {
 	if !s.resetPending {
 		return
 	}
@@ -211,7 +206,12 @@ func (s *ResettableSession) maybeReset(ctx context.Context) {
 }
 
 func (s *ResettableSession) request(ctx context.Context, method string, args ...any) (SessionResponse, error) {
-	s.maybeReset(ctx)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.maybeResetLocked(ctx)
+	if s.session == nil {
+		s.session = s.create()
+	}
 	response, err := s.session.Request(ctx, method, args...)
 	if err != nil {
 		s.resetPending = true
@@ -236,6 +236,8 @@ func (s *ResettableSession) Delete(ctx context.Context, args ...any) (SessionRes
 }
 
 func (s *ResettableSession) Close(ctx context.Context) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	if s.session == nil {
 		return nil
 	}

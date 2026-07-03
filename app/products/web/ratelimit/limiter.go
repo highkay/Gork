@@ -38,6 +38,9 @@ func (l *Limiter) Allow(key string) bool {
 	defer l.mu.Unlock()
 	item := l.failures[key]
 	if item.blockedUntil.IsZero() || !l.now().Before(item.blockedUntil) {
+		if !item.blockedUntil.IsZero() {
+			delete(l.failures, key)
+		}
 		return true
 	}
 	return false

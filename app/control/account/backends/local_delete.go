@@ -20,10 +20,11 @@ func deleteLocalAccounts(
 		if err != nil {
 			return 0, err
 		}
-		count, err = affectedRows(result)
+		affected, err := affectedRows(result)
 		if err != nil {
 			return 0, err
 		}
+		count += affected
 	}
 	return count, nil
 }

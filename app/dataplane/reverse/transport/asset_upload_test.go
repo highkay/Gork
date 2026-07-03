@@ -71,6 +71,20 @@ func TestMimeFromNameMatchesPythonFallback(t *testing.T) {
 	}
 }
 
+func TestFilenameFromURLDecodesAndCleansBasename(t *testing.T) {
+	tests := map[string]string{
+		"https://x.test/a%20b.png?x=1":           "a b.png",
+		"https://x.test/path/encoded%2fname.jpg": "name.jpg",
+		"https://x.test/path/%2e%2e":             "download",
+		"https://x.test/":                        "download",
+	}
+	for rawURL, want := range tests {
+		if got := filenameFromURL(rawURL); got != want {
+			t.Fatalf("filenameFromURL(%q) = %q, want %q", rawURL, got, want)
+		}
+	}
+}
+
 func TestAcquireAssetUploadSlotUsesConfiguredConcurrencyLikePython(t *testing.T) {
 	resetAssetUploadConcurrencyForTest(t, 2)
 

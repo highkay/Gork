@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dslzl/gork/app/platform/auth"
 )
@@ -110,6 +111,46 @@ func TestWebUIImagineWebSocketNoAccountAndStop(t *testing.T) {
 	client.SendJSON(map[string]any{"type": "start", "prompt": "again"})
 	_ = client.ReadJSON()
 	assertWebUIWSError(t, client.ReadJSON(), "No available accounts for this model tier", "rate_limit_exceeded")
+}
+
+func TestWebUIImagineWebSocketStopDoesNotWaitForSlowProvider(t *testing.T) {
+	resetWebUITestDeps(t)
+	webUIAuthSettings = func() auth.AuthSettings { return auth.AuthSettings{WebUIKey: "web", WebUIEnabled: true} }
+	webUIImagineRunID = func() string { return "run-slow" }
+	webUIImagineStopTimeout = 10 * time.Millisecond
+	release := make(chan struct{})
+	providerDone := make(chan struct{})
+	released := false
+	releaseProvider := func() {
+		if !released {
+			close(release)
+			released = true
+		}
+	}
+	t.Cleanup(releaseProvider)
+	webUIImagineEvents = func(context.Context, string, webUIImagineOptions) ([]map[string]any, bool, error) {
+		defer close(providerDone)
+		<-release
+		return nil, true, nil
+	}
+
+	client := newWebUIWSTestClient(t, "Bearer web")
+	defer client.Close()
+	client.SendJSON(map[string]any{"type": "start", "prompt": "slow"})
+	if running := client.ReadJSON(); running["run_id"] != "run-slow" {
+		t.Fatalf("running payload = %#v", running)
+	}
+	client.SendJSON(map[string]any{"type": "stop"})
+	stopped := client.ReadJSON()
+	if stopped["type"] != "status" || stopped["status"] != "stopped" || stopped["run_id"] != "run-slow" {
+		t.Fatalf("stopped payload = %#v", stopped)
+	}
+	releaseProvider()
+	select {
+	case <-providerDone:
+	case <-time.After(time.Second):
+		t.Fatal("provider did not finish after release")
+	}
 }
 
 func TestWebUIImagineWebSocketInternalRunErrorMatchesPythonShape(t *testing.T) {

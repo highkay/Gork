@@ -17,9 +17,6 @@ func (r *RedisAccountRepository) rebuildIndexes(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := r.store.SetNX(ctx, redisKeyIndexReady, "1"); err != nil {
-		return err
-	}
 	for _, key := range keys {
 		token := redisTokenFromRecordKey(key)
 		record, ok, err := r.getRecordByToken(ctx, token)
@@ -31,6 +28,9 @@ func (r *RedisAccountRepository) rebuildIndexes(ctx context.Context) error {
 				return err
 			}
 		}
+	}
+	if _, err := r.store.SetNX(ctx, redisKeyIndexReady, "1"); err != nil {
+		return err
 	}
 	return nil
 }
@@ -129,9 +129,6 @@ func (r *RedisAccountRepository) removeSecondaryIndexes(
 
 func (r *RedisAccountRepository) addRecordIndexes(ctx context.Context, record account.AccountRecord) error {
 	token := record.Token
-	if _, err := r.store.SetNX(ctx, redisKeyIndexReady, "1"); err != nil {
-		return err
-	}
 	for _, key := range redisRecordSetKeys(record) {
 		if err := r.store.SAdd(ctx, key, token); err != nil {
 			return err
@@ -166,7 +163,7 @@ func redisRecordSetKeys(record account.AccountRecord) []string {
 
 func (r *RedisAccountRepository) addSortIndexes(ctx context.Context, record account.AccountRecord) error {
 	for _, field := range redisSortFields {
-		if err := r.store.ZAdd(ctx, redisSortKey(field), map[string]int{record.Token: redisSortValue(record, field)}); err != nil {
+		if err := r.store.ZAdd(ctx, redisSortKey(field), map[string]int64{record.Token: redisSortValue(record, field)}); err != nil {
 			return err
 		}
 	}

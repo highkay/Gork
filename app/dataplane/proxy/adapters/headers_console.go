@@ -11,7 +11,7 @@ func BuildConsoleHeaders(ssoToken string, options ...ConsoleHeaderOptions) map[s
 		}
 	}
 	profile := resolveProfile(opts.Lease)
-	ua := sanitize(&profile.UserAgent, "user_agent", false)
+	ua := sanitize(&profile.UserAgent, false)
 	if ua == "" {
 		ua = DefaultConsoleUserAgent
 	}

@@ -15,6 +15,9 @@ func TestPackageDocMarksPythonPlatformPackageBoundary(t *testing.T) {
 	for _, want := range []string{
 		"Python app.platform package boundary",
 		"empty app/platform/__init__.py",
+		"shared platform primitives",
+		"token estimation",
+		"update metadata",
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("doc.go missing %q in:\n%s", want, text)

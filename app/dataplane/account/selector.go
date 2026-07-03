@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+
+	"github.com/dslzl/gork/app/dataplane/shared"
 )
 
 const (
@@ -136,7 +138,7 @@ func maybeResetWindows(
 	poolID int,
 	nowS int,
 ) {
-	if poolID != 0 {
+	if !supportsQuotaWindowReset(poolID) {
 		return
 	}
 	for idx := range candidates {
@@ -156,6 +158,10 @@ func maybeResetWindows(
 		resetCol[idx] = nowS + windowS
 	}
 	_ = modeID
+}
+
+func supportsQuotaWindowReset(poolID int) bool {
+	return poolID == int(shared.PoolBasic)
 }
 
 func best(table *AccountRuntimeTable, working map[int]bool, quotaCol []int, nowS int) (int, bool) {

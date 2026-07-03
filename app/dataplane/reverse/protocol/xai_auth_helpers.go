@@ -34,11 +34,26 @@ func (c *XAIAuthClient) grpcCall(ctx context.Context, url, token string, payload
 		return status, nil
 	}
 	if !shared {
-		if err := c.proxy.Feedback(ctx, *lease, proxyFeedback(controlproxy.ProxyFeedbackUpstream5xx, status.HTTPEquiv())); err != nil {
+		if err := c.proxy.Feedback(ctx, *lease, proxyFeedback(grpcProxyFeedbackKind(status), status.HTTPEquiv())); err != nil {
 			return status, err
 		}
 	}
 	return status, platform.NewUpstreamError(fmt.Sprintf("%s: gRPC error code=%d message=%q", label, status.Code, status.Message), status.HTTPEquiv(), "")
+}
+
+func grpcProxyFeedbackKind(status GrpcStatus) controlproxy.ProxyFeedbackKind {
+	switch httpStatus := status.HTTPEquiv(); {
+	case httpStatus == 401:
+		return controlproxy.ProxyFeedbackUnauthorized
+	case httpStatus == 403:
+		return controlproxy.ProxyFeedbackChallenge
+	case httpStatus == 429:
+		return controlproxy.ProxyFeedbackRateLimited
+	case httpStatus >= 500:
+		return controlproxy.ProxyFeedbackUpstream5xx
+	default:
+		return controlproxy.ProxyFeedbackTransportError
+	}
 }
 
 func (c *XAIAuthClient) setBirthDate(ctx context.Context, token string, options authCallOptions) (map[string]any, error) {

@@ -23,8 +23,8 @@ func BuildSSOCookie(ssoToken string, options ...CookieOptions) string {
 	if opts.CFClearance != nil {
 		cfClearance = *opts.CFClearance
 	}
-	effectiveCookies := sanitize(&cfCookies, "cf_cookies", false)
-	effectiveClearance := sanitize(&cfClearance, "cf_clearance", true)
+	effectiveCookies := sanitize(&cfCookies, false)
+	effectiveClearance := sanitize(&cfClearance, true)
 	effectiveClearance = strings.ReplaceAll(effectiveClearance, ";", "")
 
 	if effectiveClearance != "" && effectiveCookies != "" {
@@ -44,11 +44,11 @@ func BuildSSOCookie(ssoToken string, options ...CookieOptions) string {
 }
 
 func normalizeSSOCookieInput(ssoToken string) string {
-	raw := sanitize(&ssoToken, "sso_token", false)
+	raw := sanitize(&ssoToken, false)
 	if hasCookiePair(raw, "sso") || hasCookiePair(raw, "sso-rw") {
 		return normalizeStoredSSOCookie(raw)
 	}
-	token := sanitize(&ssoToken, "sso_token", true)
+	token := sanitize(&ssoToken, true)
 	return fmt.Sprintf("sso=%s; sso-rw=%s", token, token)
 }
 
@@ -64,10 +64,10 @@ func normalizeStoredSSOCookie(raw string) string {
 		}
 		switch strings.ToLower(name) {
 		case "sso":
-			value = sanitize(&value, "sso_token", true)
+			value = sanitize(&value, true)
 			ssoValue = value
 		case "sso-rw":
-			value = sanitize(&value, "sso_token", true)
+			value = sanitize(&value, true)
 			hasSSORW = true
 		}
 		normalized = append(normalized, name+"="+value)

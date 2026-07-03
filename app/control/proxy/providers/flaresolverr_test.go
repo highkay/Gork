@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
@@ -86,8 +87,14 @@ func TestFlareSolverrProviderSuppressesRequestAndDecodeFailures(t *testing.T) {
 		Config: config,
 		Client: failingFlareSolverrClient{},
 	}
-	if _, ok, err := provider.RefreshBundle(context.Background(), "node-1", "", "https://grok.com"); err != nil || ok {
+	bundle, ok, err := provider.RefreshBundle(context.Background(), "node-1", "", "https://grok.com")
+	if err != nil || ok {
 		t.Fatalf("RefreshBundle client failure ok=%v err=%v, want false nil", ok, err)
+	}
+	if bundle.LastRefreshError != "flaresolverr request failed: connection failed" ||
+		bundle.State != controlproxy.ClearanceBundleInvalid ||
+		bundle.AffinityKey != "node-1" || bundle.ClearanceHost != "grok.com" {
+		t.Fatalf("diagnostic bundle = %#v", bundle)
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

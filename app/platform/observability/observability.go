@@ -203,6 +203,12 @@ func (r *responseRecorder) WriteHeader(status int) {
 	r.ResponseWriter.WriteHeader(status)
 }
 
+func (r *responseRecorder) Flush() {
+	if flusher, ok := r.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 type accessLogEntry struct {
 	RequestID   string `json:"request_id"`
 	Method      string `json:"method"`

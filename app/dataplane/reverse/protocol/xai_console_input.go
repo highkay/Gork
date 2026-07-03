@@ -16,6 +16,7 @@ func consoleInputItems(message map[string]any) []map[string]any {
 		}}
 	}
 	apiRole := "user"
+	// Console API accepts system/user/assistant; developer folds into system and unknown/tool roles into user.
 	if role == "system" || role == "developer" {
 		apiRole = "system"
 	} else if role == "assistant" {

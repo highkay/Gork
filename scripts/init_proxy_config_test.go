@@ -80,3 +80,37 @@ func TestInitProxyConfigSkipsConfigAlreadyContainingPrivoxy(t *testing.T) {
 		t.Fatalf("stdout mismatch: want %q, got %q", wantMsg, gotMsg)
 	}
 }
+
+func TestInitProxyConfigKeepsAdjacentProxyNamespace(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	original := "[proxy.egress.extra]\nlabel = \"keep\"\n\n[proxy.egress]\nmode = \"disabled\"\n"
+	if err := os.WriteFile(configPath, []byte(original), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v", configPath, err)
+	}
+	var out bytes.Buffer
+
+	if err := initProxyConfig(configPath, &out); err != nil {
+		t.Fatalf("initProxyConfig() error = %v", err)
+	}
+
+	got, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) error = %v", configPath, err)
+	}
+	want := "[proxy.egress.extra]\nlabel = \"keep\"\n\n\n" + strings.TrimSuffix(expectedProxyConfig(), "\n") + "\n"
+	if string(got) != want {
+		t.Fatalf("updated config mismatch\nwant:\n%s\ngot:\n%s", want, string(got))
+	}
+
+	out.Reset()
+	if err := initProxyConfig(configPath, &out); err != nil {
+		t.Fatalf("second initProxyConfig() error = %v", err)
+	}
+	got, err = os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) after second run error = %v", configPath, err)
+	}
+	if string(got) != want {
+		t.Fatalf("second run changed config\nwant:\n%s\ngot:\n%s", want, string(got))
+	}
+}

@@ -144,6 +144,60 @@ func TestAdaptErrorResponseMapsStatusPayloadAndRetryHeaders(t *testing.T) {
 	}
 }
 
+func TestAdaptErrorResponseMapsCommonApplicationErrors(t *testing.T) {
+	cases := []struct {
+		name   string
+		err    error
+		status int
+		class  ErrorClass
+		kind   ErrorKind
+		code   string
+		param  string
+	}{
+		{
+			name:   "validation",
+			err:    NewValidationError("missing model", "model", "missing_required_parameter"),
+			status: 400,
+			class:  ErrorClassValidation,
+			kind:   ErrorKindValidation,
+			code:   "missing_required_parameter",
+			param:  "model",
+		},
+		{
+			name:   "auth",
+			err:    NewAuthError("bad key"),
+			status: 401,
+			class:  ErrorClassAuth,
+			kind:   ErrorKindAuthentication,
+			code:   "invalid_api_key",
+		},
+		{
+			name:   "rate_limit",
+			err:    NewRateLimitError("slow down"),
+			status: 429,
+			class:  ErrorClassRateLimit,
+			kind:   ErrorKindRateLimit,
+			code:   "rate_limit_exceeded",
+		},
+	}
+
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			adapted := AdaptErrorResponse(tt.err)
+			if adapted.Status != tt.status || adapted.Class != tt.class {
+				t.Fatalf("response = %#v", adapted)
+			}
+			body := adapted.Payload["error"].(map[string]any)
+			if body["type"] != tt.kind || body["code"] != tt.code {
+				t.Fatalf("payload = %#v", adapted.Payload)
+			}
+			if tt.param != "" && body["param"] != tt.param {
+				t.Fatalf("param = %#v, want %q", body["param"], tt.param)
+			}
+		})
+	}
+}
+
 type assertionError string
 
 func (e assertionError) Error() string { return string(e) }

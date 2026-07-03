@@ -75,6 +75,7 @@ func estimateJSONTokens(text string) (int, bool) {
 	if err := json.Unmarshal([]byte(text), &value); err != nil {
 		return 0, false
 	}
+	// Keep this Python-compatible heuristic local; it is not a tokenizer.
 	return estimateJSONValueTokens(value), true
 }
 

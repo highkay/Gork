@@ -8,6 +8,18 @@ var (
 	VideoUpscaleURL = reverseruntime.DefaultEndpointTable().Resolve("video_upscale")
 )
 
+func MediaPostEndpoint() string {
+	return reverseruntime.GlobalEndpointTable().Resolve("media_post")
+}
+
+func MediaLinkEndpoint() string {
+	return reverseruntime.GlobalEndpointTable().Resolve("media_post_link")
+}
+
+func VideoUpscaleEndpoint() string {
+	return reverseruntime.GlobalEndpointTable().Resolve("video_upscale")
+}
+
 type MediaPostPayloadOptions struct {
 	MediaType string
 	MediaURL  string

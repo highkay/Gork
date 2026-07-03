@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	redis "github.com/redis/go-redis/v9"
@@ -37,6 +38,7 @@ type RedisRuntimeLease struct {
 	Key      string
 	Owner    string
 	TTLMS    int
+	mu       sync.Mutex
 	released bool
 }
 
@@ -67,6 +69,8 @@ func NewRedisRuntimeLease(client RedisRuntimeClient, key, owner string, ttlMS in
 }
 
 func (l *RedisRuntimeLease) Renew(ctx context.Context) (bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.released {
 		return false, nil
 	}
@@ -74,6 +78,8 @@ func (l *RedisRuntimeLease) Renew(ctx context.Context) (bool, error) {
 }
 
 func (l *RedisRuntimeLease) Release(ctx context.Context) (bool, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.released {
 		return false, nil
 	}

@@ -66,6 +66,15 @@ func TestBrowserFromUserAgentMatchesPython(t *testing.T) {
 	}
 }
 
+func TestSupportedBrowserNormalizesWithoutWhitelist(t *testing.T) {
+	if got := supportedBrowser(" chrome120 "); got != "chrome120" {
+		t.Fatalf("supportedBrowser trimmed = %q", got)
+	}
+	if got := supportedBrowser("unknown999"); got != "unknown999" {
+		t.Fatalf("supportedBrowser should normalize, not whitelist: %q", got)
+	}
+}
+
 func TestResolveProxyProfileUsesLeaseBeforeConfig(t *testing.T) {
 	lease := controlproxy.NewProxyLease("lease-1")
 	lease.CFCookies = "foo=1; cf_clearance=lease-clearance"

@@ -55,7 +55,7 @@ func webRoutes() []webRoute {
 		webGet("/webui/chat", serveWebUIPage("webui/chat.html")),
 		webGet("/webui/chatkit", serveWebUIPage("webui/chatkit.html")),
 		webGet("/webui/masonry", serveWebUIPage("webui/masonry.html")),
-		webGet("/webui/api/verify", handleWebUIVerify),
+		webGet("/webui/api/verify", webuiapi.VerifyHandler(webRouterAuthSettings)),
 		webGet("/meta", handleWebMeta),
 		webGet("/meta/update", handleWebUpdateMeta),
 	}
@@ -121,14 +121,6 @@ func serveWebUIPage(path string) http.HandlerFunc {
 		}
 		webRouterServeHTML(w, r, path)
 	}
-}
-
-func handleWebUIVerify(w http.ResponseWriter, r *http.Request) {
-	if err := auth.VerifyWebUIKey(r.Header.Get("Authorization"), webRouterAuthSettings()); err != nil {
-		writeWebError(w, err)
-		return
-	}
-	writeWebJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 }
 
 func handleWebMeta(w http.ResponseWriter, r *http.Request) {

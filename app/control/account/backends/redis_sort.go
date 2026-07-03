@@ -24,34 +24,34 @@ func sortRedisRecords(records []account.AccountRecord, sortBy string, desc bool)
 	})
 }
 
-func redisSortValue(record account.AccountRecord, field string) int {
+func redisSortValue(record account.AccountRecord, field string) int64 {
 	switch field {
 	case "created_at":
-		return int(record.CreatedAt)
+		return record.CreatedAt
 	case "updated_at":
-		return int(record.UpdatedAt)
+		return record.UpdatedAt
 	case "last_use_at":
-		return intFromPtr(record.LastUseAt)
+		return int64FromPtr(record.LastUseAt)
 	case "last_fail_at":
-		return intFromPtr(record.LastFailAt)
+		return int64FromPtr(record.LastFailAt)
 	case "last_sync_at":
-		return intFromPtr(record.LastSyncAt)
+		return int64FromPtr(record.LastSyncAt)
 	case "last_clear_at":
-		return intFromPtr(record.LastClearAt)
+		return int64FromPtr(record.LastClearAt)
 	case "usage_use_count":
-		return record.UsageUseCount
+		return int64(record.UsageUseCount)
 	case "usage_fail_count":
-		return record.UsageFailCount
+		return int64(record.UsageFailCount)
 	case "usage_sync_count":
-		return record.UsageSyncCount
+		return int64(record.UsageSyncCount)
 	default:
 		return 0
 	}
 }
 
-func intFromPtr(value *int64) int {
+func int64FromPtr(value *int64) int64 {
 	if value == nil {
 		return 0
 	}
-	return int(*value)
+	return *value
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
@@ -89,9 +90,11 @@ type WebSocketClient struct {
 }
 
 type WebSocketConnection struct {
-	session  WebSocketSession
-	endpoint WebSocketEndpoint
-	onClose  func(context.Context) error
+	session   WebSocketSession
+	endpoint  WebSocketEndpoint
+	onClose   func(context.Context) error
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func NormalizeSocksProxy(proxyURL string) NormalizedSocksProxy {
@@ -196,6 +199,13 @@ func (c *WebSocketClient) proxyURL(lease *controlproxy.ProxyLease) string {
 }
 
 func (c *WebSocketConnection) Close(ctx context.Context) error {
+	c.closeOnce.Do(func() {
+		c.closeErr = c.close(ctx)
+	})
+	return c.closeErr
+}
+
+func (c *WebSocketConnection) close(ctx context.Context) error {
 	var firstErr error
 	if c.endpoint != nil && !c.endpoint.Closed() {
 		firstErr = c.endpoint.Close()

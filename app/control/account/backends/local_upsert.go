@@ -161,6 +161,11 @@ ON CONFLICT(token) DO UPDATE SET
 	deleted_at     = NULL,
 	updated_at     = excluded.updated_at,
 	tags           = excluded.tags,
+	quota_auto     = excluded.quota_auto,
+	quota_fast     = excluded.quota_fast,
+	quota_expert   = excluded.quota_expert,
+	quota_heavy    = excluded.quota_heavy,
+	quota_grok_4_3 = excluded.quota_grok_4_3,
 	quota_console  = excluded.quota_console,
 	ext            = excluded.ext,
 	revision       = excluded.revision

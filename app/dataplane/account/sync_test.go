@@ -132,6 +132,34 @@ func TestBootstrapSkipsDeletedAndBuildsRuntimeIndexes(t *testing.T) {
 	}
 }
 
+func TestBootstrapUpdatesDuplicateSnapshotTokens(t *testing.T) {
+	repo := &syncFakeRepository{snapshot: controlaccount.RuntimeSnapshot{
+		Revision: 8,
+		Items: []controlaccount.AccountRecord{
+			accountRecord("dup", "basic", basicQuotaSet(5), []string{"old-team"}),
+			accountRecord("dup", "super", superQuotaSet(22), []string{"new-team"}),
+		},
+	}}
+
+	table, err := Bootstrap(context.Background(), repo)
+	if err != nil {
+		t.Fatalf("Bootstrap returned error: %v", err)
+	}
+	if table.Revision != 8 || table.Size != 1 || len(table.TokenByIdx) != 1 {
+		t.Fatalf("revision/size/slots = %d/%d/%d", table.Revision, table.Size, len(table.TokenByIdx))
+	}
+	idx := table.IdxByToken["dup"]
+	if table.PoolByIdx[idx] != 1 || table.QuotaAutoByIdx[idx] != 22 {
+		t.Fatalf("duplicate token did not update to latest slot: pool=%d quota=%d", table.PoolByIdx[idx], table.QuotaAutoByIdx[idx])
+	}
+	if table.TagIdx["old-team"][idx] || !table.TagIdx["new-team"][idx] {
+		t.Fatalf("duplicate token tag indexes = %#v", table.TagIdx)
+	}
+	if table.ModeAvailable[ModeKey{PoolID: 0, ModeID: 1}][idx] || !table.ModeAvailable[ModeKey{PoolID: 1, ModeID: 0}][idx] {
+		t.Fatalf("duplicate token mode indexes = %#v", table.ModeAvailable)
+	}
+}
+
 func TestApplyChangesDeletesUpdatesAppendsAndAdvancesRevision(t *testing.T) {
 	table := MakeEmptyTable()
 	table.Revision = 1

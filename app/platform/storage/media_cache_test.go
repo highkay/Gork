@@ -313,6 +313,17 @@ func TestLocalMediaCacheReconcileReportsOrphansAndTempFiles(t *testing.T) {
 	if report == nil || report.OrphanIndexRows != 1 || report.TempFiles != 1 || report.RemovedBytes < 3 {
 		t.Fatalf("report = %#v", report)
 	}
+	if len(report.RemovedNames) == 0 {
+		t.Fatalf("report removed names missing: %#v", report)
+	}
+	report.RemovedNames[0] = "mutated"
+	status, err = store.Status()
+	if err != nil {
+		t.Fatalf("second Status returned error: %v", err)
+	}
+	if status.Media[MediaTypeImage].LastReconcileReport.RemovedNames[0] == "mutated" {
+		t.Fatalf("status report leaked internal RemovedNames slice")
+	}
 	if _, err := os.Stat(filepath.Join(imagesDir, ".new.png.123.part")); !os.IsNotExist(err) {
 		t.Fatalf("temp file should be removed, err=%v", err)
 	}

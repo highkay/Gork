@@ -179,6 +179,20 @@ func TestStreamAdapterEmitsTextImageAndCitationFixtures(t *testing.T) {
 	assertAnyMaps(t, adapter.SearchSourcesList(), []map[string]any{{"url": "https://example.com/a", "title": "Example A", "type": "web"}})
 }
 
+func TestStreamAdapterHandlesRenderAttributesOutOfOrder(t *testing.T) {
+	adapter := NewStreamAdapter(StreamAdapterOptions{})
+	mustFeed(t, adapter, `{"result":{"response":{"cardAttachment":{"jsonData":"{\"id\":\"cite-order\",\"url\":\"https://example.com/order\",\"title\":\"Order\"}"}}}}`)
+
+	events := mustFeed(t, adapter, `{"result":{"response":{"token":"See<grok:render type=\"render_inline_citation\" card_type=\"citation\" card_id=\"cite-order\"></grok:render>","isThinking":false,"messageTag":"final"}}}`)
+
+	if len(events) < 2 || events[0].Kind != "text" || events[0].Content != "See [[1]](https://example.com/order)" {
+		t.Fatalf("events = %#v", events)
+	}
+	if events[1].Kind != "annotation" || events[1].AnnotationData["url"] != "https://example.com/order" {
+		t.Fatalf("annotation event = %#v", events[1])
+	}
+}
+
 func TestStreamAdapterMatchesPythonFalseyFinalMetadata(t *testing.T) {
 	adapter := NewStreamAdapter(StreamAdapterOptions{})
 	events := mustFeed(t, adapter, `{"result":{"response":{"finalMetadata":{}}}}`)

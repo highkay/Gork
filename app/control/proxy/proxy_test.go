@@ -99,9 +99,10 @@ func (f *fakeManualProvider) BuildBundle(affinityKey string, clearanceHost ...st
 }
 
 type fakeFlareProvider struct {
-	bundles []ClearanceBundle
-	calls   []string
-	err     error
+	bundles    []ClearanceBundle
+	calls      []string
+	err        error
+	diagnostic *ClearanceBundle
 }
 
 func (f *fakeFlareProvider) RefreshBundle(_ context.Context, affinityKey, proxyURL string, targetURL ...string) (ClearanceBundle, bool, error) {
@@ -114,6 +115,9 @@ func (f *fakeFlareProvider) RefreshBundle(_ context.Context, affinityKey, proxyU
 	}
 	f.calls = append(f.calls, affinityKey+"|"+proxyURL+"|"+target)
 	if len(f.bundles) == 0 {
+		if f.diagnostic != nil {
+			return *f.diagnostic, false, nil
+		}
 		return ClearanceBundle{}, false, nil
 	}
 	bundle := f.bundles[0]
@@ -414,6 +418,44 @@ func TestProxyDirectoryFlareRefreshKeepsOldBundleOnFailure(t *testing.T) {
 	bundle := directory.Bundles()[BundleKey{Affinity: "direct", ClearanceHost: "grok.com"}]
 	if bundle.BundleID != "old" || bundle.CFCookies != "cf=old" {
 		t.Fatalf("bundle after failed refresh = %#v, want old bundle kept", bundle)
+	}
+}
+
+func TestProxyDirectoryRefreshClearanceSafeRecordsDiagnosticFailure(t *testing.T) {
+	oldBundle := NewClearanceBundle("old")
+	oldBundle.AffinityKey = "direct"
+	oldBundle.ClearanceHost = "grok.com"
+	oldBundle.CFCookies = "cf=old"
+	diagnostic := NewClearanceBundle("diagnostic")
+	diagnostic.LastRefreshError = "flaresolverr request failed: connection failed"
+	diagnostic.State = ClearanceBundleInvalid
+	flare := &fakeFlareProvider{
+		bundles:    []ClearanceBundle{oldBundle},
+		diagnostic: &diagnostic,
+	}
+	directory := NewProxyDirectory(DirectoryOptions{
+		Config: fakeDirectoryConfig{
+			strings: map[string]string{
+				"proxy.egress.mode":       "direct",
+				"proxy.clearance.mode":    "flaresolverr",
+				"proxy.clearance.browser": "chrome",
+			},
+		},
+		FlareProvider: flare,
+	})
+	if err := directory.Load(context.Background()); err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if err := directory.WarmUp(context.Background()); err != nil {
+		t.Fatalf("WarmUp() error = %v", err)
+	}
+	if err := directory.RefreshClearanceSafe(context.Background()); err != nil {
+		t.Fatalf("RefreshClearanceSafe() error = %v", err)
+	}
+	bundle := directory.Bundles()[BundleKey{Affinity: "direct", ClearanceHost: "grok.com"}]
+	if bundle.BundleID != "old" || bundle.CFCookies != "cf=old" ||
+		bundle.LastRefreshError != "flaresolverr request failed: connection failed" {
+		t.Fatalf("diagnostic refresh bundle = %#v", bundle)
 	}
 }
 
