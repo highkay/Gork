@@ -34,6 +34,13 @@ func normalizeImageResponseFormat(responseFormat string) (string, error) {
 	}
 }
 
+func defaultImageResponseFormat() string {
+	if strings.EqualFold(strings.TrimSpace(fmt.Sprint(config.GetConfig("features.image_format", imageFormatConfig))), "base64") {
+		return "b64_json"
+	}
+	return "url"
+}
+
 func localImageURL(fileID string) string {
 	return imageAppURL() + signedRouterFileURL("/v1/files/image", fileID)
 }

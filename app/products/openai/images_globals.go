@@ -86,7 +86,7 @@ var (
 		return streamChat(ctx, chatStreamOptions{
 			Token:            token,
 			ModeID:           modeID,
-			Message:          "Drawing: " + prompt,
+			Message:          "Generate an image for this prompt. Do not answer with text.\n\n" + prompt,
 			RequestOverrides: map[string]any{"imageGenerationCount": 2},
 			TimeoutSeconds:   chatTimeoutSeconds(),
 		})

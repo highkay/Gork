@@ -51,7 +51,7 @@ func handleImageEdits(w http.ResponseWriter, r *http.Request) {
 		Messages:       []map[string]any{{"role": "user", "content": content}},
 		N:              n,
 		Size:           routerStringDefault(r.FormValue("size"), "1024x1024"),
-		ResponseFormat: routerStringDefault(r.FormValue("response_format"), "url"),
+		ResponseFormat: routerStringDefault(r.FormValue("response_format"), defaultImageResponseFormat()),
 		Stream:         false,
 		ChatFormat:     false,
 	})

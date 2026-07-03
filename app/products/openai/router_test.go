@@ -21,6 +21,7 @@ import (
 	controlmodel "github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
+	platformconfig "github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/httpbody"
 	"github.com/dslzl/gork/app/platform/storage"
 )
@@ -429,6 +430,65 @@ func TestRouterChatImageStreamStartsBeforeGenerationCompletes(t *testing.T) {
 	}
 	if strings.Contains(bodyText, `"delta":{}`) {
 		t.Fatalf("stream body should not use empty delta heartbeat: %q", bodyText)
+	}
+}
+
+func TestRouterChatImageNonStreamPreservesUpstreamErrorStatus(t *testing.T) {
+	resetRouterDepsForTest(t)
+	routerGenerateImages = func(_ context.Context, options imageGenerationOptions) (imageResult, error) {
+		if options.Stream || !options.ChatFormat {
+			t.Fatalf("image options=%#v", options)
+		}
+		return imageResult{}, platform.NewUpstreamError("Image generation returned no images", http.StatusBadGateway, "data_frames=51 event_kinds=text")
+	}
+
+	body := `{"model":"grok-imagine-image-lite","messages":[{"role":"user","content":"draw"}],"stream":false}`
+	rec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body)))
+
+	assertRouterGoldenJSON(t, rec, http.StatusBadGateway, map[string]any{
+		"error.type":    "upstream_error",
+		"error.message": "Image generation returned no images",
+	})
+	if strings.Contains(rec.Header().Get("Content-Type"), "text/event-stream") {
+		t.Fatalf("non-stream image error should stay JSON: headers=%#v body=%s", rec.Header(), rec.Body.String())
+	}
+}
+
+func TestRouterImageFormatConfigDefaultsImageRoutesToBase64(t *testing.T) {
+	resetRouterDepsForTest(t)
+	oldConfig := platformconfig.GlobalConfig
+	t.Cleanup(func() { platformconfig.GlobalConfig = oldConfig })
+	defaults := filepath.Join(t.TempDir(), "config.defaults.toml")
+	if err := os.WriteFile(defaults, []byte("[features]\nimage_format = \"base64\"\n"), 0o600); err != nil {
+		t.Fatalf("write defaults: %v", err)
+	}
+	platformconfig.GlobalConfig = platformconfig.NewConfigSnapshot(nil, platformconfig.ConfigSnapshotOptions{})
+	if err := platformconfig.GlobalConfig.Load(context.Background(), defaults); err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+
+	calls := []imageGenerationOptions{}
+	routerGenerateImages = func(_ context.Context, options imageGenerationOptions) (imageResult, error) {
+		calls = append(calls, options)
+		if options.ChatFormat {
+			return imageResult{Response: map[string]any{"id": "chat-image"}}, nil
+		}
+		return imageResult{Response: map[string]any{"created": float64(1), "data": []any{}}}, nil
+	}
+
+	chatBody := `{"model":"grok-imagine-image-lite","messages":[{"role":"user","content":"draw"}],"stream":false}`
+	chatRec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(chatRec, httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatBody)))
+	assertRouterGoldenJSON(t, chatRec, http.StatusOK, map[string]any{"id": "chat-image"})
+
+	imageBody := `{"model":"grok-imagine-image-lite","prompt":"draw"}`
+	imageRec := httptest.NewRecorder()
+	NewRouter().ServeHTTP(imageRec, httptest.NewRequest(http.MethodPost, "/v1/images/generations", strings.NewReader(imageBody)))
+	assertRouterGoldenJSON(t, imageRec, http.StatusOK, map[string]any{"created": float64(1)})
+
+	if len(calls) != 2 || calls[0].ResponseFormat != "b64_json" || calls[1].ResponseFormat != "b64_json" {
+		t.Fatalf("image response formats=%#v", calls)
 	}
 }
 
