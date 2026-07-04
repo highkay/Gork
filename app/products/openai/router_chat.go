@@ -41,11 +41,7 @@ func handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 }
 
 func shouldStartChatMediaStream(req ChatCompletionRequest) (bool, error) {
-	isStream := routerBoolConfig("features.stream", true)
-	if req.Stream != nil {
-		isStream = *req.Stream
-	}
-	if !isStream {
+	if !routerRequestExplicitStream(req.Stream) {
 		return false, nil
 	}
 	spec, _ := model.Get(req.Model)
@@ -164,14 +160,15 @@ func dispatchChatRequestWithStreamFrame(r *http.Request, req ChatCompletionReque
 	}
 	spec, _ := model.Get(req.Model)
 	messages := routerMessagesToMaps(req.Messages)
+	mediaStream := routerRequestExplicitStream(req.Stream)
 	if spec.IsImageEdit() {
-		return dispatchChatImageEdit(r, req, messages, isStream)
+		return dispatchChatImageEdit(r, req, messages, mediaStream)
 	}
 	if spec.IsImage() {
-		return dispatchChatImage(r, req, isStream)
+		return dispatchChatImage(r, req, mediaStream)
 	}
 	if spec.IsVideo() {
-		return dispatchChatVideo(r, req, messages, isStream)
+		return dispatchChatVideo(r, req, messages, mediaStream)
 	}
 	return dispatchChatText(r, req, messages, isStream, streamFrame)
 }
@@ -188,7 +185,7 @@ func dispatchChatImageEdit(r *http.Request, req ChatCompletionRequest, messages 
 	imageResult, err := routerEditImages(r.Context(), imageEditOptions{
 		Model: req.Model, Messages: messages, N: n,
 		Size:           routerStringDefault(cfg.Size, "1024x1024"),
-		ResponseFormat: routerStringDefault(cfg.ResponseFormat, "url"),
+		ResponseFormat: routerStringDefault(cfg.ResponseFormat, defaultImageResponseFormat()),
 		Stream:         isStream, ChatFormat: true,
 	})
 	return chatFromImageResult(imageResult), err
@@ -206,7 +203,7 @@ func dispatchChatImage(r *http.Request, req ChatCompletionRequest, isStream bool
 	imageResult, err := routerGenerateImages(r.Context(), imageGenerationOptions{
 		Model: req.Model, Prompt: lastUserText(req.Messages), N: n,
 		Size:           routerStringDefault(cfg.Size, "1024x1024"),
-		ResponseFormat: routerStringDefault(cfg.ResponseFormat, "url"),
+		ResponseFormat: routerStringDefault(cfg.ResponseFormat, defaultImageResponseFormat()),
 		Stream:         isStream, ChatFormat: true,
 	})
 	return chatFromImageResult(imageResult), err

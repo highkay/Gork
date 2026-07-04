@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"reflect"
 	"strings"
@@ -401,6 +402,31 @@ func TestImagesGenerateLiteStreamChatFormatEmitsProgressThinking(t *testing.T) {
 	joined := strings.Join(result.StreamFrames, "")
 	if !strings.Contains(joined, "正在生成 图片50%") || !strings.Contains(joined, "![image](https://assets.grok.com/generated/lite.png)") {
 		t.Fatalf("frames=%s", joined)
+	}
+}
+
+func TestImagesStreamLiteGenerateRequestsImageOnly(t *testing.T) {
+	resetChatDepsForTest(t)
+	var payload map[string]any
+	streamPost = func(_ context.Context, request chatStreamRequest) (*chatStreamResponse, error) {
+		if request.Token != "tok-lite" {
+			t.Fatalf("token=%q", request.Token)
+		}
+		if err := json.Unmarshal(request.PayloadBytes, &payload); err != nil {
+			t.Fatalf("payload json err=%v", err)
+		}
+		return &chatStreamResponse{StatusCode: 200, Lines: []string{"data: [DONE]"}}, nil
+	}
+
+	if _, err := imageStreamLiteGenerate(context.Background(), "tok-lite", "draw a cat", model.ModeFast); err != nil {
+		t.Fatalf("imageStreamLiteGenerate err=%v", err)
+	}
+	message, _ := payload["message"].(string)
+	if !strings.HasPrefix(message, "Generate an image for this prompt. Do not answer with text.") || !strings.Contains(message, "draw a cat") {
+		t.Fatalf("message=%q", message)
+	}
+	if payload["modeId"] != "fast" || payload["imageGenerationCount"] != float64(2) {
+		t.Fatalf("payload=%#v", payload)
 	}
 }
 

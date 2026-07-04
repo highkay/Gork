@@ -41,12 +41,16 @@ func handleImageGenerations(w http.ResponseWriter, r *http.Request) {
 		writeRouterError(w, err)
 		return
 	}
+	responseFormat := defaultImageResponseFormat()
+	if _, ok := rawFields["response_format"]; ok {
+		responseFormat = req.ResponseFormat
+	}
 	result, err := routerGenerateImages(r.Context(), imageGenerationOptions{
 		Model:          req.Model,
 		Prompt:         req.Prompt,
 		N:              n,
 		Size:           routerStringDefault(req.Size, "1024x1024"),
-		ResponseFormat: routerStringDefault(req.ResponseFormat, "url"),
+		ResponseFormat: responseFormat,
 		Stream:         false,
 		ChatFormat:     false,
 	})
