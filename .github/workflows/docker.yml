@@ -35,9 +35,6 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
-      - name: Build Go binary
-        run: go build ./cmd/gork
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -74,7 +71,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
           pull: true
           sbom: true
           provenance: true
