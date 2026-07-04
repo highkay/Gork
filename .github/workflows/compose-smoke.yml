@@ -21,9 +21,6 @@ jobs:
       - name: Validate WARP compose
         run: docker compose -f docker-compose.warp.yml config
 
-      - name: Validate demo compose
-        run: docker compose -f docker-compose.demo.yml config
-
   container-healthcheck:
     runs-on: ubuntu-latest
     steps:

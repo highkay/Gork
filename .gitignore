@@ -81,3 +81,4 @@ docker-compose.demo.yml
 REVIEW.md
 AGENTS.md
 .codegraph/
+CONTEXT.md
