@@ -58,18 +58,6 @@ func (s *ConfigSnapshot) Load(ctx context.Context, defaultsPath string) error {
 		return nil
 	}
 
-	mt, err = configFileModTime(defaultsPath)
-	if err != nil {
-		return fmt.Errorf("Missing required defaults config: %s", defaultsPath)
-	}
-	version, err = backend.Version(ctx)
-	if err != nil {
-		return err
-	}
-	if s.loaded && mt.Equal(s.mtimeDefaults) && reflect.DeepEqual(version, s.version) {
-		return nil
-	}
-
 	defaults, err := LoadTOML(defaultsPath)
 	if err != nil {
 		return err
@@ -327,26 +315,4 @@ var GlobalConfig = NewConfigSnapshot(nil, ConfigSnapshotOptions{})
 
 func GetConfig(key string, defaultValue any) any {
 	return GlobalConfig.Get(key, defaultValue)
-}
-
-type noopConfigBackend struct{}
-
-func (noopConfigBackend) Load(context.Context) (map[string]any, error) {
-	return map[string]any{}, nil
-}
-
-func (noopConfigBackend) ApplyPatch(context.Context, map[string]any) error {
-	return nil
-}
-
-func (noopConfigBackend) Clear(context.Context) error {
-	return nil
-}
-
-func (noopConfigBackend) Version(context.Context) (any, error) {
-	return nil, nil
-}
-
-func (noopConfigBackend) Close(context.Context) error {
-	return nil
 }

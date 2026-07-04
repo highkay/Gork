@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	platform "github.com/dslzl/gork/app/platform"
 )
 
 var grokRenderRe = regexp.MustCompile(`(?s)<grok:render\s+card_id="([^"]+)"\s+card_type="([^"]+)"\s+type="([^"]+)"[^>]*>.*?</grok:render>`)
@@ -246,11 +244,4 @@ func RaiseForStreamError(data string) error {
 		return nil
 	}
 	return raiseForStreamErrorObject(obj)
-}
-
-func upstreamFromError(err error) *platform.UpstreamError {
-	if upstream, ok := err.(*platform.UpstreamError); ok {
-		return upstream
-	}
-	return nil
 }

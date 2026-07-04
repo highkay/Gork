@@ -9,10 +9,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
-	"time"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
@@ -27,8 +25,6 @@ import (
 const appMainInitialAdminKey = "gork"
 
 var (
-	appStartedAt = time.Now()
-
 	appMainEnsureConfig = func(ctx context.Context) error {
 		if err := config.GlobalConfig.EnsureLoaded(ctx, ""); err != nil {
 			return err
@@ -187,14 +183,6 @@ func newAppRouter(options AppOptions) http.Handler {
 			options.WebRouter.ServeHTTP(w, r)
 		}
 	})
-}
-
-func appRuntimeSummary(selectionStrategy string) map[string]any {
-	return map[string]any{
-		"selection_strategy": selectionStrategy,
-		"uptime_ms":          time.Since(appStartedAt).Milliseconds(),
-		"goroutines":         runtime.NumGoroutine(),
-	}
 }
 
 func serveAppPprof(w http.ResponseWriter, r *http.Request) {

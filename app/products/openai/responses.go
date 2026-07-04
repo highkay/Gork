@@ -2,11 +2,13 @@ package openai
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/dslzl/gork/app/control/model"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/products"
 )
 
 type responseOptions struct {
@@ -68,17 +70,19 @@ func Responses(ctx context.Context, options responseOptions) (chatCompletionResu
 		ReasoningID: MakeRespID("rs"),
 		MessageID:   MakeRespID("msg"),
 	}
-	maxRetries := chatSelectionMaxRetries()
 	retryCodes := configuredRetryCodes(chatRetryConfig())
-	excluded := []string{}
-	var lastErr error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		account, ok, err := directory.ReserveChatAccount(ctx, spec, excluded)
-		if err != nil {
-			return chatCompletionResult{}, err
-		}
+	dispatchDirectory := newChatDispatchDirectory(directory)
+	return products.RunAccountDispatch(ctx, products.AccountDispatchOptions[chatCompletionResult]{
+		Directory:         dispatchDirectory,
+		Spec:              spec,
+		Retry:             products.RetryPolicy{MaxAttempts: chatSelectionMaxRetries() + 1},
+		Retryable:         func(err error) bool { return shouldRetryUpstream(err, retryCodes) },
+		Feedback:          chatDispatchFeedback,
+		NoAccountsMessage: "No available accounts for this model tier",
+	}, func(ctx context.Context, lease products.AccountDispatchLease) (chatCompletionResult, error) {
+		account, ok := dispatchDirectory.account(lease)
 		if !ok {
-			return chatCompletionResult{}, platform.NewRateLimitError("No available accounts for this model tier")
+			return chatCompletionResult{}, fmt.Errorf("missing response dispatch account for %s", lease.Token)
 		}
 		result, err := runResponseAttempt(ctx, responseAttemptOptions{
 			Request:       options,
@@ -89,21 +93,13 @@ func Responses(ctx context.Context, options responseOptions) (chatCompletionResu
 			ToolNames:     toolNames,
 			ToolsDisabled: toolsDisabled,
 		})
-		finishChatAttempt(ctx, directory, account, err == nil, err)
 		if err == nil {
-			return result, nil
+			quotaSync(ctx, account.Token, int(account.ModeID))
+		} else {
+			failSync(ctx, account.Token, int(account.ModeID), err)
 		}
-		lastErr = err
-		if shouldRetryUpstream(err, retryCodes) && attempt < maxRetries {
-			excluded = append(excluded, account.Token)
-			continue
-		}
-		return chatCompletionResult{}, err
-	}
-	if lastErr != nil {
-		return chatCompletionResult{}, lastErr
-	}
-	return chatCompletionResult{}, platform.NewRateLimitError("No available accounts after retries")
+		return result, err
+	})
 }
 
 type responseIDs struct {

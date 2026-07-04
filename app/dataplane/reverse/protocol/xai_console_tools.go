@@ -77,23 +77,6 @@ func consoleToolPayloads(tools []map[string]any) []map[string]any {
 	return payloads
 }
 
-func asConsoleTools(value any) []map[string]any {
-	switch typed := value.(type) {
-	case []map[string]any:
-		return typed
-	case []any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			if mapped, ok := item.(map[string]any); ok {
-				out = append(out, mapped)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
 func mergeConsoleTools(defaults []map[string]any, userTools []map[string]any) []map[string]any {
 	merged := make([]map[string]any, 0, len(defaults)+len(userTools))
 	overrides := map[string]struct{}{}

@@ -79,9 +79,17 @@ func streamChatResult(w http.ResponseWriter, r *http.Request, req ChatCompletion
 	heartbeatID := MakeResponseID()
 	writeRouterStreamHeartbeat(w, req.Model, heartbeatID)
 
+	frames := make(chan string)
 	done := make(chan chatMediaStreamOutcome, 1)
 	go func() {
-		result, err := dispatchChatRequest(r, req)
+		result, err := dispatchChatRequestWithStreamFrame(r, req, func(frame string) error {
+			select {
+			case frames <- frame:
+				return nil
+			case <-r.Context().Done():
+				return r.Context().Err()
+			}
+		})
 		done <- chatMediaStreamOutcome{result: result, err: err}
 	}()
 
@@ -95,8 +103,12 @@ func streamChatResult(w http.ResponseWriter, r *http.Request, req ChatCompletion
 				writeRouterStreamError(w, outcome.err)
 				return
 			}
-			writeRouterStreamFrames(w, outcome.result.StreamFrames)
+			if len(outcome.result.StreamFrames) > 0 {
+				writeRouterStreamFrames(w, outcome.result.StreamFrames)
+			}
 			return
+		case frame := <-frames:
+			writeRouterStreamFrame(w, frame)
 		case <-ticker.C:
 			writeRouterStreamHeartbeat(w, req.Model, heartbeatID)
 		case <-r.Context().Done():
@@ -142,6 +154,10 @@ func truncateStreamErrorText(value string, limit int) string {
 }
 
 func dispatchChatRequest(r *http.Request, req ChatCompletionRequest) (chatCompletionResult, error) {
+	return dispatchChatRequestWithStreamFrame(r, req, nil)
+}
+
+func dispatchChatRequestWithStreamFrame(r *http.Request, req ChatCompletionRequest, streamFrame func(string) error) (chatCompletionResult, error) {
 	isStream := routerBoolConfig("features.stream", true)
 	if req.Stream != nil {
 		isStream = *req.Stream
@@ -157,7 +173,7 @@ func dispatchChatRequest(r *http.Request, req ChatCompletionRequest) (chatComple
 	if spec.IsVideo() {
 		return dispatchChatVideo(r, req, messages, isStream)
 	}
-	return dispatchChatText(r, req, messages, isStream)
+	return dispatchChatText(r, req, messages, isStream, streamFrame)
 }
 
 func dispatchChatImageEdit(r *http.Request, req ChatCompletionRequest, messages []map[string]any, isStream bool) (chatCompletionResult, error) {
@@ -210,7 +226,7 @@ func dispatchChatVideo(r *http.Request, req ChatCompletionRequest, messages []ma
 	})
 }
 
-func dispatchChatText(r *http.Request, req ChatCompletionRequest, messages []map[string]any, isStream bool) (chatCompletionResult, error) {
+func dispatchChatText(r *http.Request, req ChatCompletionRequest, messages []map[string]any, isStream bool, streamFrame func(string) error) (chatCompletionResult, error) {
 	emitThink := (*bool)(nil)
 	if req.ReasoningEffort != nil {
 		value := *req.ReasoningEffort != "none"
@@ -225,5 +241,6 @@ func dispatchChatText(r *http.Request, req ChatCompletionRequest, messages []map
 		ToolChoice:  req.ToolChoice,
 		Temperature: routerFloatDefault(req.Temperature, 0.8),
 		TopP:        routerFloatDefault(req.TopP, 0.95),
+		StreamFrame: streamFrame,
 	})
 }

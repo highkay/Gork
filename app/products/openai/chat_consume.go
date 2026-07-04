@@ -2,7 +2,6 @@ package openai
 
 import (
 	"context"
-	"strings"
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 )
@@ -19,109 +18,71 @@ type consumeChatLinesOptions struct {
 }
 
 func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatCompletionState, []string, error) {
-	adapter := protocol.NewStreamAdapter(protocol.StreamAdapterOptions{
-		ThinkingSummary:   options.EmitThink,
-		ShowSearchSources: true,
-	})
+	consumer := newChatLineConsumer(options)
 	frames := []string{}
-	ended := false
-	toolCallsEmitted := false
-	var sieve *ToolSieve
-	if options.IsStream && (len(options.ToolNames) > 0 || options.DisableTools) {
-		sieve = NewToolSieve(options.ToolNames)
-	}
-
 	for _, line := range lines {
-		eventType, data := protocol.ClassifyLine(line)
-		if eventType == "done" {
-			ended = true
-			break
-		}
-		if eventType != "data" || data == "" {
-			continue
-		}
-		events, err := adapter.Feed(data)
+		lineFrames, err := consumer.Consume(line)
 		if err != nil {
 			return chatCompletionState{}, nil, err
 		}
-		if !options.IsStream {
-			continue
+		frames = append(frames, lineFrames...)
+		if consumer.done {
+			break
 		}
-		for _, event := range events {
-			if toolCallsEmitted {
-				continue
-			}
-			switch event.Kind {
-			case "text":
-				if event.Content != "" {
-					content := event.Content
-					if sieve != nil {
-						safeText, calls := sieve.Feed(event.Content)
-						if safeText != "" {
-							frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
-								ResponseID: options.ResponseID,
-								Model:      options.Model,
-								Content:    safeText,
-							})))
-						}
-						if calls != nil {
-							if !options.DisableTools {
-								frames = appendToolCallFrames(frames, options.ResponseID, options.Model, calls)
-								toolCallsEmitted = true
-							}
-						}
-						continue
-					}
-					frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
-						ResponseID: options.ResponseID,
-						Model:      options.Model,
-						Content:    content,
-					})))
-				}
-			case "thinking":
-				if options.EmitThink && event.Content != "" {
-					frames = append(frames, formatChatDataFrame(MakeThinkingChunk(ThinkingChunkParams{
-						ResponseID: options.ResponseID,
-						Model:      options.Model,
-						Content:    event.Content,
-					})))
-				}
-			}
-		}
+	}
+	state, finalFrames, err := consumer.Finish()
+	if err != nil {
+		return chatCompletionState{}, nil, err
+	}
+	frames = append(frames, finalFrames...)
+	return state, frames, nil
+}
+
+type chatLineConsumer struct {
+	options          consumeChatLinesOptions
+	text             *textRunLineConsumer
+	toolCallsEmitted bool
+	done             bool
+}
+
+func newChatLineConsumer(options consumeChatLinesOptions) *chatLineConsumer {
+	return &chatLineConsumer{
+		options: options,
+		text: newTextRunLineConsumer(textRunOptions{
+			Context:           options.Context,
+			Token:             options.Token,
+			EmitThinking:      options.EmitThink,
+			ThinkingSummary:   options.EmitThink,
+			ShowSearchSources: true,
+			ToolNames:         options.ToolNames,
+			DisableTools:      options.DisableTools,
+			EnableToolSieve:   options.IsStream,
+		}),
+	}
+}
+
+func (c *chatLineConsumer) Consume(line string) ([]string, error) {
+	events, err := c.text.Consume(line)
+	if err != nil {
+		return nil, err
+	}
+	c.done = c.text.Done()
+	return c.framesForEvents(events), nil
+}
+
+func (c *chatLineConsumer) Finish() (chatCompletionState, []string, error) {
+	runState, events, err := c.text.Finish()
+	if err != nil {
+		return chatCompletionState{}, nil, err
 	}
 
-	if options.IsStream && !toolCallsEmitted && sieve != nil {
-		if calls := sieve.Flush(); calls != nil {
-			frames = appendToolCallFrames(frames, options.ResponseID, options.Model, calls)
-			toolCallsEmitted = true
-		}
-	}
+	frames := c.framesForEvents(events)
+	state := chatStateFromTextRun(runState)
 
-	state := chatCompletionState{
-		Text:          strings.Join(adapter.TextBuf, ""),
-		Thinking:      strings.Join(adapter.ThinkingBuf, ""),
-		References:    adapter.ReferencesSuffix(),
-		Annotations:   adapter.AnnotationsList(),
-		SearchSources: adapter.SearchSourcesList(),
-	}
-	if options.DisableTools {
-		state.Text = suppressToolSyntax(state.Text)
-	}
-	for _, image := range adapter.ImageURLs {
-		ctx := options.Context
-		if ctx == nil {
-			ctx = context.Background()
-		}
-		resolved, err := resolveImage(ctx, options.Token, image.URL, image.ImageID)
-		if err == nil && resolved != "" {
-			state.ImageTexts = append(state.ImageTexts, resolved)
-		}
-	}
-
-	if options.IsStream && !toolCallsEmitted {
+	if c.options.IsStream && !c.toolCallsEmitted {
 		final := MakeStreamChunk(StreamChunkParams{
-			ResponseID:  options.ResponseID,
-			Model:       options.Model,
+			ResponseID:  c.options.ResponseID,
+			Model:       c.options.Model,
 			Content:     "",
 			IsFinal:     true,
 			Annotations: toChatAnnotations(state.Annotations),
@@ -131,8 +92,42 @@ func consumeChatLines(lines []string, options consumeChatLinesOptions) (chatComp
 		}
 		frames = append(frames, formatChatDataFrame(final), "data: [DONE]\n\n")
 	}
-	_ = ended
 	return state, frames, nil
+}
+
+func (c *chatLineConsumer) framesForEvents(events []textRunEvent) []string {
+	if !c.options.IsStream {
+		return nil
+	}
+	frames := []string{}
+	for _, event := range events {
+		if c.toolCallsEmitted {
+			continue
+		}
+		switch event.Kind {
+		case "text":
+			if event.Content == "" {
+				continue
+			}
+			frames = append(frames, formatChatDataFrame(MakeStreamChunk(StreamChunkParams{
+				ResponseID: c.options.ResponseID,
+				Model:      c.options.Model,
+				Content:    event.Content,
+			})))
+		case "thinking":
+			if c.options.EmitThink && event.Content != "" {
+				frames = append(frames, formatChatDataFrame(MakeThinkingChunk(ThinkingChunkParams{
+					ResponseID: c.options.ResponseID,
+					Model:      c.options.Model,
+					Content:    event.Content,
+				})))
+			}
+		case "tool_calls":
+			frames = appendToolCallFrames(frames, c.options.ResponseID, c.options.Model, event.ToolCalls)
+			c.toolCallsEmitted = true
+		}
+	}
+	return frames
 }
 
 func appendToolCallFrames(frames []string, responseID string, modelName string, calls []protocol.ParsedToolCall) []string {
