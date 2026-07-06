@@ -525,10 +525,10 @@ func TestRunRefreshBatchAppliesBatchTimeout(t *testing.T) {
 	}
 }
 
-func TestRefreshCallAsyncInvalidCredentialsRecordsSSOValidationFailure(t *testing.T) {
-	oldNow := refreshNowMS
-	refreshNowMS = func() int64 { return 8000 }
-	t.Cleanup(func() { refreshNowMS = oldNow })
+func TestRefreshCallAsyncInvalidCredentialsRecordsInvalidCredentialFailure(t *testing.T) {
+	oldNow := invalidCredentialsNowMS
+	invalidCredentialsNowMS = func() int64 { return 8000 }
+	t.Cleanup(func() { invalidCredentialsNowMS = oldNow })
 	record := AccountRecord{Token: "tok-invalid", Pool: "basic", Status: AccountStatusActive, Quota: DefaultQuotaSet("basic").ToDict()}
 	repo := &fakeRefreshRepo{records: []AccountRecord{record}}
 	service := NewAccountRefreshService(repo, AccountRefreshOptions{
@@ -541,24 +541,24 @@ func TestRefreshCallAsyncInvalidCredentialsRecordsSSOValidationFailure(t *testin
 		t.Fatalf("RefreshCallAsync returned error: %v", err)
 	}
 	if len(repo.patches) != 1 {
-		t.Fatalf("sso validation patch count = %d, want 1", len(repo.patches))
+		t.Fatalf("invalid credentials patch count = %d, want 1", len(repo.patches))
 	}
 	patch := repo.patches[0]
 	if patch.Status != nil {
-		t.Fatalf("invalid credentials should not patch expired directly: %#v", patch.Status)
+		t.Fatalf("invalid credentials should not expire before threshold: %#v", patch.Status)
 	}
 	if patch.LastFailAt == nil || *patch.LastFailAt != 8000 {
-		t.Fatalf("sso validation last fail at = %#v", patch.LastFailAt)
+		t.Fatalf("invalid credentials last fail at = %#v", patch.LastFailAt)
 	}
-	if patch.LastFailReason == nil || *patch.LastFailReason != "sso_validation_refresh" {
-		t.Fatalf("sso validation reason = %#v", patch.LastFailReason)
+	if patch.LastFailReason == nil || *patch.LastFailReason != "invalid_credentials" {
+		t.Fatalf("invalid credentials reason = %#v", patch.LastFailReason)
 	}
-	if patch.StateReason == nil || *patch.StateReason != "sso_validation_refresh" {
-		t.Fatalf("sso validation state reason = %#v", patch.StateReason)
+	if patch.StateReason == nil || *patch.StateReason != "invalid_credentials" {
+		t.Fatalf("invalid credentials state reason = %#v", patch.StateReason)
 	}
-	validation := patch.ExtMerge["sso_validation"].(map[string]any)
-	if validation["failure_count"] != 1 || validation["last_fail_stage"] != "refresh" {
-		t.Fatalf("sso validation metadata = %#v", validation)
+	invalid := patch.ExtMerge["invalid_credentials"].(map[string]any)
+	if invalid["failure_count"] != 1 || invalid["last_fail_source"] != "refresh_call" {
+		t.Fatalf("invalid credentials metadata = %#v", invalid)
 	}
 }
 

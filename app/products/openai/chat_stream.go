@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
@@ -147,7 +148,28 @@ func acquireChatProxyLease(ctx context.Context) (*controlproxy.ProxyDirectory, *
 func chatProxyFeedbackForError(err error) controlproxy.ProxyFeedback {
 	var upstream *platform.UpstreamError
 	if errors.As(err, &upstream) && upstream != nil && upstream.Status > 0 {
+		if upstream.Status == http.StatusForbidden && isXAIAccountForbidden(upstream.Body) {
+			feedback := controlproxy.NewProxyFeedback(controlproxy.ProxyFeedbackForbidden)
+			feedback.StatusCode = &upstream.Status
+			return feedback
+		}
 		return controlproxy.BuildFeedback(upstream.Status)
 	}
 	return controlproxy.NewProxyFeedback(controlproxy.ProxyFeedbackTransportError)
+}
+
+func isXAIAccountForbidden(body string) bool {
+	text := strings.ToLower(body)
+	for _, marker := range []string{
+		`"code":"unauthorized:blocked-user"`,
+		`"code":"account:`,
+		"unauthorized:blocked-user",
+		"account:email-domain-rejected",
+		"user is blocked",
+	} {
+		if strings.Contains(text, marker) {
+			return true
+		}
+	}
+	return false
 }

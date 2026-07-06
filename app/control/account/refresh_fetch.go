@@ -80,7 +80,7 @@ func (s *AccountRefreshService) RefreshCallAsync(ctx context.Context, token stri
 	}
 	window, err := s.fetchModeQuota(ctx, token, record.Pool, modeID)
 	if err != nil {
-		_, handled, markErr := s.expireInvalidCredentials(ctx, record, err)
+		_, handled, markErr := s.expireInvalidCredentials(ctx, record, err, "refresh_call")
 		if markErr != nil || handled {
 			return markErr
 		}

@@ -17,6 +17,7 @@ import (
 
 	controlaccount "github.com/dslzl/gork/app/control/account"
 	"github.com/dslzl/gork/app/control/model"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	dataaccount "github.com/dslzl/gork/app/dataplane/account"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	"github.com/dslzl/gork/app/platform"
@@ -411,6 +412,20 @@ func TestChatRetryAndFeedbackKind(t *testing.T) {
 	isInvalidCredentials = func(error) bool { return true }
 	if got := feedbackKind(platform.NewUpstreamError("blocked", 403, "")); got != feedbackKindUnauthorized {
 		t.Fatalf("feedback invalid creds=%q", got)
+	}
+}
+
+func TestChatProxyFeedbackDoesNotInvalidateForAccountForbidden(t *testing.T) {
+	accountErr := platform.NewUpstreamError("blocked", http.StatusForbidden, `{"code":"unauthorized:blocked-user","error":"User is blocked"}`)
+	feedback := chatProxyFeedbackForError(accountErr)
+	if feedback.Kind != controlproxy.ProxyFeedbackForbidden || feedback.StatusCode == nil || *feedback.StatusCode != http.StatusForbidden {
+		t.Fatalf("account forbidden feedback=%#v", feedback)
+	}
+
+	challengeErr := platform.NewUpstreamError("challenge", http.StatusForbidden, "Just a moment...")
+	feedback = chatProxyFeedbackForError(challengeErr)
+	if feedback.Kind != controlproxy.ProxyFeedbackChallenge || feedback.StatusCode == nil || *feedback.StatusCode != http.StatusForbidden {
+		t.Fatalf("challenge feedback=%#v", feedback)
 	}
 }
 

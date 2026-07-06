@@ -17,6 +17,8 @@ services:
       warp_plus: {}
 
   byparr:
+    profiles:
+      - byparr
     build:
       context: .
       dockerfile: Dockerfile.byparr.local
@@ -34,6 +36,19 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 3
+    depends_on:
+      privoxy:
+        condition: service_started
+
+  flaresolverr:
+    image: ${FLARESOLVERR_IMAGE:-ghcr.io/flaresolverr/flaresolverr@sha256:139dfee1c6f89249c8d665d1333a42e8ec74ec0a86bc6bb1c8461e10d3a66a47}
+    container_name: gork-flaresolverr
+    restart: unless-stopped
+    mem_limit: ${FLARESOLVERR_MEM_LIMIT:-1536m}
+    cpus: ${FLARESOLVERR_CPUS:-1.5}
+    environment:
+      TZ: Asia/Shanghai
+      LOG_LEVEL: ${FLARESOLVERR_LOG_LEVEL:-info}
     depends_on:
       privoxy:
         condition: service_started
@@ -69,6 +84,13 @@ services:
       RUNTIME_TASK_TTL_S: ${RUNTIME_TASK_TTL_S:-300}
       RUNTIME_REDIS_LOCK_TTL_MS: ${RUNTIME_REDIS_LOCK_TTL_MS:-300000}
       GROK_APP_APP_KEY: ${GROK_APP_APP_KEY:-gork}
+      GROK_PROXY_CLEARANCE_MODE: ${GROK_PROXY_CLEARANCE_MODE:-flaresolverr}
+      GROK_PROXY_CLEARANCE_FLARESOLVERR_URL: ${GROK_PROXY_CLEARANCE_FLARESOLVERR_URL:-http://flaresolverr:8191}
+      GROK_PROXY_CLEARANCE_TIMEOUT_SEC: ${GROK_PROXY_CLEARANCE_TIMEOUT_SEC:-120}
+      GROK_RETRY_MAX_RETRIES: ${GROK_RETRY_MAX_RETRIES:-1}
+      GROK_RETRY_ON_CODES: ${GROK_RETRY_ON_CODES:-401,503}
+      GROK_RETRY_RETRY_STATUS_CODES: ${GROK_RETRY_RETRY_STATUS_CODES:-401,503}
+      GROK_ACCOUNT_INVALID_CREDENTIALS_MAX_FAILURES: ${GROK_ACCOUNT_INVALID_CREDENTIALS_MAX_FAILURES:-1}
     volumes:
       - ./config.defaults.toml:/app/config.defaults.toml:ro
       - ./data:/app/data
@@ -85,7 +107,7 @@ services:
     depends_on:
       privoxy:
         condition: service_started
-      byparr:
+      flaresolverr:
         condition: service_started
 
 networks:

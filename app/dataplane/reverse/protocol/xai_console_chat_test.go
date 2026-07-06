@@ -203,6 +203,16 @@ func TestStreamConsoleChatMatchesPythonFeedbackAndLinePairing(t *testing.T) {
 	}
 
 	proxy = &fakeConsoleProxy{}
+	poster = &fakeConsolePoster{response: ConsoleStreamResponse{StatusCode: 403, Body: `{"code":"unauthorized:blocked-user","error":"User is blocked"}`}}
+	_, err = StreamConsoleChat(context.Background(), "tok", map[string]any{"model": "x"}, ConsoleStreamOptions{Proxy: proxy, Poster: poster})
+	if !errors.As(err, &upstream) || upstream.Status != 403 {
+		t.Fatalf("account 403 error mismatch: %#v", err)
+	}
+	if len(proxy.feedbacks) != 1 || proxy.feedbacks[0].Kind != controlproxy.ProxyFeedbackForbidden || *proxy.feedbacks[0].StatusCode != 403 {
+		t.Fatalf("account 403 feedback mismatch: %#v", proxy.feedbacks)
+	}
+
+	proxy = &fakeConsoleProxy{}
 	poster = &fakeConsolePoster{err: errors.New("dial failed")}
 	_, err = StreamConsoleChat(context.Background(), "tok", map[string]any{"model": "x"}, ConsoleStreamOptions{Proxy: proxy, Poster: poster})
 	if !errors.As(err, &upstream) || upstream.Status != 502 || upstream.Error() != "Console transport failed: dial failed" {
@@ -288,6 +298,9 @@ func TestConsoleLineAdapterAndFeedbackMatchPythonFixtures(t *testing.T) {
 
 	if fb := ConsoleStatusFeedback(403); fb.Kind != controlproxy.ProxyFeedbackChallenge || *fb.StatusCode != 403 {
 		t.Fatalf("403 feedback mismatch: %#v", fb)
+	}
+	if fb := ConsoleStatusFeedback(403, `{"code":"unauthorized:blocked-user","error":"User is blocked"}`); fb.Kind != controlproxy.ProxyFeedbackForbidden || *fb.StatusCode != 403 {
+		t.Fatalf("account 403 feedback mismatch: %#v", fb)
 	}
 	if fb := ConsoleStatusFeedback(429); fb.Kind != controlproxy.ProxyFeedbackRateLimited || *fb.StatusCode != 429 {
 		t.Fatalf("429 feedback mismatch: %#v", fb)

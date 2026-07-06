@@ -63,7 +63,7 @@ func StreamConsoleChat(ctx context.Context, token string, payload map[string]any
 	if err != nil {
 		var upstream *platform.UpstreamError
 		if errors.As(err, &upstream) {
-			_ = proxy.Feedback(ctx, lease, ConsoleStatusFeedback(upstream.Status))
+			_ = proxy.Feedback(ctx, lease, ConsoleStatusFeedback(upstream.Status, upstream.Body))
 			return nil, upstream
 		}
 		_ = proxy.Feedback(ctx, lease, ConsoleTransportErrorFeedback())
@@ -74,7 +74,7 @@ func StreamConsoleChat(ctx context.Context, token string, payload map[string]any
 		if len(body) > 400 {
 			body = body[:400]
 		}
-		_ = proxy.Feedback(ctx, lease, ConsoleStatusFeedback(response.StatusCode))
+		_ = proxy.Feedback(ctx, lease, ConsoleStatusFeedback(response.StatusCode, body))
 		return nil, platform.NewUpstreamError(fmt.Sprintf("Console API returned %d", response.StatusCode), response.StatusCode, body)
 	}
 	_ = proxy.Feedback(ctx, lease, ConsoleSuccessFeedback())

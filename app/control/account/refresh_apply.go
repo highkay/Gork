@@ -14,7 +14,7 @@ func (s *AccountRefreshService) refreshOne(ctx context.Context, record AccountRe
 	}
 	windows, err := s.fetchAllQuotas(ctx, record.Token, record.Pool, bootstrap)
 	if err != nil {
-		result, handled, markErr := s.expireInvalidCredentials(ctx, record, err)
+		result, handled, markErr := s.expireInvalidCredentials(ctx, record, err, "refresh")
 		if markErr != nil || handled {
 			return result, markErr
 		}
@@ -140,7 +140,7 @@ func (s *AccountRefreshService) recordSpecificFailure(ctx context.Context, token
 		return false
 	}
 	record := records[0]
-	_, handled, markErr := s.expireInvalidCredentials(ctx, record, err)
+	_, handled, markErr := s.expireInvalidCredentials(ctx, record, err, "runtime")
 	if markErr == nil && handled {
 		return true
 	}
@@ -218,15 +218,19 @@ func (s *AccountRefreshService) singleModePatch(
 	return &patch, nil
 }
 
-func (s *AccountRefreshService) expireInvalidCredentials(ctx context.Context, record AccountRecord, err error) (RefreshResult, bool, error) {
+func (s *AccountRefreshService) expireInvalidCredentials(ctx context.Context, record AccountRecord, err error, source string) (RefreshResult, bool, error) {
 	if !protocol.IsInvalidCredentialsError(err) {
 		return RefreshResult{}, false, nil
 	}
-	result, validationErr := s.validateSSOAccount(ctx, record)
-	if validationErr != nil {
-		return RefreshResult{}, false, validationErr
+	nextFailures := invalidCredentialsFailureCount([]AccountRecord{record}) + 1
+	marked, markErr := MarkAccountInvalidCredentials(ctx, s.repo, record.Token, err, source)
+	if markErr != nil || !marked {
+		return RefreshResult{}, marked, markErr
 	}
-	return result, true, nil
+	if nextFailures >= invalidCredentialsFailureThreshold() {
+		return RefreshResult{Checked: 1, Expired: 1}, true, nil
+	}
+	return RefreshResult{Checked: 1, Failed: 1}, true, nil
 }
 
 func (s *AccountRefreshService) ResetExpiredConsoleWindows(ctx context.Context) (int, error) {

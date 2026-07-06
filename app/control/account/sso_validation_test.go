@@ -151,33 +151,46 @@ func TestValidateSSOAccountRecordsListModelsFailureAfterRefreshSuccess(t *testin
 	}
 }
 
-func TestRecordFailureAsyncInvalidCredentialsUsesSSOValidationThreshold(t *testing.T) {
+func TestRecordFailureAsyncInvalidCredentialsUsesInvalidCredentialThreshold(t *testing.T) {
+	oldNow := invalidCredentialsNowMS
+	invalidCredentialsNowMS = func() int64 { return 9000 }
+	t.Cleanup(func() { invalidCredentialsNowMS = oldNow })
+	oldMaxFailures := invalidCredentialsMaxFailures
+	invalidCredentialsMaxFailures = func() int { return 1 }
+	t.Cleanup(func() { invalidCredentialsMaxFailures = oldMaxFailures })
 	record := AccountRecord{
 		Token:  "tok-chat",
 		Pool:   "basic",
 		Status: AccountStatusActive,
 		Quota:  DefaultQuotaSet("basic").ToDict(),
-		Ext:    map[string]any{"sso_validation": map[string]any{"failure_count": 2}},
 	}
 	repo := &fakeRefreshRepo{records: []AccountRecord{record}}
-	service := NewAccountRefreshService(repo, AccountRefreshOptions{
-		Fetcher:                  &fakeUsageFetcher{},
-		SSOModelVerifier:         &fakeSSOModelVerifier{err: errors.New("list models failed")},
-		SSOValidationMaxFailures: 3,
-	})
+	service := NewAccountRefreshService(repo, AccountRefreshOptions{})
 
 	err := service.RecordFailureAsync(context.Background(), "tok-chat", 1, platform.NewUpstreamError("bad", 403, "token expired"))
 
 	if err != nil {
 		t.Fatalf("RecordFailureAsync returned error: %v", err)
 	}
-	if len(repo.deletedTokens) != 1 || repo.deletedTokens[0] != "tok-chat" {
-		t.Fatalf("deleted tokens = %#v", repo.deletedTokens)
+	if len(repo.deletedTokens) != 0 {
+		t.Fatalf("deleted tokens = %#v, want none", repo.deletedTokens)
 	}
-	for _, patch := range repo.patches {
-		if patch.Status != nil && *patch.Status == AccountStatusExpired {
-			t.Fatalf("RecordFailureAsync should not patch expired status directly: %#v", patch)
-		}
+	if len(repo.patches) != 1 {
+		t.Fatalf("patches = %#v, want one", repo.patches)
+	}
+	patch := repo.patches[0]
+	if patch.Status == nil || *patch.Status != AccountStatusExpired {
+		t.Fatalf("status = %#v, want expired", patch.Status)
+	}
+	if patch.LastFailAt == nil || *patch.LastFailAt != 9000 {
+		t.Fatalf("last fail at = %#v, want 9000", patch.LastFailAt)
+	}
+	if patch.LastFailReason == nil || *patch.LastFailReason != "invalid_credentials" {
+		t.Fatalf("last fail reason = %#v, want invalid_credentials", patch.LastFailReason)
+	}
+	invalid := patch.ExtMerge["invalid_credentials"].(map[string]any)
+	if invalid["failure_count"] != 1 || invalid["last_fail_source"] != "runtime" {
+		t.Fatalf("invalid credentials metadata = %#v", invalid)
 	}
 }
 
