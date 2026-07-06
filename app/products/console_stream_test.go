@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/platform/redact"
@@ -21,8 +22,15 @@ func TestStreamConsoleChatConfiguresDefaultPoster(t *testing.T) {
 		},
 	}}
 	oldFactory := consoleStreamPosterFactory
+	oldProxyFactory := consoleStreamProxyFactory
 	consoleStreamPosterFactory = func() protocol.ConsoleStreamPoster { return poster }
-	t.Cleanup(func() { consoleStreamPosterFactory = oldFactory })
+	consoleStreamProxyFactory = func(context.Context) (protocol.ConsoleProxy, error) {
+		return fakeConsoleProxy{}, nil
+	}
+	t.Cleanup(func() {
+		consoleStreamPosterFactory = oldFactory
+		consoleStreamProxyFactory = oldProxyFactory
+	})
 
 	events, err := StreamConsoleChat(context.Background(), "tok", map[string]any{"model": "x"}, 42)
 	if err != nil {
@@ -77,4 +85,14 @@ type fakeConsoleStreamPoster struct {
 func (f *fakeConsoleStreamPoster) PostConsoleStream(_ context.Context, request protocol.ConsoleStreamRequest) (protocol.ConsoleStreamResponse, error) {
 	f.request = request
 	return f.response, f.err
+}
+
+type fakeConsoleProxy struct{}
+
+func (fakeConsoleProxy) Acquire(context.Context) (controlproxy.ProxyLease, error) {
+	return controlproxy.NewProxyLease("console-test"), nil
+}
+
+func (fakeConsoleProxy) Feedback(context.Context, controlproxy.ProxyLease, controlproxy.ProxyFeedback) error {
+	return nil
 }

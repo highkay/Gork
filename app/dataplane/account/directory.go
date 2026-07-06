@@ -213,6 +213,29 @@ func (d *AccountDirectory) SelectionStatus(nowS int) SelectionStatus {
 	return status
 }
 
+func (d *AccountDirectory) AvailablePools(nowS int) map[string]struct{} {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	out := map[string]struct{}{}
+	if d.table == nil {
+		return out
+	}
+	options := SelectOptions{
+		NowS:        nowS,
+		MaxInflight: selectionMaxInflight(),
+	}
+	for poolID, pool := range shared.PoolIDToString {
+		for _, modeID := range allModeIDs {
+			counts := countSelectionCandidates(d.table, []int{poolID}, modeID, options, false)
+			if counts.available > 0 {
+				out[pool] = struct{}{}
+				break
+			}
+		}
+	}
+	return out
+}
+
 func (d *AccountDirectory) Release(lease AccountLease) {
 	d.mu.Lock()
 	defer d.mu.Unlock()

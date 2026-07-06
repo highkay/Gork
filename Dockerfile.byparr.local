@@ -1,0 +1,6 @@
+FROM ghcr.io/thephaseless/byparr:latest
+
+USER root
+COPY byparr_patch/endpoints.py /app/src/endpoints.py
+RUN chown root:root /app/src/endpoints.py
+USER ubuntu

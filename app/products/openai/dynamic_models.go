@@ -15,7 +15,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/dslzl/gork/app/control/model"
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	proxyadapters "github.com/dslzl/gork/app/dataplane/proxy/adapters"
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 )
@@ -131,9 +133,6 @@ func newDynamicConsoleModelSource(options dynamicConsoleModelSourceOptions) *dyn
 		now = time.Now
 	}
 	client := options.Client
-	if client == nil {
-		client = &http.Client{Timeout: 20 * time.Second}
-	}
 	directory := options.Directory
 	if directory == nil {
 		directory = chatDirectoryProvider
@@ -268,19 +267,11 @@ func (s *dynamicConsoleModelSource) fetch(ctx context.Context) ([]model.ModelSpe
 	}
 	defer func() { _ = directory.ReleaseChatAccount(ctx, account) }()
 
-	raw, headers, err := s.postListModels(ctx, account.Token)
-	if err != nil {
-		return nil, err
-	}
-	return parseDynamicConsoleModelSpecs(raw, headers)
+	return s.listModels(ctx, account.Token)
 }
 
 func (s *dynamicConsoleModelSource) ProbeListModels(ctx context.Context, token string) error {
-	raw, headers, err := s.postListModels(ctx, token)
-	if err != nil {
-		return err
-	}
-	_, err = parseDynamicConsoleModelSpecs(raw, headers)
+	_, err := s.listModels(ctx, token)
 	return err
 }
 
@@ -293,10 +284,64 @@ func parseDynamicConsoleModelSpecs(raw []byte, headers map[string]string) ([]mod
 	if err != nil {
 		return nil, err
 	}
+	return parseDynamicConsoleTransportSpecs(parsed)
+}
+
+func parseDynamicConsoleTransportSpecs(parsed transport.GRPCWebTransportResponse) ([]model.ModelSpec, error) {
 	if status := strings.TrimSpace(parsed.Trailers["grpc-status"]); status != "" && status != "0" {
 		return nil, fmt.Errorf("list models grpc status=%s message=%q", status, parsed.Trailers["grpc-message"])
 	}
 	return specsFromDynamicConsoleMessages(parsed.Messages), nil
+}
+
+func (s *dynamicConsoleModelSource) listModels(ctx context.Context, token string) ([]model.ModelSpec, error) {
+	if s.client != nil {
+		raw, headers, err := s.postListModels(ctx, token)
+		if err != nil {
+			return nil, err
+		}
+		return parseDynamicConsoleModelSpecs(raw, headers)
+	}
+	parsed, err := s.postListModelsTransport(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	return parseDynamicConsoleTransportSpecs(parsed)
+}
+
+func (s *dynamicConsoleModelSource) postListModelsTransport(ctx context.Context, token string) (transport.GRPCWebTransportResponse, error) {
+	proxyRuntime, err := defaultProxyTransportRuntime(ctx)
+	if err != nil {
+		return transport.GRPCWebTransportResponse{}, err
+	}
+	lease, err := proxyRuntime.Acquire(ctx, controlproxy.AcquireOptions{
+		Scope:           controlproxy.ProxyScopeApp,
+		Kind:            controlproxy.RequestKindHTTP,
+		ClearanceOrigin: reverseruntime.GlobalEndpointTable().Resolve("console_base"),
+	})
+	if err != nil {
+		return transport.GRPCWebTransportResponse{}, err
+	}
+	feedback := controlproxy.NewProxyFeedback(controlproxy.ProxyFeedbackSuccess)
+	defer func() { _ = proxyRuntime.Feedback(ctx, lease, feedback) }()
+
+	parsed, err := transport.PostGRPCWeb(ctx, protocol.GRPCWebRequest{
+		URL:      s.endpointURL(),
+		Token:    token,
+		Payload:  transport.EncodeGRPCWebPayload(nil),
+		Lease:    &lease,
+		TimeoutS: 20,
+		Origin:   reverseruntime.GlobalEndpointTable().Resolve("console_base"),
+		Referer:  reverseruntime.GlobalEndpointTable().Resolve("console_referer"),
+	})
+	if err != nil {
+		feedback = chatProxyFeedbackForError(err)
+		return transport.GRPCWebTransportResponse{}, err
+	}
+	if status := strings.TrimSpace(parsed.Trailers["grpc-status"]); status != "" && status != "0" {
+		feedback = controlproxy.NewProxyFeedback(controlproxy.ProxyFeedbackUpstream5xx)
+	}
+	return parsed, nil
 }
 
 func (s *dynamicConsoleModelSource) postListModels(ctx context.Context, token string) ([]byte, map[string]string, error) {

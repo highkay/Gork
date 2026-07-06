@@ -174,6 +174,70 @@ func TestAccountDirectorySelectionStatusCountsAvailability(t *testing.T) {
 	}
 }
 
+func TestAccountDirectoryAvailablePoolsRequiresSelectableQuota(t *testing.T) {
+	mustSetDirectoryStrategy(t, "quota")
+	oldConfig := directoryConfigSource
+	directoryConfigSource = fakeDirectoryConfig{"account.selection.max_inflight": 2}
+	t.Cleanup(func() { directoryConfigSource = oldConfig })
+
+	table := MakeEmptyTable()
+	table.AppendSlot(AccountSlot{
+		Token:      "basic-fast",
+		PoolID:     0,
+		StatusID:   StatusActive,
+		QuotaFast:  3,
+		TotalFast:  10,
+		WindowFast: 60,
+		Health:     1,
+	})
+	table.AppendSlot(AccountSlot{
+		Token:        "super-empty",
+		PoolID:       1,
+		StatusID:     StatusActive,
+		QuotaAuto:    0,
+		TotalAuto:    10,
+		WindowAuto:   60,
+		QuotaExpert:  0,
+		TotalExpert:  10,
+		WindowExpert: 60,
+		Health:       1,
+	})
+	table.AppendSlot(AccountSlot{
+		Token:       "heavy-disabled",
+		PoolID:      2,
+		StatusID:    StatusDisabled,
+		QuotaHeavy:  5,
+		TotalHeavy:  10,
+		WindowHeavy: 60,
+		Health:      1,
+	})
+
+	pools := accountDirectoryWithTable(table).AvailablePools(10)
+	if _, ok := pools["basic"]; !ok {
+		t.Fatalf("basic pool missing: %#v", pools)
+	}
+	if _, ok := pools["super"]; ok {
+		t.Fatalf("super pool with zero quota should not be available: %#v", pools)
+	}
+	if _, ok := pools["heavy"]; ok {
+		t.Fatalf("disabled heavy pool should not be available: %#v", pools)
+	}
+
+	table.AppendSlot(AccountSlot{
+		Token:      "super-auto",
+		PoolID:     1,
+		StatusID:   StatusActive,
+		QuotaAuto:  1,
+		TotalAuto:  10,
+		WindowAuto: 60,
+		Health:     1,
+	})
+	pools = accountDirectoryWithTable(table).AvailablePools(10)
+	if _, ok := pools["super"]; !ok {
+		t.Fatalf("super pool with selectable quota missing: %#v", pools)
+	}
+}
+
 func TestAccountDirectoryReserveAnyMatchesPythonNoModeQuota(t *testing.T) {
 	mustSetDirectoryStrategy(t, "quota")
 	table := MakeEmptyTable()

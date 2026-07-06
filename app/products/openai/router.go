@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"net/http"
 
+	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/auth"
 	"github.com/dslzl/gork/app/platform/config"
+	appruntime "github.com/dslzl/gork/app/platform/runtime"
 )
 
 var (
-	routerAvailablePools = func(*http.Request) map[string]struct{} {
-		return map[string]struct{}{}
-	}
+	routerAvailablePools = defaultRouterAvailablePools
 	routerCompletions    = Completions
 	routerResponses      = Responses
 	routerGenerateImages = GenerateImages
@@ -21,6 +21,14 @@ var (
 		return auth.AuthSettings{APIKey: config.GetConfig("app.api_key", "")}
 	}
 )
+
+func defaultRouterAvailablePools(r *http.Request) map[string]struct{} {
+	directory, err := accountdataplane.GetAccountDirectory(r.Context(), nil)
+	if err != nil || directory == nil {
+		return map[string]struct{}{}
+	}
+	return directory.AvailablePools(int(appruntime.NowS()))
+}
 
 type openAIRoute struct {
 	Method    string

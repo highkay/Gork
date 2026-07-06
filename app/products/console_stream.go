@@ -7,6 +7,7 @@ import (
 	"time"
 
 	controlproxy "github.com/dslzl/gork/app/control/proxy"
+	proxydataplane "github.com/dslzl/gork/app/dataplane/proxy"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
@@ -19,11 +20,46 @@ var consoleStreamPosterFactory = func() protocol.ConsoleStreamPoster {
 	return consoleHTTPPoster{}
 }
 
+var consoleStreamProxyFactory = func(ctx context.Context) (protocol.ConsoleProxy, error) {
+	directory, err := proxydataplane.GetTransportRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return consoleProxyDirectory{directory: directory}, nil
+}
+
 func StreamConsoleChat(ctx context.Context, token string, payload map[string]any, timeoutS float64) ([]protocol.ConsoleStreamEvent, error) {
+	proxy, err := consoleStreamProxyFactory(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return protocol.StreamConsoleChat(ctx, token, payload, protocol.ConsoleStreamOptions{
+		Proxy:    proxy,
 		Poster:   consoleStreamPosterFactory(),
 		TimeoutS: timeoutS,
 	})
+}
+
+type consoleProxyDirectory struct {
+	directory *controlproxy.ProxyDirectory
+}
+
+func (p consoleProxyDirectory) Acquire(ctx context.Context) (controlproxy.ProxyLease, error) {
+	if p.directory == nil {
+		return controlproxy.NewProxyLease(""), nil
+	}
+	return p.directory.Acquire(ctx, controlproxy.AcquireOptions{
+		Scope:           controlproxy.ProxyScopeApp,
+		Kind:            controlproxy.RequestKindHTTP,
+		ClearanceOrigin: reverseruntime.GlobalEndpointTable().Resolve("console_base"),
+	})
+}
+
+func (p consoleProxyDirectory) Feedback(ctx context.Context, lease controlproxy.ProxyLease, feedback controlproxy.ProxyFeedback) error {
+	if p.directory == nil {
+		return nil
+	}
+	return p.directory.Feedback(ctx, lease, feedback)
 }
 
 type consoleHTTPPoster struct{}

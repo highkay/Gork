@@ -1,0 +1,96 @@
+services:
+  privoxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.privoxy.warpplus
+      args:
+        WARPPLUS_SOCKS: ${WARPPLUS_SOCKS:-warpplus-us:1080}
+    image: ${PRIVOXY_WARPPLUS_IMAGE:-gork-privoxy-warpplus:local}
+    container_name: gork-privoxy
+    restart: unless-stopped
+    mem_limit: ${PRIVOXY_MEM_LIMIT:-128m}
+    cpus: ${PRIVOXY_CPUS:-0.25}
+    ports:
+      - "127.0.0.1:${PRIVOXY_HOST_PORT:-40080}:8118"
+    networks:
+      default: {}
+      warp_plus: {}
+
+  byparr:
+    build:
+      context: .
+      dockerfile: Dockerfile.byparr.local
+    image: ${BYPARR_IMAGE:-gork-byparr:local}
+    container_name: gork-byparr
+    restart: unless-stopped
+    mem_limit: ${BYPARR_MEM_LIMIT:-1g}
+    cpus: ${BYPARR_CPUS:-1.0}
+    environment:
+      TZ: Asia/Shanghai
+      LOG_LEVEL: info
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:8191/"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    depends_on:
+      privoxy:
+        condition: service_started
+
+  gork:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    image: ${GORK_IMAGE:-gork:local}
+    container_name: gork
+    restart: unless-stopped
+    mem_limit: ${GORK_MEM_LIMIT:-768m}
+    cpus: ${GORK_CPUS:-1.0}
+    ports:
+      - "${HOST_BIND:-0.0.0.0}:${HOST_PORT:-8008}:${PORT:-${SERVER_PORT:-8000}}"
+    environment:
+      TZ: Asia/Shanghai
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      HOST: ${HOST:-${SERVER_HOST:-0.0.0.0}}
+      PORT: ${PORT:-${SERVER_PORT:-8000}}
+      SERVER_HOST: ${SERVER_HOST:-0.0.0.0}
+      SERVER_PORT: ${SERVER_PORT:-8000}
+      ALLOW_UNAUTHENTICATED_API: ${ALLOW_UNAUTHENTICATED_API:-false}
+      DATA_DIR: ${DATA_DIR:-/app/data}
+      LOG_DIR: ${LOG_DIR:-/app/logs}
+      TMPDIR: ${TMPDIR:-/app/data/tmp}
+      ACCOUNT_STORAGE: ${ACCOUNT_STORAGE:-local}
+      ACCOUNT_LOCAL_PATH: ${ACCOUNT_LOCAL_PATH:-data/accounts.db}
+      ACCOUNT_REDIS_URL: ${ACCOUNT_REDIS_URL:-}
+      ACCOUNT_MYSQL_URL: ${ACCOUNT_MYSQL_URL:-}
+      ACCOUNT_POSTGRESQL_URL: ${ACCOUNT_POSTGRESQL_URL:-}
+      RUNTIME_REDIS_URL: ${RUNTIME_REDIS_URL:-}
+      RUNTIME_TASK_TTL_S: ${RUNTIME_TASK_TTL_S:-300}
+      RUNTIME_REDIS_LOCK_TTL_MS: ${RUNTIME_REDIS_LOCK_TTL_MS:-300000}
+      GROK_APP_APP_KEY: ${GROK_APP_APP_KEY:-gork}
+    volumes:
+      - ./config.defaults.toml:/app/config.defaults.toml:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "/app/gork", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    depends_on:
+      privoxy:
+        condition: service_started
+      byparr:
+        condition: service_started
+
+networks:
+  default:
+    name: gork_default
+  warp_plus:
+    external: true
+    name: warp-plus_default

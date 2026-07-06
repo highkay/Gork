@@ -3,10 +3,12 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
+	controlproxy "github.com/dslzl/gork/app/control/proxy"
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
@@ -83,13 +85,26 @@ func postChatStream(ctx context.Context, options chatStreamOptions, handleLine f
 }
 
 func defaultStreamPost(ctx context.Context, request chatStreamRequest) (*chatStreamResponse, error) {
+	proxyRuntime, proxyLease, err := acquireChatProxyLease(ctx)
+	if err != nil {
+		return nil, err
+	}
+	proxyFeedback := controlproxy.NewProxyFeedback(controlproxy.ProxyFeedbackSuccess)
+	defer func() {
+		if proxyRuntime != nil && proxyLease != nil {
+			_ = proxyRuntime.Feedback(ctx, *proxyLease, proxyFeedback)
+		}
+	}()
+
 	timeout := time.Duration(request.TimeoutSeconds * float64(time.Second))
 	stream, err := transport.PostStream(ctx, chatStreamEndpoint(), request.Token, request.PayloadBytes, transport.HTTPOptions{
 		Timeout:      timeout,
 		ContentType:  "application/json",
 		ExtraHeaders: request.Headers,
+		Lease:        proxyLease,
 	})
 	if err != nil {
+		proxyFeedback = chatProxyFeedbackForError(err)
 		return nil, err
 	}
 	defer stream.Close()
@@ -98,6 +113,7 @@ func defaultStreamPost(ctx context.Context, request chatStreamRequest) (*chatStr
 	for {
 		line, ok, err := stream.Next()
 		if err != nil {
+			proxyFeedback = controlproxy.NewProxyFeedback(controlproxy.ProxyFeedbackTransportError)
 			return nil, err
 		}
 		if !ok {
@@ -111,4 +127,27 @@ func defaultStreamPost(ctx context.Context, request chatStreamRequest) (*chatStr
 		}
 		lines = append(lines, line)
 	}
+}
+
+func acquireChatProxyLease(ctx context.Context) (*controlproxy.ProxyDirectory, *controlproxy.ProxyLease, error) {
+	proxyRuntime, err := defaultProxyTransportRuntime(ctx)
+	if err != nil || proxyRuntime == nil {
+		return proxyRuntime, nil, err
+	}
+	lease, err := proxyRuntime.Acquire(ctx, controlproxy.AcquireOptions{
+		Scope: controlproxy.ProxyScopeApp,
+		Kind:  controlproxy.RequestKindHTTP,
+	})
+	if err != nil {
+		return proxyRuntime, nil, err
+	}
+	return proxyRuntime, &lease, nil
+}
+
+func chatProxyFeedbackForError(err error) controlproxy.ProxyFeedback {
+	var upstream *platform.UpstreamError
+	if errors.As(err, &upstream) && upstream != nil && upstream.Status > 0 {
+		return controlproxy.BuildFeedback(upstream.Status)
+	}
+	return controlproxy.NewProxyFeedback(controlproxy.ProxyFeedbackTransportError)
 }
