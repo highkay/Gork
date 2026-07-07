@@ -50,6 +50,9 @@ func ConsoleResponses(ctx context.Context, options consoleResponseOptions) (chat
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := waitConsoleModelRateLimit(ctx, options.Model); err != nil {
+			return chatCompletionResult{}, err
+		}
 		account, ok, err := directory.ReserveChatAccount(ctx, spec, excluded)
 		if err != nil {
 			return chatCompletionResult{}, err
@@ -64,6 +67,7 @@ func ConsoleResponses(ctx context.Context, options consoleResponseOptions) (chat
 			return result, nil
 		}
 		lastErr = err
+		cooldownConsoleModelRateLimit(ctx, options.Model, err)
 		if shouldRetryUpstream(err, retryCodes) && attempt < maxRetries {
 			excluded = append(excluded, account.Token)
 			continue
@@ -79,7 +83,7 @@ func ConsoleResponses(ctx context.Context, options consoleResponseOptions) (chat
 func runConsoleResponseAttempt(ctx context.Context, options consoleResponseOptions, account chatAccount, responseID, messageID string, isStream bool) (chatCompletionResult, error) {
 	upstreamStream := true
 	functionToolNames := []string{}
-	if !protocol.ToolChoiceDisablesTools(options.ToolChoice) {
+	if !protocol.ToolChoiceDisablesTools(options.ToolChoice) && protocol.ConsoleClientFunctionToolsEnabled(options.Model) {
 		functionToolNames = protocol.ClientFunctionToolNames(options.Tools)
 	}
 	payload := protocol.BuildConsolePayload(protocol.ConsolePayloadOptions{

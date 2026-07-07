@@ -16,9 +16,25 @@ var ConsoleModels = map[string]string{
 	"grok-build-console":                   "grok-build-0.1",
 }
 
+func ResolveConsoleModel(model string) string {
+	if mapped := ConsoleModels[model]; mapped != "" {
+		return mapped
+	}
+	return model
+}
+
 var consoleModelsWithReasoning = map[string]struct{}{
 	"grok-4.3":                   {},
 	"grok-4.20-multi-agent-0309": {},
+}
+
+var consoleModelsWithoutClientFunctionTools = map[string]struct{}{
+	"grok-4.20-multi-agent-0309": {},
+}
+
+func ConsoleClientFunctionToolsEnabled(model string) bool {
+	_, disabled := consoleModelsWithoutClientFunctionTools[ResolveConsoleModel(model)]
+	return !disabled
 }
 
 var consoleModelFixedEffort = map[string]string{

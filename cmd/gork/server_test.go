@@ -59,6 +59,10 @@ func TestNewGorkHTTPServerAppliesSecurityOptions(t *testing.T) {
 }
 
 func TestBuildGorkHTTPServerOptionsUsesEnvAndConfig(t *testing.T) {
+	oldConfig := config.GlobalConfig
+	config.GlobalConfig = config.NewConfigSnapshot(gorkServerEmptyConfigBackend{}, config.ConfigSnapshotOptions{Env: map[string]string{}})
+	t.Cleanup(func() { config.GlobalConfig = oldConfig })
+
 	defaults := filepath.Join(t.TempDir(), "defaults.toml")
 	if err := os.WriteFile(defaults, []byte(`
 [app]
@@ -75,9 +79,6 @@ max_header_bytes = 8192
 	if err := config.GlobalConfig.Load(context.Background(), defaults); err != nil {
 		t.Fatalf("load defaults: %v", err)
 	}
-	t.Cleanup(func() {
-		_ = config.GlobalConfig.Load(context.Background(), "")
-	})
 	t.Setenv("HOST", "127.0.0.1")
 	t.Setenv("PORT", "19090")
 	t.Setenv("ALLOW_UNAUTHENTICATED_API", "YES")
@@ -103,4 +104,26 @@ max_header_bytes = 8192
 		options.MaxHeaderBytes != 8192 {
 		t.Fatalf("timeouts/header = %#v", options)
 	}
+}
+
+type gorkServerEmptyConfigBackend struct{}
+
+func (gorkServerEmptyConfigBackend) Load(context.Context) (map[string]any, error) {
+	return map[string]any{}, nil
+}
+
+func (gorkServerEmptyConfigBackend) ApplyPatch(context.Context, map[string]any) error {
+	return nil
+}
+
+func (gorkServerEmptyConfigBackend) Clear(context.Context) error {
+	return nil
+}
+
+func (gorkServerEmptyConfigBackend) Version(context.Context) (any, error) {
+	return nil, nil
+}
+
+func (gorkServerEmptyConfigBackend) Close(context.Context) error {
+	return nil
 }

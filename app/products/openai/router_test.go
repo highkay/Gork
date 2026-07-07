@@ -463,7 +463,7 @@ func TestRouterImageFormatConfigDefaultsImageRoutesToBase64(t *testing.T) {
 	if err := os.WriteFile(defaults, []byte("[features]\nimage_format = \"base64\"\n"), 0o600); err != nil {
 		t.Fatalf("write defaults: %v", err)
 	}
-	platformconfig.GlobalConfig = platformconfig.NewConfigSnapshot(nil, platformconfig.ConfigSnapshotOptions{})
+	platformconfig.GlobalConfig = platformconfig.NewConfigSnapshot(routerEmptyConfigBackend{}, platformconfig.ConfigSnapshotOptions{Env: map[string]string{}})
 	if err := platformconfig.GlobalConfig.Load(context.Background(), defaults); err != nil {
 		t.Fatalf("load config: %v", err)
 	}
@@ -490,6 +490,28 @@ func TestRouterImageFormatConfigDefaultsImageRoutesToBase64(t *testing.T) {
 	if len(calls) != 2 || calls[0].ResponseFormat != "b64_json" || calls[1].ResponseFormat != "b64_json" {
 		t.Fatalf("image response formats=%#v", calls)
 	}
+}
+
+type routerEmptyConfigBackend struct{}
+
+func (routerEmptyConfigBackend) Load(context.Context) (map[string]any, error) {
+	return map[string]any{}, nil
+}
+
+func (routerEmptyConfigBackend) ApplyPatch(context.Context, map[string]any) error {
+	return nil
+}
+
+func (routerEmptyConfigBackend) Clear(context.Context) error {
+	return nil
+}
+
+func (routerEmptyConfigBackend) Version(context.Context) (any, error) {
+	return nil, nil
+}
+
+func (routerEmptyConfigBackend) Close(context.Context) error {
+	return nil
 }
 
 func TestRouterChatImageStreamValidatesBeforeStartingStream(t *testing.T) {

@@ -50,11 +50,14 @@ func isConsoleInternalToolName(name string) bool {
 	return ok
 }
 
-func consoleToolPayloads(tools []map[string]any) []map[string]any {
+func consoleToolPayloads(tools []map[string]any, allowFunctionTools bool) []map[string]any {
 	payloads := make([]map[string]any, 0, len(tools))
 	for _, tool := range tools {
 		if stringFromAny(tool["type"]) != "function" {
 			payloads = append(payloads, cloneAnyMap(tool))
+			continue
+		}
+		if !allowFunctionTools {
 			continue
 		}
 		src := tool

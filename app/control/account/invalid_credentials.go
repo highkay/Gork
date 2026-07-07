@@ -30,6 +30,10 @@ type InvalidCredentialRepository interface {
 	PatchAccounts(context.Context, []AccountPatch) (AccountMutationResult, error)
 }
 
+type invalidCredentialDeleteRepository interface {
+	DeleteAccounts(context.Context, []string) (AccountMutationResult, error)
+}
+
 func MarkAccountInvalidCredentials(
 	ctx context.Context,
 	repo InvalidCredentialRepository,
@@ -64,7 +68,14 @@ func MarkAccountInvalidCredentials(
 		return false, patchErr
 	}
 	if patch.Status != nil && *patch.Status == AccountStatusExpired {
-		logInvalidCredentialsMarked(source, token, err, failureCount)
+		if deleteRepo, ok := repo.(invalidCredentialDeleteRepository); ok {
+			if _, deleteErr := deleteRepo.DeleteAccounts(ctx, []string{token}); deleteErr != nil {
+				return false, deleteErr
+			}
+			logInvalidCredentialsDeleted(source, token, err, failureCount)
+		} else {
+			logInvalidCredentialsMarked(source, token, err, failureCount)
+		}
 	}
 	return true, nil
 }
@@ -135,16 +146,24 @@ func invalidCredentialsFailureCount(records []AccountRecord) int {
 }
 
 func logInvalidCredentialsMarked(source string, token string, err error, failureCount int) {
+	logInvalidCredentialsStateChange("account expired from invalid credentials", source, token, err, failureCount, string(AccountStatusExpired))
+}
+
+func logInvalidCredentialsDeleted(source string, token string, err error, failureCount int) {
+	logInvalidCredentialsStateChange("account deleted from invalid credentials", source, token, err, failureCount, "deleted")
+}
+
+func logInvalidCredentialsStateChange(message string, source string, token string, err error, failureCount int, status string) {
 	var upstream *platform.UpstreamError
 	upstreamStatus := 0
 	if errors.As(err, &upstream) {
 		upstreamStatus = upstream.Status
 	}
 	logging.Logger.Info(
-		"account expired from invalid credentials",
+		message,
 		"source", source,
 		"token", tokenPrefix(token),
-		"status", AccountStatusExpired,
+		"status", status,
 		"failure_count", failureCount,
 		"upstream_status", upstreamStatus,
 	)

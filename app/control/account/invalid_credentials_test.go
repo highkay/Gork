@@ -9,12 +9,15 @@ import (
 )
 
 type fakeInvalidCredentialRepo struct {
-	records    []AccountRecord
-	patches    []AccountPatch
-	getErr     error
-	patchErr   error
-	getCalls   int
-	patchCalls int
+	records     []AccountRecord
+	patches     []AccountPatch
+	deleted     []string
+	getErr      error
+	patchErr    error
+	deleteErr   error
+	getCalls    int
+	patchCalls  int
+	deleteCalls int
 }
 
 func (r *fakeInvalidCredentialRepo) GetAccounts(_ context.Context, tokens []string) ([]AccountRecord, error) {
@@ -35,6 +38,15 @@ func (r *fakeInvalidCredentialRepo) PatchAccounts(_ context.Context, patches []A
 	}
 	r.patches = append(r.patches, patches...)
 	return AccountMutationResult{Patched: len(patches)}, nil
+}
+
+func (r *fakeInvalidCredentialRepo) DeleteAccounts(_ context.Context, tokens []string) (AccountMutationResult, error) {
+	r.deleteCalls++
+	if r.deleteErr != nil {
+		return AccountMutationResult{}, r.deleteErr
+	}
+	r.deleted = append(r.deleted, tokens...)
+	return AccountMutationResult{Deleted: len(tokens)}, nil
 }
 
 func TestFeedbackKindForErrorMapsInvalidCredentialsBeforeStatus(t *testing.T) {
@@ -117,6 +129,24 @@ func TestMarkAccountInvalidCredentialsPropagatesRepositoryErrors(t *testing.T) {
 	if patchRepo.getCalls != 1 || patchRepo.patchCalls != 1 {
 		t.Fatalf("repo calls after patch error = get:%d patch:%d", patchRepo.getCalls, patchRepo.patchCalls)
 	}
+
+	deleteRepo := &fakeInvalidCredentialRepo{
+		records: []AccountRecord{{
+			Ext: map[string]any{"invalid_credentials": map[string]any{"failure_count": 2}},
+		}},
+		deleteErr: errors.New("delete failed"),
+	}
+	marked, err = MarkAccountInvalidCredentials(context.Background(), deleteRepo, "tok-1", invalid, "refresh")
+
+	if err == nil || err.Error() != "delete failed" {
+		t.Fatalf("delete error = %v, want delete failed", err)
+	}
+	if marked {
+		t.Fatal("delete error should not mark account")
+	}
+	if deleteRepo.getCalls != 1 || deleteRepo.patchCalls != 1 || deleteRepo.deleteCalls != 1 {
+		t.Fatalf("repo calls after delete error = get:%d patch:%d delete:%d", deleteRepo.getCalls, deleteRepo.patchCalls, deleteRepo.deleteCalls)
+	}
 }
 
 func TestMarkAccountInvalidCredentialsRecordsFailureBeforeThreshold(t *testing.T) {
@@ -170,7 +200,7 @@ func TestMarkAccountInvalidCredentialsRecordsFailureBeforeThreshold(t *testing.T
 	}
 }
 
-func TestMarkAccountInvalidCredentialsExpiresAccountAndMergesExtAtThreshold(t *testing.T) {
+func TestMarkAccountInvalidCredentialsDeletesAccountAndMergesExtAtThreshold(t *testing.T) {
 	oldNow := invalidCredentialsNowMS
 	invalidCredentialsNowMS = func() int64 { return 123456789 }
 	t.Cleanup(func() { invalidCredentialsNowMS = oldNow })
@@ -230,6 +260,12 @@ func TestMarkAccountInvalidCredentialsExpiresAccountAndMergesExtAtThreshold(t *t
 	invalid := patch.ExtMerge["invalid_credentials"].(map[string]any)
 	if got := invalid["failure_count"]; got != 3 {
 		t.Fatalf("failure_count = %v, want 3", got)
+	}
+	if repo.deleteCalls != 1 {
+		t.Fatalf("delete calls = %d, want 1", repo.deleteCalls)
+	}
+	if len(repo.deleted) != 1 || repo.deleted[0] != "token-abcdef" {
+		t.Fatalf("deleted tokens = %#v", repo.deleted)
 	}
 }
 

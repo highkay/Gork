@@ -234,6 +234,8 @@ func parseBoolString(value any) bool {
 
 func configMin(key string) (float64, bool) {
 	switch {
+	case strings.HasPrefix(key, "chat.console_") && strings.HasSuffix(key, "_ms"):
+		return 0, true
 	case strings.Contains(key, "concurrency"),
 		strings.Contains(key, "batch_size"),
 		strings.Contains(key, "timeout"),
@@ -351,6 +353,12 @@ var configDescriptions = map[string]string{
 	"batch.refresh_concurrency":                  "Per-token concurrency for admin usage refresh jobs.",
 	"cache.local.image_max_mb":                   "0 stores images without indexing or eviction; values > 0 enable indexed LRU eviction.",
 	"cache.local.video_max_mb":                   "0 stores videos without indexing or eviction; values > 0 enable indexed LRU eviction.",
+	"chat.console_cooldown_ms":                   "Local cooldown in milliseconds after console model upstream 429 responses; 0 disables global console cooldown.",
+	"chat.console_max_queue_wait_ms":             "Maximum local queue wait in milliseconds before console model requests fail fast with 429; 0 disables the cap.",
+	"chat.console_min_interval_ms":               "Minimum local spacing in milliseconds between console model upstream requests; 0 disables global console pacing.",
+	"chat.console_multi_agent_cooldown_ms":       "Local cooldown in milliseconds after multi-agent console upstream 429 responses.",
+	"chat.console_multi_agent_max_queue_wait_ms": "Maximum local queue wait in milliseconds before multi-agent console requests fail fast with 429.",
+	"chat.console_multi_agent_min_interval_ms":   "Minimum local spacing in milliseconds between multi-agent console upstream requests.",
 	"chat.timeout":                               "Timeout in seconds for chat and responses requests.",
 	"features.auto_chat_mode_fallback":           "Falls back from auto quota to fast/expert chat modes when possible.",
 	"features.custom_instruction":                "Global instruction appended to chat requests.",

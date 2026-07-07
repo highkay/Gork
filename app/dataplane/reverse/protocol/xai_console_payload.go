@@ -57,10 +57,7 @@ func BuildConsoleRequestPayload(options ConsolePayloadOptions) ConsoleRequestPay
 			effort = "medium"
 		}
 	}
-	consoleModel := options.Model
-	if mapped := ConsoleModels[options.Model]; mapped != "" {
-		consoleModel = mapped
-	}
+	consoleModel := ResolveConsoleModel(options.Model)
 	maxTokens := consoleModelMaxOutputTokens[consoleModel]
 	if maxTokens == 0 {
 		maxTokens = 1000000
@@ -86,8 +83,11 @@ func BuildConsoleRequestPayload(options ConsolePayloadOptions) ConsoleRequestPay
 		payload.ToolChoice = "auto"
 	}
 	if len(options.Tools) > 0 {
-		payload.Tools = mergeConsoleTools(payload.Tools, consoleToolPayloads(options.Tools))
-		payload.ToolChoice = consoleToolChoice(options.ToolChoice)
+		allowFunctionTools := ConsoleClientFunctionToolsEnabled(options.Model)
+		payload.Tools = mergeConsoleTools(payload.Tools, consoleToolPayloads(options.Tools, allowFunctionTools))
+		if allowFunctionTools {
+			payload.ToolChoice = consoleToolChoice(options.ToolChoice)
+		}
 	}
 	return payload
 }

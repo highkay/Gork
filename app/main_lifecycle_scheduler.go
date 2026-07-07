@@ -5,6 +5,8 @@ import (
 	"time"
 
 	accountcontrol "github.com/dslzl/gork/app/control/account"
+	proxydataplane "github.com/dslzl/gork/app/dataplane/proxy"
+	reversetransport "github.com/dslzl/gork/app/dataplane/reverse/transport"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 	platformruntime "github.com/dslzl/gork/app/platform/runtime"
 	openaiproduct "github.com/dslzl/gork/app/products/openai"
@@ -14,7 +16,12 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 	if state.repository == nil {
 		return nil, nil
 	}
+	usageProxyRuntime, err := proxydataplane.GetTransportRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
 	service := accountcontrol.NewAccountRefreshService(state.repository, accountcontrol.AccountRefreshOptions{
+		Fetcher:          reversetransport.UsageFetcher{ProxyRuntime: usageProxyRuntime},
 		UsageConcurrency: platformconfig.GlobalConfig.GetInt("account.refresh.usage_concurrency", 50),
 		PerTokenTimeout:  appMainConfigDurationSeconds("account.refresh.per_token_timeout_sec", 30),
 		BatchTimeout:     appMainConfigDurationSeconds("account.refresh.batch_timeout_sec", 600),

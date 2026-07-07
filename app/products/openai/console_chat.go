@@ -49,6 +49,9 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if err := waitConsoleModelRateLimit(ctx, options.Model); err != nil {
+			return chatCompletionResult{}, err
+		}
 		account, ok, err := directory.ReserveChatAccount(ctx, spec, excluded)
 		if err != nil {
 			return chatCompletionResult{}, err
@@ -63,6 +66,7 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 			return result, nil
 		}
 		lastErr = err
+		cooldownConsoleModelRateLimit(ctx, options.Model, err)
 		if shouldRetryUpstream(err, retryCodes) && attempt < maxRetries {
 			excluded = append(excluded, account.Token)
 			continue
@@ -78,7 +82,7 @@ func ConsoleCompletions(ctx context.Context, options chatCompletionOptions) (cha
 func runConsoleCompletionAttempt(ctx context.Context, options chatCompletionOptions, account chatAccount, responseID string, isStream bool, timeoutS float64) (chatCompletionResult, error) {
 	upstreamStream := true
 	functionToolNames := []string{}
-	if !protocol.ToolChoiceDisablesTools(options.ToolChoice) {
+	if !protocol.ToolChoiceDisablesTools(options.ToolChoice) && protocol.ConsoleClientFunctionToolsEnabled(options.Model) {
 		functionToolNames = protocol.ClientFunctionToolNames(options.Tools)
 	}
 	payload := protocol.BuildConsolePayload(protocol.ConsolePayloadOptions{

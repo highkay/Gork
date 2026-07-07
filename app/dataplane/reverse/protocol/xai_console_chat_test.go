@@ -149,6 +149,36 @@ func TestBuildConsolePayloadMergesClientFunctionTools(t *testing.T) {
 	}
 }
 
+func TestBuildConsolePayloadOmitsClientFunctionToolsForMultiAgent(t *testing.T) {
+	payload := BuildConsolePayload(ConsolePayloadOptions{
+		Messages: []map[string]any{{"role": "user", "content": "lookup order"}},
+		Model:    "grok-4.20-multi-agent-console",
+		Tools: []map[string]any{
+			{"type": "function", "function": map[string]any{
+				"name":        "lookup_order",
+				"description": "lookup an order",
+				"parameters":  map[string]any{"type": "object"},
+			}},
+			{"type": "web_search", "filters": map[string]any{"allowed_domains": []any{"x.ai"}}},
+		},
+		ToolChoice: map[string]any{"type": "function", "function": map[string]any{"name": "lookup_order"}},
+	})
+
+	if ConsoleClientFunctionToolsEnabled("grok-4.20-multi-agent-low") {
+		t.Fatal("multi-agent aliases must not enable client function tools")
+	}
+	if !ConsoleClientFunctionToolsEnabled("grok-4.3-console") {
+		t.Fatal("grok-4.3 console should keep client function tools enabled")
+	}
+	tools := payload["tools"].([]map[string]any)
+	if len(tools) != 2 || tools[0]["type"] != "x_search" || tools[1]["type"] != "web_search" {
+		t.Fatalf("multi-agent tools = %#v", tools)
+	}
+	if payload["tool_choice"] != "auto" {
+		t.Fatalf("multi-agent tool_choice = %#v, want auto", payload["tool_choice"])
+	}
+}
+
 func TestConsoleStreamAdapterCollectsClientFunctionCalls(t *testing.T) {
 	adapter := NewConsoleStreamAdapter([]string{"lookup_order"})
 	tokens, err := adapter.Feed("response.output_text.delta", `{"delta":"preface"}`)

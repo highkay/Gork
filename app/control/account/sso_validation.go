@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
 )
 
@@ -181,7 +182,7 @@ func (s *AccountRefreshService) recordSSOValidationFailure(
 	if _, err := s.repo.PatchAccounts(ctx, []AccountPatch{patch}); err != nil {
 		return RefreshResult{}, err
 	}
-	if count < s.validationMaxFailures() {
+	if !protocol.IsInvalidCredentialsError(cause) || count < s.validationMaxFailures() {
 		return RefreshResult{Checked: 1, Failed: 1}, nil
 	}
 	if _, err := s.repo.DeleteAccounts(ctx, []string{record.Token}); err != nil {

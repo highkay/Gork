@@ -51,9 +51,44 @@ func TestValidateSSOAccountSkipsListModelsWhenRefreshFails(t *testing.T) {
 	}
 }
 
-func TestValidateSSOAccountDeletesAfterConfiguredConsecutiveFailures(t *testing.T) {
+func TestValidateSSOAccountDoesNotDeleteTransientConsecutiveFailures(t *testing.T) {
 	oldNow := refreshNowMS
 	refreshNowMS = func() int64 { return 2000 }
+	t.Cleanup(func() { refreshNowMS = oldNow })
+	record := AccountRecord{
+		Token:  "tok-transient",
+		Pool:   "basic",
+		Status: AccountStatusActive,
+		Quota:  DefaultQuotaSet("basic").ToDict(),
+		Ext:    map[string]any{"sso_validation": map[string]any{"failure_count": 2}},
+	}
+	repo := &fakeRefreshRepo{records: []AccountRecord{record}}
+	service := NewAccountRefreshService(repo, AccountRefreshOptions{
+		Fetcher:                  &fakeUsageFetcher{err: errors.New("refresh failed")},
+		SSOModelVerifier:         &fakeSSOModelVerifier{},
+		SSOValidationMaxFailures: 3,
+	})
+
+	result, err := service.validateSSOAccount(context.Background(), record)
+
+	if err != nil {
+		t.Fatalf("validateSSOAccount returned error: %v", err)
+	}
+	if result.Checked != 1 || result.Failed != 1 || result.Expired != 0 {
+		t.Fatalf("validation result = %#v", result)
+	}
+	if len(repo.deletedTokens) != 0 {
+		t.Fatalf("deleted tokens = %#v", repo.deletedTokens)
+	}
+	validation := repo.patches[len(repo.patches)-1].ExtMerge["sso_validation"].(map[string]any)
+	if validation["failure_count"] != 3 || validation["last_fail_stage"] != "refresh" {
+		t.Fatalf("sso validation metadata = %#v", validation)
+	}
+}
+
+func TestValidateSSOAccountDeletesInvalidCredentialsAfterConfiguredFailures(t *testing.T) {
+	oldNow := refreshNowMS
+	refreshNowMS = func() int64 { return 2500 }
 	t.Cleanup(func() { refreshNowMS = oldNow })
 	record := AccountRecord{
 		Token:  "tok-delete",
@@ -64,7 +99,7 @@ func TestValidateSSOAccountDeletesAfterConfiguredConsecutiveFailures(t *testing.
 	}
 	repo := &fakeRefreshRepo{records: []AccountRecord{record}}
 	service := NewAccountRefreshService(repo, AccountRefreshOptions{
-		Fetcher:                  &fakeUsageFetcher{err: errors.New("refresh failed")},
+		Fetcher:                  &fakeUsageFetcher{err: platform.NewUpstreamError("bad", 403, "blocked-user")},
 		SSOModelVerifier:         &fakeSSOModelVerifier{},
 		SSOValidationMaxFailures: 3,
 	})
@@ -151,7 +186,7 @@ func TestValidateSSOAccountRecordsListModelsFailureAfterRefreshSuccess(t *testin
 	}
 }
 
-func TestRecordFailureAsyncInvalidCredentialsUsesInvalidCredentialThreshold(t *testing.T) {
+func TestRecordFailureAsyncInvalidCredentialsDeletesAtInvalidCredentialThreshold(t *testing.T) {
 	oldNow := invalidCredentialsNowMS
 	invalidCredentialsNowMS = func() int64 { return 9000 }
 	t.Cleanup(func() { invalidCredentialsNowMS = oldNow })
@@ -172,8 +207,8 @@ func TestRecordFailureAsyncInvalidCredentialsUsesInvalidCredentialThreshold(t *t
 	if err != nil {
 		t.Fatalf("RecordFailureAsync returned error: %v", err)
 	}
-	if len(repo.deletedTokens) != 0 {
-		t.Fatalf("deleted tokens = %#v, want none", repo.deletedTokens)
+	if len(repo.deletedTokens) != 1 || repo.deletedTokens[0] != "tok-chat" {
+		t.Fatalf("deleted tokens = %#v, want tok-chat", repo.deletedTokens)
 	}
 	if len(repo.patches) != 1 {
 		t.Fatalf("patches = %#v, want one", repo.patches)

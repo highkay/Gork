@@ -206,6 +206,18 @@ max_inflight = 8
 # ==================== 对话配置 ====================
 [chat]
 timeout = 60
+# 全局 console model 本地节流间隔（毫秒），0 = 不限速
+console_min_interval_ms = 3000
+# multi-agent console model 本地节流间隔（毫秒），默认低于 60 RPM 上游限额，留滑动窗口余量
+console_multi_agent_min_interval_ms = 3000
+# 全局 console model 收到 429 后的本地冷却时间（毫秒），0 = 不冷却
+console_cooldown_ms = 60000
+# multi-agent console model 收到 429 后的本地冷却时间（毫秒）
+console_multi_agent_cooldown_ms = 60000
+# 全局 console model 最大本地排队等待（毫秒），超过则直接返回 429；0 = 不限制
+console_max_queue_wait_ms = 15000
+# multi-agent console model 最大本地排队等待（毫秒），超过则直接返回 429
+console_multi_agent_max_queue_wait_ms = 15000
 
 
 # ==================== 图像配置 ====================
