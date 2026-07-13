@@ -28,6 +28,12 @@ file_level = "INFO"
 max_files = 7
 
 
+# ==================== 可观测性 ====================
+[observability]
+# Prometheus 文本指标端点 /metrics，默认关闭
+metrics_enabled = false
+
+
 # ==================== 应用功能 ====================
 [features]
 # 是否启用临时对话

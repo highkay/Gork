@@ -12,6 +12,7 @@ import (
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
 	"github.com/dslzl/gork/app/platform/config"
 	"github.com/dslzl/gork/app/platform/logging"
+	"github.com/dslzl/gork/app/platform/observability"
 	"github.com/dslzl/gork/app/products/anthropic"
 	"github.com/dslzl/gork/app/products/openai"
 	"github.com/dslzl/gork/app/products/web"
@@ -32,7 +33,16 @@ var (
 	appMainSetupLogging = func() error {
 		return logging.SetupLogging(logging.LoggingOptions{})
 	}
+	appMainObservabilityConfig = func() appMainObservabilitySettings {
+		return appMainObservabilitySettings{
+			MetricsEnabled: config.GlobalConfig.GetBool("observability.metrics_enabled", false),
+		}
+	}
 )
+
+type appMainObservabilitySettings struct {
+	MetricsEnabled bool
+}
 
 type Hook func(context.Context) error
 
@@ -58,7 +68,7 @@ func NewApp(options AppOptions) *App {
 		options.StartupHooks = defaultStartupHooks()
 	}
 	return &App{
-		handler:       withAppMiddleware(newAppRouter(normalizeAppOptions(options))),
+		handler:       observability.Middleware(withAppMiddleware(newAppRouter(normalizeAppOptions(options)))),
 		startupHooks:  append([]Hook(nil), options.StartupHooks...),
 		shutdownHooks: append([]Hook(nil), options.ShutdownHooks...),
 	}
@@ -110,6 +120,13 @@ func normalizeAppOptions(options AppOptions) AppOptions {
 func newAppRouter(options AppOptions) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
+		case r.URL.Path == "/metrics":
+			if !appMainObservabilityConfig().MetricsEnabled {
+				writeAppJSON(w, http.StatusNotFound, map[string]any{"error": "not found"})
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
+			_, _ = w.Write([]byte(observability.MetricsText()))
 		case r.URL.Path == "/health":
 			writeAppJSON(w, http.StatusOK, map[string]any{"status": "ok"})
 		case r.URL.Path == "/favicon.ico":
