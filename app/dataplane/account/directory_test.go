@@ -218,6 +218,72 @@ func TestAccountDirectoryFeedbackDispatchMatchesPython(t *testing.T) {
 	}
 }
 
+func TestAccountDirectoryReserveDetailedReportsFailureReason(t *testing.T) {
+	mustSetDirectoryStrategy(t, "quota")
+	now := 100
+	tests := []struct {
+		name   string
+		table  *AccountRuntimeTable
+		reason ReserveFailureReason
+	}{
+		{name: "empty", table: MakeEmptyTable(), reason: ReserveFailureNoAvailable},
+		{name: "rate limited", table: reserveFailureTable(StatusActive, 0, 0, 0), reason: ReserveFailureRateLimited},
+		{name: "invalid credentials", table: reserveFailureTable(StatusExpired, 1, 0, 0), reason: ReserveFailureInvalidCredentials},
+		{name: "disabled", table: reserveFailureTable(StatusDisabled, 1, 0, 0), reason: ReserveFailureDisabled},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			directory := accountDirectoryWithTable(tt.table)
+			lease, reason, ok := directory.ReserveDetailed(0, 1, ReserveOptions{NowS: intPtr(now)})
+			if ok || lease.Token != "" {
+				t.Fatalf("ReserveDetailed selected lease=%#v ok=%t", lease, ok)
+			}
+			if reason != tt.reason {
+				t.Fatalf("reason = %q, want %q", reason, tt.reason)
+			}
+		})
+	}
+}
+
+func TestAccountDirectoryReserveUsesConfiguredMaxInflight(t *testing.T) {
+	mustSetDirectoryStrategy(t, "random")
+	oldConfig := directoryConfigSource
+	directoryConfigSource = fakeDirectoryConfig{"account.selection.max_inflight": 1}
+	t.Cleanup(func() { directoryConfigSource = oldConfig })
+
+	directory := accountDirectoryWithTable(reserveFailureTable(StatusActive, 1, 1, 0))
+	lease, reason, ok := directory.ReserveDetailed(0, 1, ReserveOptions{NowS: intPtr(10)})
+	if ok || lease.Token != "" {
+		t.Fatalf("ReserveDetailed selected lease=%#v ok=%t", lease, ok)
+	}
+	if reason != ReserveFailureRateLimited {
+		t.Fatalf("reason = %q, want %q", reason, ReserveFailureRateLimited)
+	}
+}
+
+func TestAccountDirectorySelectionStatusCountsAvailability(t *testing.T) {
+	mustSetDirectoryStrategy(t, "random")
+	oldConfig := directoryConfigSource
+	directoryConfigSource = fakeDirectoryConfig{"account.selection.max_inflight": 2}
+	t.Cleanup(func() { directoryConfigSource = oldConfig })
+
+	table := MakeEmptyTable()
+	table.AppendSlot(AccountSlot{Token: "available", PoolID: 0, StatusID: StatusActive, QuotaFast: 1, TotalFast: 10, WindowFast: 60, Health: 1})
+	table.AppendSlot(AccountSlot{Token: "quota", PoolID: 0, StatusID: StatusActive, QuotaFast: 0, TotalFast: 10, WindowFast: 60, Health: 1})
+	idx := table.AppendSlot(AccountSlot{Token: "cooling", PoolID: 0, StatusID: StatusActive, QuotaFast: 1, TotalFast: 10, WindowFast: 60, Health: 1})
+	table.CoolingUntilSByIdx[idx] = 20
+	table.AppendSlot(AccountSlot{Token: "invalid", PoolID: 0, StatusID: StatusExpired, QuotaFast: 1, TotalFast: 10, WindowFast: 60, Health: 1})
+	table.AppendSlot(AccountSlot{Token: "disabled", PoolID: 0, StatusID: StatusDisabled, QuotaFast: 1, TotalFast: 10, WindowFast: 60, Health: 1})
+
+	status := accountDirectoryWithTable(table).SelectionStatus(10)
+	if status.Strategy != "random" || status.MaxInflight != 2 {
+		t.Fatalf("strategy/max_inflight = %s/%d", status.Strategy, status.MaxInflight)
+	}
+	if status.Total != 5 || status.Available != 1 || status.Cooling != 2 || status.InvalidCredentials != 1 || status.Disabled != 1 {
+		t.Fatalf("selection status = %#v", status)
+	}
+}
+
 func TestGetAccountDirectorySingletonMatchesPython(t *testing.T) {
 	ctx := context.Background()
 	oldDirectory := accountDirectorySingleton
@@ -261,6 +327,22 @@ func (f fakeDirectoryConfig) GetInt(key string, defaultValue int) int {
 
 func accountDirectoryWithTable(table *AccountRuntimeTable) *AccountDirectory {
 	return &AccountDirectory{table: table}
+}
+
+func reserveFailureTable(statusID int, quota int, inflight int, coolingUntilS int) *AccountRuntimeTable {
+	table := MakeEmptyTable()
+	idx := table.AppendSlot(AccountSlot{
+		Token:      "tok",
+		PoolID:     0,
+		StatusID:   statusID,
+		QuotaFast:  quota,
+		TotalFast:  10,
+		WindowFast: 60,
+		Health:     1,
+	})
+	table.InflightByIdx[idx] = inflight
+	table.CoolingUntilSByIdx[idx] = coolingUntilS
+	return table
 }
 
 func mustSetDirectoryStrategy(t *testing.T, strategy string) {
