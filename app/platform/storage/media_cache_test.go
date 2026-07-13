@@ -273,3 +273,118 @@ func countRows(t *testing.T, db *sql.DB, mediaType MediaType) int {
 	}
 	return count
 }
+
+func TestLocalMediaCacheStatusReportsUsageAndCounters(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	store := NewLocalMediaCacheStore(LocalMediaCacheOptions{Config: staticMediaConfig{
+		"cache.local.image_max_mb": 1,
+		"cache.local.video_max_mb": 1,
+	}})
+
+	if _, err := store.SaveImage([]byte("image"), "image/png", "img-status"); err != nil {
+		t.Fatalf("SaveImage returned error: %v", err)
+	}
+	if _, err := store.SaveVideo([]byte("video"), "vid-status"); err != nil {
+		t.Fatalf("SaveVideo returned error: %v", err)
+	}
+	if err := store.Reconcile(MediaTypeImage); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+
+	status, err := store.Status()
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	image := status.Media[MediaTypeImage]
+	video := status.Media[MediaTypeVideo]
+	if image.Count != 1 || image.Bytes != int64(len("image")) || image.SaveCount != 1 || image.ReconcileCount != 1 {
+		t.Fatalf("image status = %#v", image)
+	}
+	if video.Count != 1 || video.Bytes != int64(len("video")) || video.SaveCount != 1 {
+		t.Fatalf("video status = %#v", video)
+	}
+}
+
+func TestLocalMediaCacheReconcileReportsOrphansAndTempFiles(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	store := NewLocalMediaCacheStore(LocalMediaCacheOptions{Config: staticMediaConfig{
+		"cache.local.image_max_mb": 1,
+	}})
+	if _, err := store.SaveImage([]byte("stale"), "image/png", "stale"); err != nil {
+		t.Fatalf("SaveImage returned error: %v", err)
+	}
+	if err := os.Remove(filepath.Join(dataDir, "files", "images", "stale.png")); err != nil {
+		t.Fatalf("remove stale file: %v", err)
+	}
+	imagesDir, err := ImageFilesDir()
+	if err != nil {
+		t.Fatalf("ImageFilesDir returned error: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(imagesDir, ".new.png.123.part"), []byte("tmp"), 0o644); err != nil {
+		t.Fatalf("write temp: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(imagesDir, "valid.png"), []byte("valid"), 0o644); err != nil {
+		t.Fatalf("write valid: %v", err)
+	}
+	if err := store.Reconcile(MediaTypeImage); err != nil {
+		t.Fatalf("Reconcile returned error: %v", err)
+	}
+	status, err := store.Status()
+	if err != nil {
+		t.Fatalf("Status returned error: %v", err)
+	}
+	report := status.Media[MediaTypeImage].LastReconcileReport
+	if report == nil || report.OrphanIndexRows != 1 || report.TempFiles != 1 || report.RemovedBytes < 3 {
+		t.Fatalf("report = %#v", report)
+	}
+	if len(report.RemovedNames) == 0 {
+		t.Fatalf("report removed names missing: %#v", report)
+	}
+	report.RemovedNames[0] = "mutated"
+	status, err = store.Status()
+	if err != nil {
+		t.Fatalf("second Status returned error: %v", err)
+	}
+	if status.Media[MediaTypeImage].LastReconcileReport.RemovedNames[0] == "mutated" {
+		t.Fatalf("status report leaked internal RemovedNames slice")
+	}
+	if _, err := os.Stat(filepath.Join(imagesDir, ".new.png.123.part")); !os.IsNotExist(err) {
+		t.Fatalf("temp file should be removed, err=%v", err)
+	}
+}
+
+func TestMediaTrimCandidatesUseLRUUpdatedAt(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("DATA_DIR", dataDir)
+	store := NewLocalMediaCacheStore(LocalMediaCacheOptions{Config: staticMediaConfig{
+		"cache.local.image_max_mb": 1,
+	}})
+	if _, err := store.SaveImage([]byte("a"), "image/png", "a"); err != nil {
+		t.Fatalf("SaveImage a returned error: %v", err)
+	}
+	db := openMediaCacheDB(t)
+	defer db.Close()
+	if _, err := db.Exec(`DELETE FROM local_media_files WHERE media_type = ?`, string(MediaTypeImage)); err != nil {
+		t.Fatalf("delete rows: %v", err)
+	}
+	for _, row := range []struct {
+		name    string
+		updated int64
+	}{
+		{name: "newer.png", updated: 200},
+		{name: "older.png", updated: 100},
+	} {
+		if _, err := db.Exec(`INSERT INTO local_media_files (media_type, name, size_bytes, created_at_ns, updated_at_ns) VALUES (?, ?, ?, ?, ?)`, string(MediaTypeImage), row.name, 1, 1, row.updated); err != nil {
+			t.Fatalf("insert row: %v", err)
+		}
+	}
+	candidates, err := mediaTrimCandidates(db, MediaTypeImage)
+	if err != nil {
+		t.Fatalf("mediaTrimCandidates returned error: %v", err)
+	}
+	if len(candidates) != 2 || candidates[0].name != "older.png" || candidates[1].name != "newer.png" {
+		t.Fatalf("candidate order = %#v", candidates)
+	}
+}

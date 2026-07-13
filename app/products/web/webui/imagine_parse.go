@@ -70,6 +70,9 @@ func webUIImagineAllowed(r *http.Request) bool {
 	if key == "" {
 		return auth.IsWebUIEnabled(settings)
 	}
+	if webUIImagineTickets.Consume(strings.TrimSpace(r.URL.Query().Get("ticket")), webUIImagineNow()) {
+		return true
+	}
 	token := webUIImagineToken(r)
 	return token != "" && subtle.ConstantTimeCompare([]byte(token), []byte(key)) == 1
 }

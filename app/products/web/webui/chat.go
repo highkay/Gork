@@ -33,6 +33,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("/webui/api/models", webUIProtected(http.MethodGet, handleWebUIModels))
 	mux.HandleFunc("/webui/api/chat/completions", webUIProtected(http.MethodPost, handleWebUIChatCompletions))
 	mux.HandleFunc("/webui/api/imagine/ws", handleWebUIImagineWS)
+	mux.HandleFunc("/webui/api/imagine/ws-ticket", webUIProtected(http.MethodPost, handleWebUIImagineWSTicket))
 	mux.HandleFunc("/webui/api/voice/token", webUIProtected(http.MethodPost, handleWebUIVoiceToken))
 	return mux
 }
