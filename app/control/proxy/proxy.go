@@ -29,10 +29,15 @@ type FlareClearanceProvider interface {
 	RefreshBundle(ctx context.Context, affinityKey, proxyURL string, targetURL ...string) (ClearanceBundle, bool, error)
 }
 
+type ByparrClearanceProvider interface {
+	RefreshBundle(ctx context.Context, affinityKey, proxyURL string, targetURL ...string) (ClearanceBundle, bool, error)
+}
+
 type DirectoryOptions struct {
 	Config         DirectoryConfig
 	ManualProvider ManualClearanceProvider
 	FlareProvider  FlareClearanceProvider
+	ByparrProvider ByparrClearanceProvider
 	IDGenerator    func() string
 	Clock          func() int64
 }
@@ -62,6 +67,7 @@ type ProxyDirectory struct {
 	config              DirectoryConfig
 	manual              ManualClearanceProvider
 	flare               FlareClearanceProvider
+	byparr              ByparrClearanceProvider
 	idGenerator         func() string
 	clock               func() int64
 }
@@ -74,6 +80,7 @@ type directoryConfigSignature struct {
 	BasePool      []string
 	ResourcePool  []string
 	FlareURL      string
+	ByparrURL     string
 	CFCookies     string
 	UserAgent     string
 	CFClearance   string
@@ -106,6 +113,10 @@ func NewProxyDirectory(options ...DirectoryOptions) *ProxyDirectory {
 	if flare == nil {
 		flare = noopFlareClearanceProvider{}
 	}
+	byparr := option.ByparrProvider
+	if byparr == nil {
+		byparr = noopByparrClearanceProvider{}
+	}
 	idGenerator := option.IDGenerator
 	if idGenerator == nil {
 		idGenerator = func() string { return platformruntime.NextHex() }
@@ -124,6 +135,7 @@ func NewProxyDirectory(options ...DirectoryOptions) *ProxyDirectory {
 		config:              cfg,
 		manual:              manual,
 		flare:               flare,
+		byparr:              byparr,
 		idGenerator:         idGenerator,
 		clock:               clock,
 	}
@@ -155,6 +167,7 @@ func (d *ProxyDirectory) Load(ctx context.Context) error {
 		BasePool:      append([]string(nil), basePool...),
 		ResourcePool:  append([]string(nil), resourcePool...),
 		FlareURL:      cfg.GetString("proxy.clearance.flaresolverr_url", ""),
+		ByparrURL:     cfg.GetString("proxy.clearance.byparr_url", ""),
 		CFCookies:     clearance.CFCookies,
 		UserAgent:     clearance.UserAgent,
 		CFClearance:   clearance.CFClearance,

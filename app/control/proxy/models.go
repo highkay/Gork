@@ -34,6 +34,7 @@ const (
 	ClearanceModeNone         ClearanceMode = "none"
 	ClearanceModeManual       ClearanceMode = "manual"
 	ClearanceModeFlareSolverr ClearanceMode = "flaresolverr"
+	ClearanceModeByparr       ClearanceMode = "byparr"
 )
 
 func ParseClearanceMode(value any) (ClearanceMode, error) {
@@ -59,7 +60,7 @@ func parseClearanceModeString(value string) (ClearanceMode, error) {
 
 func validateClearanceMode(mode ClearanceMode) (ClearanceMode, error) {
 	switch mode {
-	case ClearanceModeNone, ClearanceModeManual, ClearanceModeFlareSolverr:
+	case ClearanceModeNone, ClearanceModeManual, ClearanceModeFlareSolverr, ClearanceModeByparr:
 		return mode, nil
 	default:
 		return "", fmt.Errorf("invalid ClearanceMode: %q", mode)
@@ -114,13 +115,16 @@ func NewEgressNode(nodeID string) EgressNode {
 }
 
 type ClearanceBundle struct {
-	BundleID      string               `json:"bundle_id"`
-	CFCookies     string               `json:"cf_cookies"`
-	UserAgent     string               `json:"user_agent"`
-	State         ClearanceBundleState `json:"state"`
-	AffinityKey   string               `json:"affinity_key"`
-	ClearanceHost string               `json:"clearance_host"`
-	LastRefreshAt *int64               `json:"last_refresh_at"`
+	BundleID         string               `json:"bundle_id"`
+	CFCookies        string               `json:"cf_cookies"`
+	UserAgent        string               `json:"user_agent"`
+	State            ClearanceBundleState `json:"state"`
+	AffinityKey      string               `json:"affinity_key"`
+	ClearanceHost    string               `json:"clearance_host"`
+	LastRefreshAt    *int64               `json:"last_refresh_at"`
+	ExpiresAt        *int64               `json:"expires_at,omitempty"`
+	RefreshCount     int                  `json:"refresh_count,omitempty"`
+	LastRefreshError string               `json:"last_refresh_error,omitempty"`
 }
 
 func NewClearanceBundle(bundleID string) ClearanceBundle {

@@ -163,9 +163,12 @@ func (d *ProxyDirectory) refreshBundle(ctx context.Context, mode ClearanceMode, 
 	var bundle ClearanceBundle
 	var ok bool
 	var err error
-	if mode == ClearanceModeManual {
+	switch mode {
+	case ClearanceModeManual:
 		bundle, ok, err = d.manual.BuildBundle(affinity, host)
-	} else {
+	case ClearanceModeByparr:
+		bundle, ok, err = d.byparr.RefreshBundle(ctx, affinity, target.proxyURL, target.origin)
+	default:
 		bundle, ok, err = d.flare.RefreshBundle(ctx, affinity, target.proxyURL, target.origin)
 	}
 	if err != nil || !ok {

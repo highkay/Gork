@@ -16,7 +16,7 @@ func TestProxyEnumValuesMatchPython(t *testing.T) {
 	if EgressModeDirect != "direct" || EgressModeSingleProxy != "single_proxy" || EgressModeProxyPool != "proxy_pool" {
 		t.Fatalf("egress mode values changed")
 	}
-	if ClearanceModeNone != "none" || ClearanceModeManual != "manual" || ClearanceModeFlareSolverr != "flaresolverr" {
+	if ClearanceModeNone != "none" || ClearanceModeManual != "manual" || ClearanceModeFlareSolverr != "flaresolverr" || ClearanceModeByparr != "byparr" {
 		t.Fatalf("clearance mode values changed")
 	}
 	if EgressNodeHealthy != 0 || EgressNodeDegraded != 1 || EgressNodeUnhealthy != 2 {
@@ -53,6 +53,7 @@ func TestParseClearanceModeMatchesPython(t *testing.T) {
 		{"", ClearanceModeNone},
 		{"  MANUAL  ", ClearanceModeManual},
 		{"FlareSolverr", ClearanceModeFlareSolverr},
+		{"byparr", ClearanceModeByparr},
 		{ClearanceModeManual, ClearanceModeManual},
 	}
 	for _, tt := range cases {
