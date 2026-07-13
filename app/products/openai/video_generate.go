@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"io"
 	"net/url"
 	"strings"
 	"time"
@@ -49,7 +48,7 @@ var (
 			return nil, "", err
 		}
 		defer result.Stream.Close()
-		raw, err := io.ReadAll(result.Stream)
+		raw, err := readLocalMediaAsset(result.Stream, maxLocalVideoAssetBytes)
 		if err != nil {
 			return nil, "", err
 		}

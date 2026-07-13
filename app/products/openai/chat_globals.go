@@ -13,7 +13,6 @@ import (
 	appruntime "github.com/dslzl/gork/app/platform/runtime"
 	"github.com/dslzl/gork/app/platform/storage"
 	"github.com/dslzl/gork/app/products"
-	"io"
 	"regexp"
 )
 
@@ -33,7 +32,7 @@ var (
 			return nil, "", err
 		}
 		defer result.Stream.Close()
-		raw, err := io.ReadAll(result.Stream)
+		raw, err := readLocalMediaAsset(result.Stream, maxLocalImageAssetBytes)
 		if err != nil {
 			return nil, "", err
 		}

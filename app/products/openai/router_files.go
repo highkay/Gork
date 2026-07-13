@@ -13,11 +13,18 @@ import (
 	"github.com/dslzl/gork/app/platform/storage"
 )
 
-var routerFileIDRE = regexp.MustCompile(`^[0-9a-f\-]{16,36}$`)
+var (
+	routerFileIDRE     = regexp.MustCompile(`^[0-9a-f\-]{16,36}$`)
+	routerSafeFileIDRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+)
+
+func validRouterFileID(fileID string) bool {
+	return routerFileIDRE.MatchString(fileID) || routerSafeFileIDRE.MatchString(fileID)
+}
 
 func handleServeVideo(w http.ResponseWriter, r *http.Request) {
 	fileID := r.URL.Query().Get("id")
-	if !routerFileIDRE.MatchString(fileID) {
+	if !validRouterFileID(fileID) {
 		writeRouterError(w, platform.NewValidationError("Invalid file ID", "id", ""))
 		return
 	}
@@ -37,7 +44,7 @@ func handleServeVideo(w http.ResponseWriter, r *http.Request) {
 
 func handleServeImage(w http.ResponseWriter, r *http.Request) {
 	fileID := r.URL.Query().Get("id")
-	if !routerFileIDRE.MatchString(fileID) {
+	if !validRouterFileID(fileID) {
 		writeRouterError(w, platform.NewValidationError("Invalid file ID", "id", ""))
 		return
 	}
