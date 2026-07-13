@@ -16,6 +16,10 @@ func runGorkCommand(ctx context.Context, args []string, stdout io.Writer, stderr
 	switch args[0] {
 	case "healthcheck":
 		return runHealthcheckCommand(ctx, args[1:], stdout, stderr)
+	case "config":
+		return runConfigCommand(ctx, args[1:], stdout, stderr)
+	case "protocol-check":
+		return runProtocolCheckCommand(ctx, args[1:], stdout, stderr)
 	case "account":
 		if len(args) < 2 || args[1] != "check" {
 			return true, 2, fmt.Errorf("unknown command: %s", strings.Join(args, " "))

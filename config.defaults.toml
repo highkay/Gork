@@ -2,6 +2,8 @@
 [app]
 # 管理后台密码
 app_key = "gork"
+# 兼容旧管理后台密码键（admin 路由会读）
+admin_key = ""
 # 应用访问地址
 app_url = ""
 # API 调用密钥
@@ -10,6 +12,12 @@ api_key = ""
 webui_enabled = false
 # WebUI 访问密码
 webui_key = ""
+
+
+# ==================== 安全 / 媒体签名 ====================
+[security.media]
+# 本地媒体签名 URL 有效期（秒）
+signed_url_ttl_seconds = 3600
 
 
 # ==================== 日志配置 ====================
@@ -86,7 +94,7 @@ resource_proxy_pool = []
 skip_ssl_verify = false
 
 [proxy.clearance]
-# Cloudflare clearance 模式：none | manual | flaresolverr
+# Cloudflare clearance 模式：none | manual | flaresolverr | byparr
 mode = "flaresolverr"
 # 手动模式：Cloudflare Cookie 字符串
 cf_cookies = ""
@@ -96,6 +104,8 @@ user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
 browser = "chrome136"
 # FlareSolverr 服务地址
 flaresolverr_url = "http://flaresolverr:8191"
+# Byparr 服务地址（mode=byparr 时使用；默认不启用）
+byparr_url = "http://byparr:8191"
 # 挑战等待超时（秒）
 timeout_sec = 60
 # Clearance 刷新间隔（秒）
@@ -122,7 +132,13 @@ reset_session_status_codes = [403]
 max_retries = 1
 # [App 层] 触发换账号重试的 HTTP 状态码，英文逗号分隔
 on_codes = "429,401,503"
+# 兼容运行时键：触发换账号重试的 HTTP 状态码
+retry_status_codes = "429,401,503"
 
+
+[account]
+# 账号仓储后端：local | redis | mysql | postgresql | sqlite
+storage = "local"
 
 [account.refresh]
 # 总开关：true=配额刷新模式（主动探测，选号评分）；false=自动重试模式（随机选号，零探测）

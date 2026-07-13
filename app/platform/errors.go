@@ -1,6 +1,10 @@
 package platform
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/dslzl/gork/app/platform/observability"
+)
 
 // ErrorKind is the OpenAI-compatible error type string.
 type ErrorKind string
@@ -119,6 +123,11 @@ func NewUpstreamError(message string, status int, body string) *UpstreamError {
 	if status == 0 {
 		status = 502
 	}
+	observability.RecordUpstreamError(observability.UpstreamError{
+		Product:    "xai",
+		StatusCode: status,
+		Message:    message,
+	})
 	return &UpstreamError{
 		AppError: NewAppError(message, ErrorKindUpstream, "upstream_error", status, map[string]any{"body": body}),
 		Body:     body,

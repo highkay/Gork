@@ -114,6 +114,21 @@ func GetNested(data map[string]any, dottedKey string, defaultValue any) any {
 	return node
 }
 
+// SetNested 按点号路径写入嵌套 map（config validate/docs CLI 使用）。
+func SetNested(data map[string]any, dottedKey string, value any) {
+	parts := strings.Split(dottedKey, ".")
+	current := data
+	for _, key := range parts[:len(parts)-1] {
+		next, ok := current[key].(map[string]any)
+		if !ok {
+			next = map[string]any{}
+			current[key] = next
+		}
+		current = next
+	}
+	current[parts[len(parts)-1]] = value
+}
+
 func parseSimpleTOML(file *os.File) (map[string]any, error) {
 	data := map[string]any{}
 	current := data
