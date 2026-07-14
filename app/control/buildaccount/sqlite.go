@@ -3,6 +3,7 @@ package buildaccount
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dslzl/gork/app/dataplane/build"
 	"github.com/dslzl/gork/app/platform/security"
 	_ "modernc.org/sqlite"
 )
@@ -56,6 +58,18 @@ func (s *SQLiteStore) Initialize(ctx context.Context) error {
 	if _, err := db.ExecContext(ctx, schemaSQL); err != nil {
 		db.Close()
 		return err
+	}
+	for _, alter := range []string{
+		`ALTER TABLE build_accounts ADD COLUMN billing_json TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE build_accounts ADD COLUMN billing_synced_at INTEGER`,
+	} {
+		if _, err := db.ExecContext(ctx, alter); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+			// SQLite 重复列错误可忽略；其它错误中止
+			if !strings.Contains(err.Error(), "duplicate column name") {
+				db.Close()
+				return err
+			}
+		}
 	}
 	s.db = db
 	return nil
@@ -241,6 +255,29 @@ WHERE id=? AND deleted_at IS NULL`,
 	return err
 }
 
+// UpdateBilling 写入最近 Billing 快照（JSON）。
+func (s *SQLiteStore) UpdateBilling(ctx context.Context, id int64, billing build.Billing) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	db, err := s.dbOrErr()
+	if err != nil {
+		return err
+	}
+	if billing.SyncedAt.IsZero() {
+		billing.SyncedAt = time.Now().UTC()
+	}
+	raw, err := json.Marshal(billing)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx, `
+UPDATE build_accounts SET billing_json=?, billing_synced_at=?, updated_at=?
+WHERE id=? AND deleted_at IS NULL`,
+		string(raw), billing.SyncedAt.Unix(), time.Now().UTC().Unix(), id,
+	)
+	return err
+}
+
 // SetStatus 更新状态。
 func (s *SQLiteStore) SetStatus(ctx context.Context, id int64, status string, reason string) error {
 	s.mu.Lock()
@@ -275,16 +312,16 @@ type scannable interface {
 
 func (s *SQLiteStore) scanAccount(row scannable) (Account, error) {
 	var (
-		a                                              Account
-		expiresAt, coolingUntil, lastUse, created, upd sql.NullInt64
-		accessEnc, refreshEnc                          string
-		stateReason                                    sql.NullString
+		a                                                      Account
+		expiresAt, coolingUntil, lastUse, created, upd, billAt sql.NullInt64
+		accessEnc, refreshEnc, billingJSON                     string
+		stateReason                                            sql.NullString
 	)
 	err := row.Scan(
 		&a.ID, &a.Name, &a.Email, &a.UserID, &a.ClientID,
 		&accessEnc, &refreshEnc, &expiresAt,
 		&a.Status, &coolingUntil, &a.Priority, &lastUse, &a.FailCount,
-		&created, &upd, &stateReason,
+		&created, &upd, &stateReason, &billingJSON, &billAt,
 	)
 	if err == sql.ErrNoRows {
 		return Account{}, fmt.Errorf("build account not found")
@@ -305,6 +342,16 @@ func (s *SQLiteStore) scanAccount(row scannable) (Account, error) {
 	a.LastUseAt = timeFromUnix(lastUse)
 	a.CreatedAt = timeFromUnix(created)
 	a.UpdatedAt = timeFromUnix(upd)
+	a.BillingSynced = timeFromUnix(billAt)
+	if strings.TrimSpace(billingJSON) != "" {
+		var bill build.Billing
+		if err := json.Unmarshal([]byte(billingJSON), &bill); err == nil {
+			a.Billing = bill
+			if a.BillingSynced.IsZero() && !bill.SyncedAt.IsZero() {
+				a.BillingSynced = bill.SyncedAt
+			}
+		}
+	}
 	return a, nil
 }
 
@@ -338,7 +385,8 @@ const selectAccountSQL = `
 SELECT id, name, email, user_id, client_id,
        access_token, refresh_token, expires_at,
        status, cooling_until, priority, last_use_at, fail_count,
-       created_at, updated_at, state_reason
+       created_at, updated_at, state_reason,
+       billing_json, billing_synced_at
 FROM build_accounts`
 
 const schemaSQL = `
@@ -359,7 +407,9 @@ CREATE TABLE IF NOT EXISTS build_accounts (
 	created_at      INTEGER NOT NULL,
 	updated_at      INTEGER NOT NULL,
 	state_reason    TEXT,
-	deleted_at      INTEGER
+	deleted_at      INTEGER,
+	billing_json    TEXT    NOT NULL DEFAULT '',
+	billing_synced_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_build_acc_status ON build_accounts (status);
 CREATE INDEX IF NOT EXISTS idx_build_acc_user ON build_accounts (user_id);

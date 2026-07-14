@@ -42,6 +42,9 @@ type stubAdminBuildStore struct {
 func (s *stubAdminBuildStore) List(context.Context) ([]buildaccount.Account, error) {
 	return nil, nil
 }
+func (s *stubAdminBuildStore) Get(context.Context, int64) (buildaccount.Account, error) {
+	return s.last, nil
+}
 func (s *stubAdminBuildStore) Upsert(_ context.Context, account buildaccount.Account) (buildaccount.Account, error) {
 	account.ID = 9
 	s.last = account
@@ -49,6 +52,10 @@ func (s *stubAdminBuildStore) Upsert(_ context.Context, account buildaccount.Acc
 }
 func (s *stubAdminBuildStore) Delete(context.Context, int64) error { return nil }
 func (s *stubAdminBuildStore) SetStatus(context.Context, int64, string, string) error {
+	return nil
+}
+func (s *stubAdminBuildStore) UpdateBilling(context.Context, int64, build.Billing) error { return nil }
+func (s *stubAdminBuildStore) UpdateTokens(context.Context, int64, string, string, time.Time) error {
 	return nil
 }
 

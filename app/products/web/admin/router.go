@@ -100,6 +100,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("/admin/api/build-accounts/status", adminProtected(http.MethodPost, handleAdminBuildAccountsStatus))
 	mux.HandleFunc("/admin/api/build-accounts/device/start", adminProtected(http.MethodPost, handleAdminBuildDeviceStart))
 	mux.HandleFunc("/admin/api/build-accounts/device/poll", adminProtected(http.MethodPost, handleAdminBuildDevicePoll))
+	mux.HandleFunc("/admin/api/build-accounts/billing", adminProtected(http.MethodPost, handleAdminBuildAccountsBilling))
 	return mux
 }
 

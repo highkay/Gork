@@ -17,9 +17,12 @@ import (
 // buildAccountAdminStore 是 Build 账号管理面（与 openai 选号目录同源实现）。
 type buildAccountAdminStore interface {
 	List(ctx context.Context) ([]buildaccount.Account, error)
+	Get(ctx context.Context, id int64) (buildaccount.Account, error)
 	Upsert(ctx context.Context, account buildaccount.Account) (buildaccount.Account, error)
 	Delete(ctx context.Context, id int64) error
 	SetStatus(ctx context.Context, id int64, status string, reason string) error
+	UpdateBilling(ctx context.Context, id int64, billing build.Billing) error
+	UpdateTokens(ctx context.Context, id int64, access, refresh string, expiresAt time.Time) error
 }
 
 var adminBuildAccountStore = func() buildAccountAdminStore { return nil }
@@ -164,15 +167,15 @@ func parseBuildAccountID(r *http.Request) (int64, error) {
 // serializeBuildAccount 不回传明文 token，仅暴露是否已配置。
 func serializeBuildAccount(acc buildaccount.Account) map[string]any {
 	item := map[string]any{
-		"id":               acc.ID,
-		"name":             acc.Name,
-		"email":            acc.Email,
-		"user_id":          acc.UserID,
-		"client_id":        acc.ClientID,
-		"status":           acc.Status,
-		"priority":         acc.Priority,
-		"fail_count":       acc.FailCount,
-		"has_access_token": acc.AccessToken != "",
+		"id":                acc.ID,
+		"name":              acc.Name,
+		"email":             acc.Email,
+		"user_id":           acc.UserID,
+		"client_id":         acc.ClientID,
+		"status":            acc.Status,
+		"priority":          acc.Priority,
+		"fail_count":        acc.FailCount,
+		"has_access_token":  acc.AccessToken != "",
 		"has_refresh_token": acc.RefreshToken != "",
 	}
 	if !acc.ExpiresAt.IsZero() {
@@ -189,6 +192,14 @@ func serializeBuildAccount(acc buildaccount.Account) map[string]any {
 	}
 	if !acc.UpdatedAt.IsZero() {
 		item["updated_at"] = acc.UpdatedAt.UTC().Format(time.RFC3339)
+	}
+	if !acc.BillingSynced.IsZero() || acc.Billing.PlanCode != "" || acc.Billing.MonthlyLimit > 0 {
+		item["billing"] = acc.Billing
+		if !acc.BillingSynced.IsZero() {
+			item["billing_synced_at"] = acc.BillingSynced.UTC().Format(time.RFC3339)
+		} else if !acc.Billing.SyncedAt.IsZero() {
+			item["billing_synced_at"] = acc.Billing.SyncedAt.UTC().Format(time.RFC3339)
+		}
 	}
 	return item
 }

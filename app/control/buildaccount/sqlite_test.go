@@ -15,6 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+
 func TestSQLiteStorePlaintextRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "build.db")
@@ -155,6 +156,34 @@ func TestAccountNeedsRefresh(t *testing.T) {
 	a.ExpiresAt = now.Add(10 * time.Minute)
 	if a.NeedsRefresh(now, 2*time.Minute) {
 		t.Fatal("expected not yet")
+	}
+}
+
+func TestSQLiteStoreUpdateBilling(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "bill.db")
+	store := NewSQLiteStore(path, nil)
+	if err := store.Initialize(ctx); err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	acc, err := store.Upsert(ctx, Account{Name: "b", UserID: "ub", AccessToken: "at", Status: StatusActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bill := build.Billing{PlanCode: "pro", MonthlyLimit: 100, Used: 10, SyncedAt: time.Now().UTC()}
+	if err := store.UpdateBilling(ctx, acc.ID, bill); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Get(ctx, acc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Billing.PlanCode != "pro" || got.Billing.MonthlyLimit != 100 {
+		t.Fatalf("%#v", got.Billing)
+	}
+	if got.BillingSynced.IsZero() {
+		t.Fatal("expected billing_synced")
 	}
 }
 

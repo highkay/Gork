@@ -29,8 +29,11 @@ type Account struct {
 	Priority     int
 	LastUseAt    time.Time
 	FailCount    int
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	// Billing 为最近一次 GET /billing 快照（可选）。
+	Billing       build.Billing
+	BillingSynced time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // Credential 转为可写入记录。

@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/dslzl/gork/app/control/buildaccount"
+	"github.com/dslzl/gork/app/dataplane/build"
 )
 
 
@@ -55,6 +57,40 @@ func (f *fakeBuildAccountStore) SetStatus(_ context.Context, id int64, status st
 	for i, acc := range f.accounts {
 		if acc.ID == id {
 			acc.Status = status
+			f.accounts[i] = acc
+			return nil
+		}
+	}
+	return nil
+}
+
+func (f *fakeBuildAccountStore) Get(_ context.Context, id int64) (buildaccount.Account, error) {
+	for _, acc := range f.accounts {
+		if acc.ID == id {
+			return acc, nil
+		}
+	}
+	return buildaccount.Account{}, fmt.Errorf("build account not found")
+}
+
+func (f *fakeBuildAccountStore) UpdateBilling(_ context.Context, id int64, billing build.Billing) error {
+	for i, acc := range f.accounts {
+		if acc.ID == id {
+			acc.Billing = billing
+			acc.BillingSynced = billing.SyncedAt
+			f.accounts[i] = acc
+			return nil
+		}
+	}
+	return nil
+}
+
+func (f *fakeBuildAccountStore) UpdateTokens(_ context.Context, id int64, access, refresh string, expiresAt time.Time) error {
+	for i, acc := range f.accounts {
+		if acc.ID == id {
+			acc.AccessToken = access
+			acc.RefreshToken = refresh
+			acc.ExpiresAt = expiresAt
 			f.accounts[i] = acc
 			return nil
 		}
