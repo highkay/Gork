@@ -81,6 +81,9 @@ func Get(modelName string) (ModelSpec, bool) {
 func Resolve(modelName string) (ModelSpec, error) {
 	spec, ok := Get(modelName)
 	if !ok {
+		if buildSpec, buildOK := BuildSpecFromName(modelName); buildOK {
+			return buildSpec, nil
+		}
 		return ModelSpec{}, fmt.Errorf("Unknown model: '%s'", modelName)
 	}
 	return spec, nil

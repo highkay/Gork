@@ -20,11 +20,17 @@ import (
 )
 
 type appMainLifecycleState struct {
-	runtimeStore *platformruntime.RedisRuntimeStore
-	repository   accountcontrol.AccountRepository
-	directory    *accountdataplane.AccountDirectory
-	schedulerKey *platformruntime.RedisRuntimeLease
-	adminCleanup func()
+	runtimeStore      *platformruntime.RedisRuntimeStore
+	repository        accountcontrol.AccountRepository
+	directory         *accountdataplane.AccountDirectory
+	buildAccountStore buildAccountStoreCloser
+	schedulerKey      *platformruntime.RedisRuntimeLease
+	adminCleanup      func()
+}
+
+// buildAccountStoreCloser 收窄生命周期持有的 Build 账号库（实现在 main_lifecycle_build.go）。
+type buildAccountStoreCloser interface {
+	Close() error
 }
 
 type appMainLifecycleStep func(context.Context, *appMainLifecycleState) (Hook, error)
@@ -34,13 +40,14 @@ var (
 	appMainStartRuntimeStore          appMainLifecycleStep                = defaultAppMainStartRuntimeStore
 	appMainConfigureTaskSnapshotStore appMainLifecycleStep                = defaultAppMainConfigureTaskSnapshotStore
 	appMainInitializeRepository       appMainLifecycleStep                = defaultAppMainInitializeRepository
+	appMainInitializeBuildAccountStore appMainLifecycleStep               = defaultAppMainInitializeBuildAccountStore
 	appMainRunStartupMigrations       appMainLifecycleStep                = defaultAppMainRunStartupMigrations
 	appMainReconcileLocalMediaCache   appMainLifecycleStep                = defaultAppMainReconcileLocalMediaCache
 	appMainStartAccountDirectory      appMainLifecycleStep                = defaultAppMainStartAccountDirectory
 	appMainStartRefreshRuntime        appMainLifecycleStep                = defaultAppMainStartRefreshRuntime
 	appMainStartProxyScheduler        appMainLifecycleStep                = defaultAppMainStartProxyScheduler
 	appMainAcquireSchedulerFileLock   func(context.Context) (Hook, error) = acquireAppMainSchedulerFileLock
-	appMainConsoleResetInterval      = 30 * time.Second
+	appMainConsoleResetInterval       = 30 * time.Second
 	appMainConsole429RecoveryInterval = 10 * time.Minute
 )
 
@@ -65,6 +72,7 @@ func defaultLifecycleHooks() ([]Hook, []Hook) {
 		stepHook(appMainStartRuntimeStore),
 		stepHook(appMainConfigureTaskSnapshotStore),
 		stepHook(appMainInitializeRepository),
+		stepHook(appMainInitializeBuildAccountStore),
 		stepHook(appMainRunStartupMigrations),
 		stepHook(appMainReconcileLocalMediaCache),
 		stepHook(appMainStartAccountDirectory),

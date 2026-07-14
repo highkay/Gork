@@ -17,6 +17,7 @@ func TestModeIDValuesAndAPIStringsMatchPython(t *testing.T) {
 		{ModeHeavy, 3, "heavy"},
 		{ModeGrok43, 4, "grok-420-computer-use-sa"},
 		{ModeConsole, 5, "console"},
+		{ModeBuild, 6, "build"},
 	}
 	for _, tt := range cases {
 		if got := int(tt.mode); got != tt.into {
@@ -33,7 +34,8 @@ func TestTierAndCapabilityValuesMatchPython(t *testing.T) {
 		t.Fatalf("tier values changed: basic=%d super=%d heavy=%d", TierBasic, TierSuper, TierHeavy)
 	}
 	if CapabilityChat != 1 || CapabilityImage != 2 || CapabilityImageEdit != 4 ||
-		CapabilityVideo != 8 || CapabilityVoice != 16 || CapabilityAsset != 32 || CapabilityConsoleChat != 64 {
+		CapabilityVideo != 8 || CapabilityVoice != 16 || CapabilityAsset != 32 ||
+		CapabilityConsoleChat != 64 || CapabilityBuildChat != 128 {
 		t.Fatalf("capability bit values changed")
 	}
 	if CapabilityChat|CapabilityImageEdit != 5 {

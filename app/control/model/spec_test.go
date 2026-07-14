@@ -40,6 +40,13 @@ func TestModelSpecFieldsAndCapabilityHelpersMatchPython(t *testing.T) {
 	if !spec.IsConsoleChat() {
 		t.Fatalf("IsConsoleChat should detect CapabilityConsoleChat")
 	}
+	if spec.IsBuildChat() {
+		t.Fatalf("IsBuildChat should be false without CapabilityBuildChat")
+	}
+	buildSpec := ModelSpec{Capability: CapabilityBuildChat}
+	if !buildSpec.IsBuildChat() {
+		t.Fatalf("IsBuildChat should detect CapabilityBuildChat")
+	}
 }
 
 func TestModelSpecPoolNameAndIDMatchPython(t *testing.T) {
