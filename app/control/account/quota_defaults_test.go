@@ -160,3 +160,32 @@ func TestInferPoolFromAutoTotal(t *testing.T) {
 		t.Fatalf("InferPool(missing auto) = %q, want basic", got)
 	}
 }
+
+// TestInferPoolFromLiveWindowsDoesNotPromoteWithoutModeSignal 对齐 chenyme #615：
+// 模式额度不可用时不得凭空把 basic 提权为 super；空窗口应返回 nil（保留已存 pool）。
+func TestInferPoolFromLiveWindowsDoesNotPromoteWithoutModeSignal(t *testing.T) {
+	if got := InferPoolFromLiveWindows(nil); got != nil {
+		t.Fatalf("nil windows = %v, want nil", got)
+	}
+	if got := InferPoolFromLiveWindows(map[int]QuotaWindow{}); got != nil {
+		t.Fatalf("empty windows = %v, want nil", got)
+	}
+	// auto total 非 20 且非 super/heavy 形态 → 不写回 basic，避免误伤已确认 super
+	if got := InferPoolFromLiveWindows(map[int]QuotaWindow{
+		0: {Total: 7, Remaining: 7, Source: QuotaSourceReal},
+	}); got != nil {
+		t.Fatalf("ambiguous auto total 7 = %v, want nil (preserve stored pool)", *got)
+	}
+	// 明确 basic 形态可写回
+	if got := InferPoolFromLiveWindows(map[int]QuotaWindow{
+		0: {Total: 20, Remaining: 10, Source: QuotaSourceReal},
+	}); got == nil || *got != "basic" {
+		t.Fatalf("auto total 20 = %v, want basic", got)
+	}
+	// 已确认 super 形态仍可写回
+	if got := InferPoolFromLiveWindows(map[int]QuotaWindow{
+		0: {Total: 50, Remaining: 1, Source: QuotaSourceReal},
+	}); got == nil || *got != "super" {
+		t.Fatalf("auto total 50 = %v, want super", got)
+	}
+}
