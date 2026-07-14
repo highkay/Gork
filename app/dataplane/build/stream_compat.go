@@ -24,13 +24,9 @@ func ChatStreamFramesFromResponsesSSE(model, responseID string, r io.Reader) ([]
 	if trimmed == "" {
 		return nil, fmt.Errorf("empty build stream body")
 	}
-	// 非 SSE：整包 JSON 一次性输出
+	// 非 SSE：整包 JSON 一次性输出（文本和/或 tool_calls）
 	if !strings.Contains(trimmed, "data:") && strings.HasPrefix(trimmed, "{") {
-		text, err := extractOutputText(raw)
-		if err != nil {
-			return nil, err
-		}
-		return framesFromTextDeltas(model, responseID, []string{text}, false), nil
+		return framesFromPlainResponsesJSON(model, responseID, raw)
 	}
 	parsed, err := collectSSEStream(trimmed)
 	if err != nil {
@@ -39,23 +35,27 @@ func ChatStreamFramesFromResponsesSSE(model, responseID string, r io.Reader) ([]
 	if parsed.failed {
 		return framesFromStreamError(model, responseID, parsed.errMsg), nil
 	}
-	if len(parsed.deltas) == 0 {
-		if text, ok := extractTextFromSSEJSONBlobs(trimmed); ok {
-			return framesFromTextDeltas(model, responseID, []string{text}, false), nil
-		}
-		return nil, fmt.Errorf("build stream 无可用文本 delta")
+	if !parsed.tools.empty() || len(parsed.deltas) > 0 {
+		return framesFromTextAndTools(model, responseID, parsed.deltas, parsed.tools), nil
 	}
-	return framesFromTextDeltas(model, responseID, parsed.deltas, false), nil
+	if text, ok := extractTextFromSSEJSONBlobs(trimmed); ok {
+		return framesFromTextAndTools(model, responseID, []string{text}, nil), nil
+	}
+	if calls := extractToolCallsFromSSEBlobs(trimmed); len(calls) > 0 {
+		return framesFromCompletedToolCalls(model, responseID, calls), nil
+	}
+	return nil, fmt.Errorf("build stream 无可用文本或 tool_calls")
 }
 
 type sseStreamParse struct {
 	deltas []string
+	tools  *toolCallStreamState
 	failed bool
 	errMsg string
 }
 
 func collectSSEStream(payload string) (sseStreamParse, error) {
-	var out sseStreamParse
+	out := sseStreamParse{tools: newToolCallStreamState()}
 	scanner := bufio.NewScanner(strings.NewReader(payload))
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 2<<20)
@@ -70,6 +70,12 @@ func collectSSEStream(payload string) (sseStreamParse, error) {
 		dataLines = nil
 		if data == "" || data == "[DONE]" {
 			return
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(data), &payload); err == nil {
+			if applyToolStreamEvent(out.tools, payload) {
+				return
+			}
 		}
 		kind, pieces, msg := classifyEventData(data)
 		switch kind {
@@ -184,44 +190,47 @@ func extractTextFromSSEJSONBlobs(payload string) (string, bool) {
 	return joined, joined != ""
 }
 
-func framesFromTextDeltas(model, responseID string, deltas []string, _ bool) []string {
-	now := time.Now().Unix()
-	frames := make([]string, 0, len(deltas)+2)
-	first := true
-	for _, delta := range deltas {
-		if delta == "" {
+func framesFromPlainResponsesJSON(model, responseID string, raw []byte) ([]string, error) {
+	calls := ExtractToolCallsFromResponses(raw)
+	text, textErr := extractOutputText(raw)
+	if len(calls) > 0 {
+		var deltas []string
+		if textErr == nil && strings.TrimSpace(text) != "" {
+			deltas = []string{text}
+		}
+		state := newToolCallStreamState()
+		for i, call := range calls {
+			acc := state.ensure(i)
+			acc.ID = stringField(call, "id")
+			if fn, ok := call["function"].(map[string]any); ok {
+				acc.Name = stringField(fn, "name")
+				acc.Args = stringField(fn, "arguments")
+			}
+		}
+		return framesFromTextAndTools(model, responseID, deltas, state), nil
+	}
+	if textErr != nil {
+		return nil, textErr
+	}
+	return framesFromTextAndTools(model, responseID, []string{text}, nil), nil
+}
+
+func extractToolCallsFromSSEBlobs(payload string) []map[string]any {
+	var all []map[string]any
+	for _, line := range strings.Split(payload, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
-		deltaMap := map[string]any{"content": delta}
-		if first {
-			deltaMap["role"] = "assistant"
-			first = false
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if data == "" || data == "[DONE]" {
+			continue
 		}
-		chunk := map[string]any{
-			"id":      responseID,
-			"object":  "chat.completion.chunk",
-			"created": now,
-			"model":   model,
-			"choices": []any{map[string]any{
-				"index": 0,
-				"delta": deltaMap,
-			}},
+		if calls := ExtractToolCallsFromResponses([]byte(data)); len(calls) > 0 {
+			all = append(all, calls...)
 		}
-		frames = append(frames, mustDataFrame(chunk))
 	}
-	final := map[string]any{
-		"id":      responseID,
-		"object":  "chat.completion.chunk",
-		"created": now,
-		"model":   model,
-		"choices": []any{map[string]any{
-			"index":         0,
-			"delta":         map[string]any{},
-			"finish_reason": "stop",
-		}},
-	}
-	frames = append(frames, mustDataFrame(final), "data: [DONE]\n\n")
-	return frames
+	return all
 }
 
 func framesFromStreamError(model, responseID, msg string) []string {
