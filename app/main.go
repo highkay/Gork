@@ -128,7 +128,16 @@ func newAppRouter(options AppOptions) http.Handler {
 			w.Header().Set("Content-Type", "text/plain; version=0.0.4")
 			_, _ = w.Write([]byte(observability.MetricsText()))
 		case r.URL.Path == "/health":
+			// Liveness: process is up. Keep response shape stable for Docker healthcheck.
 			writeAppJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+		case r.URL.Path == "/readyz":
+			// Readiness: config loadable + account pool non-empty. 503 when not ready.
+			snapshot := evaluateAppReadiness(r.Context())
+			status := http.StatusServiceUnavailable
+			if snapshot.Ready {
+				status = http.StatusOK
+			}
+			writeAppJSON(w, status, snapshot)
 		case r.URL.Path == "/favicon.ico":
 			serveAppFavicon(w, r, options.StaticsRoot)
 		case strings.HasPrefix(r.URL.Path, "/static/"):

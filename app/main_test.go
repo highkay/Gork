@@ -17,6 +17,11 @@ import (
 
 func TestNewAppRoutesHealthStaticFaviconAndProductRouters(t *testing.T) {
 	stubAppMainRequestMiddleware(t)
+	// /readyz 依赖账号探针；主路由表测试固定为 ready，避免触碰真实目录。
+	appMainReadinessConfig = func(context.Context) error { return nil }
+	appMainReadinessAccounts = func(context.Context) (readinessAccountProbe, error) {
+		return readinessAccountProbe{Total: 1, Available: 1}, nil
+	}
 	staticRoot := t.TempDir()
 	if err := os.WriteFile(filepath.Join(staticRoot, "app.js"), []byte("console.log('ok')"), 0o644); err != nil {
 		t.Fatal(err)
@@ -32,6 +37,9 @@ func TestNewAppRoutesHealthStaticFaviconAndProductRouters(t *testing.T) {
 	})
 
 	assertAppResponse(t, app.Handler(), http.MethodGet, "/health", "", http.StatusOK, `"status":"ok"`)
+	// /readyz 与 /health 分流：liveness 永远 ok；readiness 结构化 ready 字段。
+	assertAppResponse(t, app.Handler(), http.MethodGet, "/readyz", "", http.StatusOK, `"ready":true`)
+	assertAppResponse(t, app.Handler(), http.MethodGet, "/readyz", "", http.StatusOK, `"state":"ready"`)
 	assertAppResponse(t, app.Handler(), http.MethodGet, "/static/app.js", "", http.StatusOK, "console.log")
 	assertAppResponse(t, app.Handler(), http.MethodGet, "/favicon.ico", "", http.StatusOK, "ico")
 	assertAppResponse(t, app.Handler(), http.MethodGet, "/v1/models", "", http.StatusOK, "openai")
@@ -249,6 +257,9 @@ func resetAppMainDeps(t *testing.T) {
 	oldStartAccountDirectory := appMainStartAccountDirectory
 	oldStartRefreshRuntime := appMainStartRefreshRuntime
 	oldStartProxyScheduler := appMainStartProxyScheduler
+	oldReadinessNow := appMainReadinessNow
+	oldReadinessConfig := appMainReadinessConfig
+	oldReadinessAccounts := appMainReadinessAccounts
 	t.Cleanup(func() {
 		appMainEnsureConfig = oldEnsureConfig
 		appMainLoadRequestConfig = oldLoadRequestConfig
@@ -262,6 +273,9 @@ func resetAppMainDeps(t *testing.T) {
 		appMainStartAccountDirectory = oldStartAccountDirectory
 		appMainStartRefreshRuntime = oldStartRefreshRuntime
 		appMainStartProxyScheduler = oldStartProxyScheduler
+		appMainReadinessNow = oldReadinessNow
+		appMainReadinessConfig = oldReadinessConfig
+		appMainReadinessAccounts = oldReadinessAccounts
 	})
 }
 
