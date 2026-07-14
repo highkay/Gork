@@ -47,20 +47,7 @@ jobs:
           GITLEAKS_ENABLE_SUMMARY: true
         continue-on-error: true
 
-  pip-audit:
-    name: Python Dependency Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-      - name: Export requirements
-        run: uv export --frozen --no-dev --format requirements-txt -o /tmp/req.txt
-      - name: Run pip-audit
-        run: |
-          uvx pip-audit -r /tmp/req.txt --progress-spinner off \
-            --ignore-vuln PYSEC-2026-161
-          echo "Dependency audit passed"
+  # 纯 Go 仓库：不再跑 Python pip-audit（历史遗留）
 
   govulncheck:
     name: Go Module Vulnerability Scan
@@ -70,7 +57,8 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          # 使用较新补丁版本以覆盖 go.mod 最低版本，便于标准库安全修复
+          go-version: "1.26.5"
           cache: true
       - name: Run govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
@@ -81,7 +69,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan repository filesystem
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -99,7 +87,7 @@ jobs:
       - name: Build local image
         run: docker build -t gork-security-scan:${{ github.sha }} .
       - name: Scan local image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: gork-security-scan:${{ github.sha }}
           vuln-type: os,library
