@@ -40,6 +40,7 @@ func TestAuthSettingsHelpersMatchPython(t *testing.T) {
 }
 
 func TestVerifyAPIKeyAllowsDisabledBearerAndXAPIKey(t *testing.T) {
+	ResetAPIKeyUsageForTest()
 	if err := VerifyAPIKey("", "", AuthSettings{}); err != nil {
 		t.Fatalf("disabled API key should allow request: %v", err)
 	}
@@ -50,8 +51,28 @@ func TestVerifyAPIKeyAllowsDisabledBearerAndXAPIKey(t *testing.T) {
 	if err := VerifyAPIKey("", "beta", settings); err != nil {
 		t.Fatalf("x-api-key rejected: %v", err)
 	}
+	usage := SnapshotAPIKeyUsage()
+	if usage[APIKeyFingerprint("alpha")] != 1 || usage[APIKeyFingerprint("beta")] != 1 {
+		t.Fatalf("api key usage audit = %#v", usage)
+	}
 	assertAuthError(t, VerifyAPIKey("", "", settings), 401, "Missing or invalid Authorization header.")
 	assertAuthError(t, VerifyAPIKey("Bearer wrong", "", settings), 403, "Invalid API key.")
+}
+
+func TestMatchAPIKeyMultiKeyAndFingerprint(t *testing.T) {
+	ResetAPIKeyUsageForTest()
+	allowed := []string{"k-one", "k-two"}
+	match, ok := MatchAPIKey("k-two", allowed)
+	if !ok || match.Index != 1 || match.Fingerprint != APIKeyFingerprint("k-two") {
+		t.Fatalf("match=%#v ok=%v", match, ok)
+	}
+	if _, ok := MatchAPIKey("nope", allowed); ok {
+		t.Fatal("expected miss")
+	}
+	// 不强制 g2a_ 前缀：任意字符串 key 均可用。
+	if _, ok := MatchAPIKey("plain-legacy", []string{"plain-legacy"}); !ok {
+		t.Fatal("legacy key should match without g2a_ prefix")
+	}
 }
 
 func TestVerifyAdminKeyMatchesHeaderAndQueryBehavior(t *testing.T) {

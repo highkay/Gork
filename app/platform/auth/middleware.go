@@ -91,10 +91,9 @@ func VerifyAPIKey(authorization, xAPIKey string, settings AuthSettings) error {
 	if token == "" {
 		return authHTTPError(401, "Missing or invalid Authorization header.")
 	}
-	for _, key := range allowed {
-		if constantTimeStringEqual(token, key) {
-			return nil
-		}
+	// 多 key 兼容：逗号/数组均已在 GetAPIKeys 展开；命中即记审计计数。
+	if _, matched := MatchAPIKey(token, allowed); matched {
+		return nil
 	}
 	return authHTTPError(403, "Invalid API key.")
 }
