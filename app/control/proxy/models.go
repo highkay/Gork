@@ -10,7 +10,33 @@ type ProxyScope string
 const (
 	ProxyScopeApp   ProxyScope = "app"
 	ProxyScopeAsset ProxyScope = "asset"
+	// 逻辑 scope（W2.4 草案）：对外语义对齐 chen build/web/console；
+	// 运行时经 NormalizeProxyScope 映射到 app/asset，默认全映射到 app。
+	ProxyScopeBuild   ProxyScope = "build"
+	ProxyScopeWeb     ProxyScope = "web"
+	ProxyScopeConsole ProxyScope = "console"
 )
+
+// NormalizeProxyScope 将逻辑 scope 归一为物理 scope（app/asset）。
+// 未知/空 → app；asset/build 资源类可走 asset（见 map 配置）。
+func NormalizeProxyScope(scope ProxyScope) ProxyScope {
+	switch scope {
+	case "", ProxyScopeApp, ProxyScopeBuild, ProxyScopeWeb, ProxyScopeConsole:
+		return ProxyScopeApp
+	case ProxyScopeAsset:
+		return ProxyScopeAsset
+	default:
+		// 兼容别名
+		switch string(scope) {
+		case "grok_build", "grok_web", "grok_console":
+			return ProxyScopeApp
+		case "grok_web_asset", "resource":
+			return ProxyScopeAsset
+		default:
+			return ProxyScopeApp
+		}
+	}
+}
 
 type RequestKind string
 

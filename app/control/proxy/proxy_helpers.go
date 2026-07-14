@@ -28,6 +28,9 @@ func defaultAcquireOptions(options ...AcquireOptions) AcquireOptions {
 			option.Kind = RequestKindHTTP
 		}
 	}
+	// W2.4：逻辑 scope 归一；未配专用出口时行为与 app 一致（零变化）。
+	option.Scope = NormalizeProxyScope(option.Scope)
+	// Resource 流量仍按 Resource 标志选 resource 节点；scope 仅元数据。
 	return option
 }
 

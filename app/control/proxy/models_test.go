@@ -10,6 +10,18 @@ func TestProxyEnumValuesMatchPython(t *testing.T) {
 	if ProxyScopeApp != "app" || ProxyScopeAsset != "asset" {
 		t.Fatalf("proxy scope values changed")
 	}
+	if ProxyScopeBuild != "build" || ProxyScopeWeb != "web" || ProxyScopeConsole != "console" {
+		t.Fatalf("logical proxy scope values changed")
+	}
+	if got := NormalizeProxyScope(ProxyScopeConsole); got != ProxyScopeApp {
+		t.Fatalf("NormalizeProxyScope(console)=%q want app", got)
+	}
+	if got := NormalizeProxyScope(ProxyScopeAsset); got != ProxyScopeAsset {
+		t.Fatalf("NormalizeProxyScope(asset)=%q", got)
+	}
+	if got := NormalizeProxyScope(ProxyScope("grok_web_asset")); got != ProxyScopeAsset {
+		t.Fatalf("NormalizeProxyScope(grok_web_asset)=%q", got)
+	}
 	if RequestKindHTTP != "http" || RequestKindWebSocket != "websocket" || RequestKindGRPC != "grpc" {
 		t.Fatalf("request kind values changed")
 	}
