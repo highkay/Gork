@@ -11,6 +11,7 @@ import (
 
 // ChatStreamFramesFromResponsesSSE 将 Build /responses SSE（或整包 JSON）转为
 // OpenAI chat.completion.chunk 的 data 帧列表（含末尾 data: [DONE]）。
+// 对齐 chenyme #626：上游 error/failed 之后的事件忽略，不发成功 stop。
 func ChatStreamFramesFromResponsesSSE(model, responseID string, r io.Reader) ([]string, error) {
 	if responseID == "" {
 		responseID = "chatcmpl-build"
@@ -29,31 +30,40 @@ func ChatStreamFramesFromResponsesSSE(model, responseID string, r io.Reader) ([]
 		if err != nil {
 			return nil, err
 		}
-		return framesFromTextDeltas(model, responseID, []string{text}), nil
+		return framesFromTextDeltas(model, responseID, []string{text}, false), nil
 	}
-	deltas, err := collectSSETextDeltas(trimmed)
+	parsed, err := collectSSEStream(trimmed)
 	if err != nil {
 		return nil, err
 	}
-	if len(deltas) == 0 {
-		// 尝试从 SSE data 里拼最终 JSON
+	if parsed.failed {
+		return framesFromStreamError(model, responseID, parsed.errMsg), nil
+	}
+	if len(parsed.deltas) == 0 {
 		if text, ok := extractTextFromSSEJSONBlobs(trimmed); ok {
-			return framesFromTextDeltas(model, responseID, []string{text}), nil
+			return framesFromTextDeltas(model, responseID, []string{text}, false), nil
 		}
 		return nil, fmt.Errorf("build stream 无可用文本 delta")
 	}
-	return framesFromTextDeltas(model, responseID, deltas), nil
+	return framesFromTextDeltas(model, responseID, parsed.deltas, false), nil
 }
 
-func collectSSETextDeltas(payload string) ([]string, error) {
-	var deltas []string
+type sseStreamParse struct {
+	deltas []string
+	failed bool
+	errMsg string
+}
+
+func collectSSEStream(payload string) (sseStreamParse, error) {
+	var out sseStreamParse
 	scanner := bufio.NewScanner(strings.NewReader(payload))
-	// 单行可能很长
 	buf := make([]byte, 0, 64*1024)
 	scanner.Buffer(buf, 2<<20)
 	var dataLines []string
+	finished := false
 	flush := func() {
-		if len(dataLines) == 0 {
+		if finished || len(dataLines) == 0 {
+			dataLines = nil
 			return
 		}
 		data := strings.TrimSpace(strings.Join(dataLines, "\n"))
@@ -61,11 +71,23 @@ func collectSSETextDeltas(payload string) ([]string, error) {
 		if data == "" || data == "[DONE]" {
 			return
 		}
-		if pieces := textDeltasFromEventData(data); len(pieces) > 0 {
-			deltas = append(deltas, pieces...)
+		kind, pieces, msg := classifyEventData(data)
+		switch kind {
+		case eventKindError:
+			out.failed = true
+			out.errMsg = msg
+			finished = true
+		case eventKindDelta:
+			out.deltas = append(out.deltas, pieces...)
+		case eventKindTerminal:
+			finished = true
 		}
 	}
 	for scanner.Scan() {
+		if finished {
+			// 错误/终态后忽略后续行（#626）
+			continue
+		}
 		line := scanner.Text()
 		if line == "" {
 			flush()
@@ -73,43 +95,74 @@ func collectSSETextDeltas(payload string) ([]string, error) {
 		}
 		if strings.HasPrefix(line, "data:") {
 			dataLines = append(dataLines, strings.TrimSpace(strings.TrimPrefix(line, "data:")))
-			continue
 		}
-		// 忽略 event:/id:/retry:
 	}
-	flush()
+	if !finished {
+		flush()
+	}
 	if err := scanner.Err(); err != nil {
-		return nil, err
+		return out, err
 	}
-	return deltas, nil
+	return out, nil
 }
 
-func textDeltasFromEventData(data string) []string {
+const (
+	eventKindIgnore   = 0
+	eventKindDelta    = 1
+	eventKindError    = 2
+	eventKindTerminal = 3
+)
+
+func classifyEventData(data string) (kind int, deltas []string, errMsg string) {
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(data), &payload); err != nil {
-		return nil
+		return eventKindIgnore, nil, ""
 	}
 	typ, _ := payload["type"].(string)
 	switch typ {
+	case "response.failed", "error", "response.error":
+		msg := extractStreamErrorMessage(payload)
+		if msg == "" {
+			msg = "upstream stream failed"
+		}
+		return eventKindError, nil, msg
 	case "response.output_text.delta", "response.text.delta", "response.content_part.delta":
 		if s := stringField(payload, "delta"); s != "" {
-			return []string{s}
+			return eventKindDelta, []string{s}, ""
 		}
 		if s := stringField(payload, "text"); s != "" {
-			return []string{s}
+			return eventKindDelta, []string{s}, ""
 		}
-	case "response.output_text.done", "response.completed", "response.done":
-		// 结束事件不产生 delta
-		return nil
+		return eventKindIgnore, nil, ""
+	case "response.completed", "response.done", "response.output_text.done":
+		return eventKindTerminal, nil, ""
 	}
-	// 无 type：尝试 output_text / choices
 	if s := stringField(payload, "delta"); s != "" {
-		return []string{s}
+		return eventKindDelta, []string{s}, ""
 	}
 	if s, err := extractOutputText([]byte(data)); err == nil && s != "" {
-		return []string{s}
+		return eventKindDelta, []string{s}, ""
 	}
-	return nil
+	return eventKindIgnore, nil, ""
+}
+
+func extractStreamErrorMessage(payload map[string]any) string {
+	if s := stringField(payload, "message"); s != "" {
+		return s
+	}
+	if errObj, ok := payload["error"].(map[string]any); ok {
+		if s := stringField(errObj, "message"); s != "" {
+			return s
+		}
+	}
+	if resp, ok := payload["response"].(map[string]any); ok {
+		if errObj, ok := resp["error"].(map[string]any); ok {
+			if s := stringField(errObj, "message"); s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 func extractTextFromSSEJSONBlobs(payload string) (string, bool) {
@@ -131,10 +184,9 @@ func extractTextFromSSEJSONBlobs(payload string) (string, bool) {
 	return joined, joined != ""
 }
 
-func framesFromTextDeltas(model, responseID string, deltas []string) []string {
+func framesFromTextDeltas(model, responseID string, deltas []string, _ bool) []string {
 	now := time.Now().Unix()
 	frames := make([]string, 0, len(deltas)+2)
-	// 首帧带 role
 	first := true
 	for _, delta := range deltas {
 		if delta == "" {
@@ -157,7 +209,6 @@ func framesFromTextDeltas(model, responseID string, deltas []string) []string {
 		}
 		frames = append(frames, mustDataFrame(chunk))
 	}
-	// 结束帧
 	final := map[string]any{
 		"id":      responseID,
 		"object":  "chat.completion.chunk",
@@ -171,6 +222,23 @@ func framesFromTextDeltas(model, responseID string, deltas []string) []string {
 	}
 	frames = append(frames, mustDataFrame(final), "data: [DONE]\n\n")
 	return frames
+}
+
+func framesFromStreamError(model, responseID, msg string) []string {
+	now := time.Now().Unix()
+	chunk := map[string]any{
+		"id":      responseID,
+		"object":  "chat.completion.chunk",
+		"created": now,
+		"model":   model,
+		"choices": []any{map[string]any{
+			"index":         0,
+			"delta":         map[string]any{},
+			"finish_reason": "error",
+		}},
+		"error": map[string]any{"message": msg},
+	}
+	return []string{mustDataFrame(chunk), "data: [DONE]\n\n"}
 }
 
 func mustDataFrame(payload any) string {

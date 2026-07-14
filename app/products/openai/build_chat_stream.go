@@ -6,11 +6,27 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/dslzl/gork/app/control/buildaccount"
 	"github.com/dslzl/gork/app/dataplane/build"
 	"github.com/dslzl/gork/app/platform"
 )
+
+// sessionSeedFromMessages 用末条用户文本作 prompt cache 会话种子（无显式键时）。
+func sessionSeedFromMessages(msgs []build.ChatMessage) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if strings.EqualFold(strings.TrimSpace(msgs[i].Role), "user") {
+			if s := strings.TrimSpace(msgs[i].Content); s != "" {
+				if len(s) > 256 {
+					return s[:256]
+				}
+				return s
+			}
+		}
+	}
+	return ""
+}
 
 // runBuildCompletion 在已选定账号列表上尝试推理（非流/流式共用选号循环）。
 func runBuildCompletion(
@@ -24,12 +40,18 @@ func runBuildCompletion(
 	oauth buildTokenRefresher,
 ) (chatCompletionResult, error) {
 	msgs := build.ExtractChatMessages(options.Messages)
+	cacheKey := build.ResolvePromptCacheKey(
+		build.PromptCacheKeyFromOverrides(options.RequestOverrides),
+		sessionSeedFromMessages(msgs),
+		upstream,
+	)
 	body, err := build.BuildResponsesBodyOpts(build.ResponsesBodyOptions{
-		Model:      upstream,
-		Messages:   msgs,
-		Stream:     stream,
-		Tools:      options.Tools,
-		ToolChoice: options.ToolChoice,
+		Model:          upstream,
+		Messages:       msgs,
+		Stream:         stream,
+		Tools:          options.Tools,
+		ToolChoice:     options.ToolChoice,
+		PromptCacheKey: cacheKey,
 	})
 	if err != nil {
 		return chatCompletionResult{}, platform.NewUpstreamError(err.Error(), 400, "")

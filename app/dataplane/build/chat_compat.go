@@ -15,11 +15,12 @@ type ChatMessage struct {
 
 // ResponsesBodyOptions 构造 Build POST /responses 请求体。
 type ResponsesBodyOptions struct {
-	Model      string
-	Messages   []ChatMessage
-	Stream     bool
-	Tools      []map[string]any
-	ToolChoice any
+	Model          string
+	Messages       []ChatMessage
+	Stream         bool
+	Tools          []map[string]any
+	ToolChoice     any
+	PromptCacheKey string // 已解析的上游 prompt_cache_key；空则不注入
 }
 
 // BuildResponsesBody 将 chat messages 转为 Build POST /responses 请求体。
@@ -78,6 +79,9 @@ func BuildResponsesBodyOpts(opts ResponsesBodyOptions) ([]byte, error) {
 	}
 	if opts.ToolChoice != nil {
 		payload["tool_choice"] = opts.ToolChoice
+	}
+	if key := strings.TrimSpace(opts.PromptCacheKey); key != "" {
+		payload["prompt_cache_key"] = key
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
