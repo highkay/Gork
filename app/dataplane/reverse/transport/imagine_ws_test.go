@@ -122,6 +122,22 @@ func TestStreamImagesReconnectsWhenServerClosesBeforeEnoughImages(t *testing.T) 
 	assertImagineFeedback(t, runtime.feedbacks, 1, controlproxy.ProxyFeedbackSuccess, imagineIntPtr(200))
 }
 
+func TestSendImagineRoundStartUsesWriteTimeout(t *testing.T) {
+	conn := &fakeImagineWriteHangConn{}
+	started := time.Now()
+	err := sendImagineRoundStart(context.Background(), conn, imagineRoundOptions{
+		Prompt:        "prompt",
+		StreamTimeout: 30 * time.Millisecond,
+	})
+	elapsed := time.Since(started)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	if elapsed < 25*time.Millisecond || elapsed > 500*time.Millisecond {
+		t.Fatalf("write timeout elapsed=%v, want ~30ms", elapsed)
+	}
+}
+
 func TestStreamImagineRoundHandlesSendFailureAndSlotTimeout(t *testing.T) {
 	sendFailure := &fakeImagineWebSocketConn{sendErr: errors.New("write failed")}
 	result, err := streamImagineRound(context.Background(), sendFailure, imagineRoundOptions{
@@ -360,6 +376,20 @@ type fakeImagineWebSocketConn struct {
 	sendErr  error
 	closed   bool
 }
+
+// fakeImagineWriteHangConn 模拟底层写阻塞，直到 context 截止（对齐 WriteDeadline 语义）。
+type fakeImagineWriteHangConn struct{}
+
+func (c *fakeImagineWriteHangConn) SendJSON(ctx context.Context, _ map[string]any) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (c *fakeImagineWriteHangConn) Receive(context.Context, time.Duration) (ImagineWebSocketMessage, error) {
+	return ImagineWebSocketMessage{}, context.DeadlineExceeded
+}
+
+func (c *fakeImagineWriteHangConn) Close() error { return nil }
 
 func (c *fakeImagineWebSocketConn) SendJSON(_ context.Context, payload map[string]any) error {
 	if c.sendErr != nil {
