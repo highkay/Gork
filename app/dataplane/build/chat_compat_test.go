@@ -23,8 +23,13 @@ func TestBuildResponsesBodyMinimal(t *testing.T) {
 	if payload["instructions"] != "be brief" {
 		t.Fatalf("instructions=%v", payload["instructions"])
 	}
-	if payload["input"] != "User: hi" {
-		t.Fatalf("input=%v", payload["input"])
+	items, ok := payload["input"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("input=%#v", payload["input"])
+	}
+	msg := items[0].(map[string]any)
+	if msg["type"] != "message" || msg["role"] != "user" || msg["content"] != "hi" {
+		t.Fatalf("msg=%#v", msg)
 	}
 	if payload["stream"] != false {
 		t.Fatalf("stream=%v", payload["stream"])

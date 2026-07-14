@@ -7,10 +7,13 @@ import (
 	"time"
 )
 
-// ChatMessage 是 OpenAI chat messages 的最小子集。
+// ChatMessage 是 OpenAI chat messages 的最小子集（含多轮 tool 历史）。
 type ChatMessage struct {
-	Role    string
-	Content string
+	Role       string
+	Content    string
+	Name       string
+	ToolCallID string
+	ToolCalls  []map[string]any
 }
 
 // ResponsesBodyOptions 构造 Build POST /responses 请求体。
@@ -38,36 +41,17 @@ func BuildResponsesBodyOpts(opts ResponsesBodyOptions) ([]byte, error) {
 	if model == "" {
 		return nil, fmt.Errorf("build responses model 为空")
 	}
-	var systemParts []string
-	var turns []string
-	for _, msg := range opts.Messages {
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		text := strings.TrimSpace(msg.Content)
-		if text == "" {
-			continue
-		}
-		switch role {
-		case "system", "developer":
-			systemParts = append(systemParts, text)
-		case "assistant":
-			turns = append(turns, "Assistant: "+text)
-		case "tool":
-			turns = append(turns, "Tool: "+text)
-		default:
-			turns = append(turns, "User: "+text)
-		}
-	}
-	input := strings.TrimSpace(strings.Join(turns, "\n"))
-	if input == "" {
-		return nil, fmt.Errorf("empty message after chat→responses conversion")
+	instructions, input, err := BuildResponsesInput(opts.Messages)
+	if err != nil {
+		return nil, err
 	}
 	payload := map[string]any{
 		"model":  model,
 		"input":  input,
 		"stream": opts.Stream,
 	}
-	if len(systemParts) > 0 {
-		payload["instructions"] = strings.Join(systemParts, "\n\n")
+	if strings.TrimSpace(instructions) != "" {
+		payload["instructions"] = instructions
 	}
 	if len(opts.Tools) > 0 {
 		normalized, err := NormalizeChatTools(opts.Tools)
@@ -148,16 +132,34 @@ func ChatCompletionFromResponsesJSON(model, responseID string, raw []byte) (map[
 	}, nil
 }
 
-// ExtractChatMessages 从 []map[string]any 抽出 role/content 文本。
+// ExtractChatMessages 从 []map[string]any 抽出 role/content 与 tool 历史字段。
 func ExtractChatMessages(messages []map[string]any) []ChatMessage {
 	out := make([]ChatMessage, 0, len(messages))
 	for _, item := range messages {
 		role, _ := item["role"].(string)
 		content := flattenContent(item["content"])
-		if strings.TrimSpace(role) == "" && strings.TrimSpace(content) == "" {
+		name, _ := item["name"].(string)
+		toolCallID, _ := item["tool_call_id"].(string)
+		var toolCalls []map[string]any
+		if raw, ok := item["tool_calls"].([]map[string]any); ok {
+			toolCalls = raw
+		} else if raw, ok := item["tool_calls"].([]any); ok {
+			for _, entry := range raw {
+				if m, ok := entry.(map[string]any); ok {
+					toolCalls = append(toolCalls, m)
+				}
+			}
+		}
+		if strings.TrimSpace(role) == "" && strings.TrimSpace(content) == "" && len(toolCalls) == 0 {
 			continue
 		}
-		out = append(out, ChatMessage{Role: role, Content: content})
+		out = append(out, ChatMessage{
+			Role:       role,
+			Content:    content,
+			Name:       name,
+			ToolCallID: toolCallID,
+			ToolCalls:  toolCalls,
+		})
 	}
 	return out
 }
