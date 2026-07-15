@@ -9,20 +9,30 @@
   <link href="/static/css/app.css?v={{APP_VERSION}}" rel="stylesheet">
   <style>
     body { background: #FAF9F5 }
-    .page-hd { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; gap:12px; flex-wrap:wrap }
+    .page-hd { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap }
     .page-title { font-size:22px; font-weight:700; line-height:1.2 }
     .page-sub { font-size:13px; color:var(--fg-muted); margin-top:5px; max-width:720px }
     .page-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
     .page-action-btn {
-      height:32px; padding:0 14px; border-radius:999px;
+      height:34px; padding:0 14px; border-radius:999px;
       display:inline-flex; align-items:center; justify-content:center; gap:6px;
       font-size:13px; font-weight:600; cursor:pointer;
       border:1px solid #e6e6e6; background:#fafafa; color:#444;
+      white-space:nowrap;
     }
     .page-action-btn:hover { background:#f3f3f3; border-color:#dcdcdc }
     .page-action-btn-primary { background:#111; border-color:#111; color:#fff }
     .page-action-btn-primary:hover { background:#222; border-color:#222 }
     .page-action-btn:disabled { opacity:.45; cursor:not-allowed }
+    .list-toolbar {
+      display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+      margin:0 0 12px; padding:10px 12px; border-radius:12px;
+      background:#f7f7f5; border:1px solid #ececec;
+    }
+    .list-toolbar .toolbar-label {
+      font-size:12px; font-weight:700; color:#555; margin-right:4px;
+    }
+    .list-toolbar .page-action-btn-primary { background:#111; color:#fff }
     .grid-2 { display:grid; grid-template-columns:1.25fr .75fr; gap:16px }
     @media (max-width: 980px) { .grid-2 { grid-template-columns:1fr } }
     .card {
@@ -90,26 +100,31 @@
 </head>
 <body>
   <div id="admin-header" data-active="/admin/build"></div>
-  <main class="admin-main" style="max-width:1280px;margin:0 auto;padding:24px 20px 48px">
+  <main class="admin-main" style="max-width:1280px;margin:0 auto;padding:28px 20px 48px">
     <div class="page-hd">
       <div>
         <div class="page-title">Build 账号</div>
         <div class="page-sub">
           独立 Build 池：Device OAuth / 分片导入 / 配额同步 / 过期清理。Token 不回显；开启 features.build_provider 后模型为 build/&lt;upstream&gt;。
+          Free 号上游 /billing 常为 0 额度；列表展示对齐 chenyme 的「约 used / 1,000,000 tokens」估算口径。
         </div>
       </div>
       <div class="page-actions">
-        <button type="button" class="page-action-btn" id="btn-refresh">刷新</button>
-        <button type="button" class="page-action-btn" id="btn-batch-billing">批量同步配额</button>
-        <button type="button" class="page-action-btn" id="btn-batch-refresh">批量刷新 Token</button>
-        <button type="button" class="page-action-btn" id="btn-cleanup-expired">清理过期</button>
+        <button type="button" class="page-action-btn" id="btn-refresh">刷新列表</button>
       </div>
     </div>
 
     <div class="grid-2">
       <section class="card">
         <div class="card-title">账号列表</div>
-        <div class="card-sub">支持状态 / 是否过期 / 是否已同步配额 / 关键词筛选。</div>
+        <div class="card-sub">支持状态 / 是否过期 / 是否已同步配额 / 关键词筛选。批量操作见下方工具条。</div>
+        <div class="list-toolbar" id="list-toolbar" role="toolbar" aria-label="Build 批量操作">
+          <span class="toolbar-label">批量操作</span>
+          <button type="button" class="page-action-btn page-action-btn-primary" id="btn-batch-billing">批量同步配额</button>
+          <button type="button" class="page-action-btn" id="btn-batch-refresh">批量刷新 Token</button>
+          <button type="button" class="page-action-btn" id="btn-cleanup-expired">清理过期</button>
+          <button type="button" class="page-action-btn" id="btn-cleanup-invalid">清理失效</button>
+        </div>
         <div class="facets" id="facets"></div>
         <div class="filters">
           <select id="filter-status">
@@ -243,29 +258,47 @@ function tokenFlags(row) {
   return `${row.has_access_token ? 'AT' : '—'}/${row.has_refresh_token ? 'RT' : '—'}`;
 }
 
+// 对齐 chenyme estimatedFreeTokenLimit=1_000_000（limitKnown=false 时 UI 显示「约 used / 1M」）
+const ESTIMATED_FREE_TOKEN_LIMIT = 1000000;
+
 function fmtBilling(row) {
   const b = row.billing || null;
   const synced = row.billing_synced_at || (b && b.synced_at) || '';
   if (!b && !synced) {
     return `<span class="muted" style="font-size:12px">未同步</span>`;
   }
-  // free 号上游常返回合法全 0；已同步则展示 0/0，禁止误报「无配额数据」
-  const plan = (b && (b.plan_name || b.plan_code)) || (b && b.is_unified_billing_user ? '免费/统一计费' : '免费·零额度');
-  const used = b ? (Number(b.used) || 0) : 0;
-  const limit = b ? (Number(b.monthly_limit) || 0) : 0;
+  const monthlyLimit = b ? (Number(b.monthly_limit) || 0) : 0;
+  const monthlyUsed = b ? (Number(b.used) || 0) : 0;
   const odCap = b ? (Number(b.on_demand_cap) || 0) : 0;
   const odUsed = b ? (Number(b.on_demand_used) || 0) : 0;
   const prepaid = b ? (Number(b.prepaid_balance) || 0) : 0;
-  let usage = `${used.toFixed(2)} / ${limit.toFixed(2)}`;
+  const unified = !!(b && b.is_unified_billing_user);
+  const planName = (b && (b.plan_name || b.plan_code)) || '';
+  // paid：有月额度；free：统一计费 / 无 plan / 月额度 0 —— 展示估算 1M tokens（与 chen 一致）
+  const isFreeProfile = !planName && monthlyLimit <= 0 && odCap <= 0 && prepaid <= 0;
+  const period = b && (b.usage_period_type || b.billing_period_start)
+    ? [b.usage_period_type, b.billing_period_start, b.billing_period_end].filter(Boolean).join(' ')
+    : '';
+
+  if (isFreeProfile) {
+    // 尚无 rolling 观测 used 时显示 0；文案对齐阿里云「约 0 / 1,000,000 tokens」
+    const usedTokens = 0;
+    const plan = unified ? 'Free' : 'Free';
+    return `<div style="font-size:12px;font-weight:600">${esc(plan)}</div>
+      <div class="mono" style="font-size:12px">约 ${usedTokens.toLocaleString()} / ${ESTIMATED_FREE_TOKEN_LIMIT.toLocaleString()} tokens</div>
+      <div class="muted" style="font-size:11px">估算额度 · 上游 billing 月额为 0</div>
+      ${period ? `<div class="muted" style="font-size:11px">${esc(period)}</div>` : ''}
+      <div class="muted" style="font-size:11px">${esc(fmtTime(synced))}</div>`;
+  }
+
+  const plan = planName || '付费/月度';
+  let usage = `${monthlyUsed.toFixed(2)} / ${monthlyLimit.toFixed(2)}`;
   if (odCap > 0 || odUsed > 0) {
     usage += ` · OD ${odUsed.toFixed(2)}/${odCap.toFixed(2)}`;
   }
   if (prepaid > 0) {
     usage += ` · 预付 ${prepaid.toFixed(2)}`;
   }
-  const period = b && (b.usage_period_type || b.billing_period_start)
-    ? [b.usage_period_type, b.billing_period_start, b.billing_period_end].filter(Boolean).join(' ')
-    : '';
   return `<div style="font-size:12px;font-weight:600">${esc(plan)}</div>
     <div class="mono" style="font-size:12px">${esc(usage)}</div>
     ${period ? `<div class="muted" style="font-size:11px">${esc(period)}</div>` : ''}
@@ -618,6 +651,10 @@ function bind() {
   document.getElementById('btn-cleanup-expired').addEventListener('click', () => {
     if (!confirm('软删除全部 token 已过期的 Build 账号？')) return;
     runAsyncJob('/build-accounts/cleanup', { mode: 'expired' }, '清理过期');
+  });
+  document.getElementById('btn-cleanup-invalid').addEventListener('click', () => {
+    if (!confirm('软删除 status=expired / 失效账号？')) return;
+    runAsyncJob('/build-accounts/cleanup', { mode: 'invalid' }, '清理失效');
   });
 }
 
