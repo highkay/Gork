@@ -125,10 +125,13 @@ func failSync(ctx context.Context, token string, modeID int, err error) {
 }
 
 func shouldRetryUpstream(err error, retryCodes map[int]struct{}) bool {
+	if isInvalidCredentials(err) {
+		return false
+	}
 	if _, ok := retryCodes[upstreamStatus(err)]; ok {
 		return true
 	}
-	return isInvalidCredentials(err)
+	return false
 }
 
 func feedbackKind(err error) accountFeedbackKind {

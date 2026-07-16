@@ -30,6 +30,16 @@ func (d *ProxyDirectory) WarmUp(ctx context.Context) error {
 }
 
 func (d *ProxyDirectory) RefreshClearanceSafe(ctx context.Context) error {
+	return d.refreshClearance(ctx, nil)
+}
+
+// RefreshClearanceFiltered refreshes clearance bundles but skips keys present
+// in skip (typically those in active cooldown).
+func (d *ProxyDirectory) RefreshClearanceFiltered(ctx context.Context, skip map[BundleKey]bool) error {
+	return d.refreshClearance(ctx, skip)
+}
+
+func (d *ProxyDirectory) refreshClearance(ctx context.Context, skip map[BundleKey]bool) error {
 	mode, nodes, existing := d.refreshSnapshot()
 	if mode == ClearanceModeNone {
 		return nil
@@ -49,6 +59,9 @@ func (d *ProxyDirectory) RefreshClearanceSafe(ctx context.Context) error {
 		}
 	}
 	for key, target := range targets {
+		if skip != nil && skip[key] {
+			continue
+		}
 		bundle, ok, err := d.refreshBundle(ctx, mode, key.Affinity, key.ClearanceHost, target)
 		if err != nil {
 			return err
@@ -66,12 +79,16 @@ func (d *ProxyDirectory) getOrBuildBundle(ctx context.Context, affinityKey, prox
 	host := clearanceHost(origin)
 	key := BundleKey{Affinity: affinityKey, ClearanceHost: host}
 	for {
-		mode, event, winner, bundle := d.bundleRefreshState(key)
+		mode, event, winner, bundle, suppressed := d.bundleRefreshState(key)
 		if mode == ClearanceModeNone {
 			return nil, nil
 		}
 		if bundle != nil {
 			return bundle, nil
+		}
+		// In cooldown with no usable fallback: do not hammer the upstream.
+		if suppressed {
+			return nil, nil
 		}
 		if winner {
 			return d.buildBundleAsWinner(ctx, mode, key, proxyURL, origin, event)
@@ -84,21 +101,33 @@ func (d *ProxyDirectory) getOrBuildBundle(ctx context.Context, affinityKey, prox
 	}
 }
 
-func (d *ProxyDirectory) bundleRefreshState(key BundleKey) (ClearanceMode, *refreshEvent, bool, *ClearanceBundle) {
+// bundleRefreshState resolves the next action for a key.
+// suppressed=true means active cooldown with no fallback — skip refresh.
+func (d *ProxyDirectory) bundleRefreshState(key BundleKey) (ClearanceMode, *refreshEvent, bool, *ClearanceBundle, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.clearanceMode == ClearanceModeNone {
-		return d.clearanceMode, nil, false, nil
+		return d.clearanceMode, nil, false, nil, false
 	}
 	if bundle, ok := d.bundles[key]; ok && bundle.State == ClearanceBundleValid {
-		return d.clearanceMode, nil, false, &bundle
+		return d.clearanceMode, nil, false, &bundle, false
+	}
+	var current *ClearanceBundle
+	if b, ok := d.bundles[key]; ok {
+		current = &b
+	}
+	if fallback := d.cooldownBundleLocked(key, current); fallback != nil {
+		return d.clearanceMode, nil, false, fallback, false
+	}
+	if until, ok := d.refreshBackoffUntil[key]; ok && until > d.clock() {
+		return d.clearanceMode, nil, false, nil, true
 	}
 	if event, ok := d.refreshEvents[key]; ok {
-		return d.clearanceMode, event, false, nil
+		return d.clearanceMode, event, false, nil, false
 	}
 	event := &refreshEvent{done: make(chan struct{})}
 	d.refreshEvents[key] = event
-	return d.clearanceMode, event, true, nil
+	return d.clearanceMode, event, true, nil, false
 }
 
 func (d *ProxyDirectory) buildBundleAsWinner(ctx context.Context, mode ClearanceMode, key BundleKey, proxyURL, origin string, event *refreshEvent) (*ClearanceBundle, error) {
@@ -108,11 +137,13 @@ func (d *ProxyDirectory) buildBundleAsWinner(ctx context.Context, mode Clearance
 		return nil, err
 	}
 	if !ok {
-		d.recordBundleRefreshFailure(key, bundle)
-		return nil, nil
+		d.mu.Lock()
+		fallback := d.recordRefreshFailureLocked(key)
+		d.mu.Unlock()
+		return fallback, nil
 	}
-	bundle = d.recordSuccessfulBundleRefresh(key, bundle)
-	return &bundle, nil
+	out := d.recordSuccessfulBundleRefresh(key, bundle)
+	return &out, nil
 }
 
 func (d *ProxyDirectory) recordSuccessfulBundleRefresh(key BundleKey, bundle ClearanceBundle) ClearanceBundle {
@@ -126,12 +157,17 @@ func (d *ProxyDirectory) recordSuccessfulBundleRefresh(key BundleKey, bundle Cle
 		bundle.RefreshCount++
 	}
 	d.bundles[key] = bundle
+	d.recordRefreshSuccessLocked(key)
 	d.mu.Unlock()
 	return bundle
 }
 
 func (d *ProxyDirectory) recordBundleRefreshFailure(key BundleKey, bundle ClearanceBundle) {
 	if bundle.LastRefreshError == "" {
+		// Still arm backoff when refresh returns no bundle, even without error text.
+		d.mu.Lock()
+		_ = d.recordRefreshFailureLocked(key)
+		d.mu.Unlock()
 		return
 	}
 	if bundle.AffinityKey == "" {
@@ -149,6 +185,7 @@ func (d *ProxyDirectory) recordBundleRefreshFailure(key BundleKey, bundle Cleara
 	} else {
 		d.bundles[key] = bundle
 	}
+	_ = d.recordRefreshFailureLocked(key)
 	d.mu.Unlock()
 }
 

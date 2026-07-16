@@ -192,6 +192,8 @@ func (d *ProxyDirectory) Load(ctx context.Context) error {
 	d.poolCursor = 0
 	d.bundles = invalidateMatchingBundles(d.bundles, validAffinities)
 	d.refreshEvents = filterRefreshEvents(d.refreshEvents, validAffinities)
+	d.refreshBackoffUntil = filterBackoffByAffinity(d.refreshBackoffUntil, validAffinities)
+	d.failureCounts = filterFailureCounts(d.failureCounts, validAffinities)
 	d.configSig = &sig
 	return nil
 }

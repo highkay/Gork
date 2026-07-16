@@ -392,8 +392,11 @@ func TestChatRetryAndFeedbackKind(t *testing.T) {
 		t.Fatalf("400 should not retry")
 	}
 	isInvalidCredentials = func(error) bool { return true }
-	if !shouldRetryUpstream(platform.NewUpstreamError("blocked", 403, ""), map[int]struct{}{}) {
-		t.Fatalf("invalid credentials should retry")
+	if shouldRetryUpstream(platform.NewUpstreamError("blocked", 403, ""), map[int]struct{}{}) {
+		t.Fatalf("invalid credentials should not retry")
+	}
+	if shouldRetryUpstream(platform.NewUpstreamError("blocked", 403, ""), map[int]struct{}{403: {}}) {
+		t.Fatalf("invalid credentials should not retry even when status is configured")
 	}
 
 	isInvalidCredentials = func(error) bool { return false }
@@ -789,8 +792,8 @@ func TestChatProductionDefaultsUseConfigRefreshAndInvalidCredentialsRuntime(t *t
 	if !isInvalidCredentials(invalid) {
 		t.Fatalf("invalid credentials error should be detected")
 	}
-	if !shouldRetryUpstream(invalid, map[int]struct{}{}) {
-		t.Fatalf("invalid credentials error should retry")
+	if shouldRetryUpstream(invalid, map[int]struct{}{}) {
+		t.Fatalf("invalid credentials error should not retry")
 	}
 	if got := feedbackKind(invalid); got != feedbackKindUnauthorized {
 		t.Fatalf("feedback kind = %s", got)
