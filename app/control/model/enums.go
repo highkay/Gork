@@ -10,6 +10,7 @@ const (
 	ModeHeavy
 	ModeGrok43
 	ModeConsole
+	ModeBuild // 独立 Build 通道，不复用 ModeConsole / SSO mode 列
 )
 
 // ToAPIString returns the upstream API mode string.
@@ -23,6 +24,8 @@ func (m ModeID) ToAPIString() string {
 	switch m {
 	case ModeConsole:
 		return "console"
+	case ModeBuild:
+		return "build"
 	default:
 		return ""
 	}
@@ -48,6 +51,7 @@ const (
 	CapabilityVoice
 	CapabilityAsset
 	CapabilityConsoleChat
+	CapabilityBuildChat // xAI Build (Device OAuth + cli-chat-proxy)
 )
 
 // ModeStrings are human-readable mode strings in API order.

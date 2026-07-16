@@ -58,16 +58,20 @@ type ProxyDirectory struct {
 	resourceNodes []EgressNode
 	bundles       map[BundleKey]ClearanceBundle
 	refreshEvents map[BundleKey]*refreshEvent
-	egressMode    EgressMode
-	clearanceMode ClearanceMode
-	configSig     *directoryConfigSignature
-	poolCursor    int
-	config        DirectoryConfig
-	manual        ManualClearanceProvider
-	flare         FlareClearanceProvider
-	byparr        ByparrClearanceProvider
-	idGenerator   func() string
-	clock         func() int64
+	// Cool-down guard: after a refresh failure, suppress immediate re-entry for
+	// the same proxy+host key and prefer the last known bundle.
+	refreshBackoffUntil map[BundleKey]int64 // cooldown expiry, ms since epoch
+	failureCounts       map[BundleKey]int   // consecutive refresh failures
+	egressMode          EgressMode
+	clearanceMode       ClearanceMode
+	configSig           *directoryConfigSignature
+	poolCursor          int
+	config              DirectoryConfig
+	manual              ManualClearanceProvider
+	flare               FlareClearanceProvider
+	byparr              ByparrClearanceProvider
+	idGenerator         func() string
+	clock               func() int64
 }
 
 type directoryConfigSignature struct {
@@ -124,16 +128,18 @@ func NewProxyDirectory(options ...DirectoryOptions) *ProxyDirectory {
 		clock = platformruntime.NowMS
 	}
 	return &ProxyDirectory{
-		bundles:       map[BundleKey]ClearanceBundle{},
-		refreshEvents: map[BundleKey]*refreshEvent{},
-		egressMode:    EgressModeDirect,
-		clearanceMode: ClearanceModeNone,
-		config:        cfg,
-		manual:        manual,
-		flare:         flare,
-		byparr:        byparr,
-		idGenerator:   idGenerator,
-		clock:         clock,
+		bundles:             map[BundleKey]ClearanceBundle{},
+		refreshEvents:       map[BundleKey]*refreshEvent{},
+		refreshBackoffUntil: map[BundleKey]int64{},
+		failureCounts:       map[BundleKey]int{},
+		egressMode:          EgressModeDirect,
+		clearanceMode:       ClearanceModeNone,
+		config:              cfg,
+		manual:              manual,
+		flare:               flare,
+		byparr:              byparr,
+		idGenerator:         idGenerator,
+		clock:               clock,
 	}
 }
 

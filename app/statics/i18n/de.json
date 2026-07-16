@@ -146,7 +146,8 @@
     "versionNotesEmpty": "Keine Versionshinweise verfügbar.",
     "versionOpenRelease": "Release öffnen",
     "versionClose": "Schließen",
-    "assetVersionChanged": "Static assets changed. Refresh this page to load the latest UI."
+    "assetVersionChanged": "Static assets changed. Refresh this page to load the latest UI.",
+    "build": "Build"
   },
   "account": {
     "pageTitle": "Gork - Konten",

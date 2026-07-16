@@ -145,6 +145,11 @@ func isLockedBirthDateLimitError(err error) bool {
 		strings.Contains(upstream.Message, "birth-date-change-limit-reached")
 }
 
+// isBirthDateLockedError is the historical name used by tests and call sites.
+func isBirthDateLockedError(err error) bool {
+	return isLockedBirthDateLimitError(err)
+}
+
 func encodeGRPCPayload(data []byte) []byte {
 	out := make([]byte, 5+len(data))
 	binary.BigEndian.PutUint32(out[1:5], uint32(len(data)))

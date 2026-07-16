@@ -146,7 +146,8 @@
     "versionNotesEmpty": "リリースノートはありません。",
     "versionOpenRelease": "リリースを開く",
     "versionClose": "閉じる",
-    "assetVersionChanged": "Static assets changed. Refresh this page to load the latest UI."
+    "assetVersionChanged": "Static assets changed. Refresh this page to load the latest UI.",
+    "build": "Build"
   },
   "account": {
     "pageTitle": "Gork - アカウント",

@@ -235,7 +235,8 @@ func TestImagesGenerateNonStreamUsesImagineEvents(t *testing.T) {
 		!strings.Contains(data[1]["url"].(string), "sig=") {
 		t.Fatalf("data=%#v", data)
 	}
-	if dir.releases != 1 || len(dir.feedbacks) != 0 {
+	// finishChatAttempt always records success feedback after a successful attempt.
+	if dir.releases != 1 || len(dir.feedbacks) != 1 || dir.feedbacks[0].Kind != feedbackKindSuccess {
 		t.Fatalf("dir releases=%d feedbacks=%#v", dir.releases, dir.feedbacks)
 	}
 }

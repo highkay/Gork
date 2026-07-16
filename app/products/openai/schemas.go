@@ -58,6 +58,7 @@ type ChatCompletionRequest struct {
 	VideoConfig       *VideoConfig     `json:"video_config,omitempty"`
 	Tools             []map[string]any `json:"tools,omitempty"`
 	ToolChoice        any              `json:"tool_choice,omitempty"`
+	ResponseFormat    any              `json:"response_format,omitempty"`
 	ParallelToolCalls *bool            `json:"parallel_tool_calls,omitempty"`
 	MaxTokens         *int             `json:"max_tokens,omitempty"`
 }

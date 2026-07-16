@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title data-i18n="build.pageTitle">Gork - Build 账号</title>
+  <link rel="icon" href="/favicon.ico?v={{APP_VERSION}}">
+  <link href="https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/style.css" rel="stylesheet">
+  <link href="/static/css/app.css?v={{APP_VERSION}}" rel="stylesheet">
+  <style>
+    body { background: #FAF9F5 }
+    .page-hd { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:16px; gap:12px; flex-wrap:wrap }
+    .page-title { font-size:22px; font-weight:700; line-height:1.2 }
+    .page-sub { font-size:13px; color:var(--fg-muted); margin-top:5px; max-width:720px }
+    .page-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    .page-action-btn {
+      height:34px; padding:0 14px; border-radius:999px;
+      display:inline-flex; align-items:center; justify-content:center; gap:6px;
+      font-size:13px; font-weight:600; cursor:pointer;
+      border:1px solid #e6e6e6; background:#fafafa; color:#444;
+      white-space:nowrap;
+    }
+    .page-action-btn:hover { background:#f3f3f3; border-color:#dcdcdc }
+    .page-action-btn-primary { background:#111; border-color:#111; color:#fff }
+    .page-action-btn-primary:hover { background:#222; border-color:#222 }
+    .page-action-btn:disabled { opacity:.45; cursor:not-allowed }
+    .list-toolbar {
+      display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+      margin:0 0 12px; padding:10px 12px; border-radius:12px;
+      background:#f7f7f5; border:1px solid #ececec;
+    }
+    .list-toolbar .toolbar-label {
+      font-size:12px; font-weight:700; color:#555; margin-right:4px;
+    }
+    .list-toolbar .page-action-btn-primary { background:#111; color:#fff }
+    .grid-2 { display:grid; grid-template-columns:1.25fr .75fr; gap:16px }
+    @media (max-width: 980px) { .grid-2 { grid-template-columns:1fr } }
+    .card {
+      background:#fff; border-radius:14px; padding:16px 18px;
+      border:1px solid #efefef; box-shadow:0 1px 0 rgba(0,0,0,.02);
+    }
+    .card-title { font-size:14px; font-weight:700; margin-bottom:8px }
+    .card-sub { font-size:12px; color:#8a8a8a; margin-bottom:12px; line-height:1.5 }
+    .field { margin-bottom:12px }
+    .field label { display:block; font-size:12px; color:#666; margin-bottom:6px; font-weight:600 }
+    .field input, .field select, .field textarea {
+      width:100%; border:1px solid #e6e6e6; border-radius:10px; background:#fafafa;
+      padding:10px 12px; font:inherit; font-size:13px; color:#222; box-sizing:border-box;
+    }
+    .field textarea { min-height:140px; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace }
+    .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; align-items:center }
+    .filters input, .filters select {
+      height:32px; border:1px solid #e6e6e6; border-radius:999px; background:#fafafa;
+      padding:0 12px; font-size:12px; color:#333;
+    }
+    .filters input { min-width:160px }
+    .facets { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; font-size:12px; color:#777 }
+    .facet-chip {
+      border:1px solid #ececec; background:#fafafa; border-radius:999px; padding:4px 10px; cursor:pointer;
+    }
+    .facet-chip.active { background:#111; color:#fff; border-color:#111 }
+    .device-box {
+      margin-top:12px; padding:12px 14px; border-radius:12px; background:#f7f7f5; border:1px dashed #e2e2e2;
+      display:none;
+    }
+    .device-box.show { display:block }
+    .device-code { font-size:22px; font-weight:700; letter-spacing:.08em; margin:6px 0 }
+    .device-meta { font-size:12px; color:#666; line-height:1.6 }
+    .device-meta a { color:#111; font-weight:600 }
+    table.build-table { width:100%; border-collapse:collapse; font-size:13px }
+    .build-table th, .build-table td { text-align:left; padding:10px 8px; border-bottom:1px solid #f0f0f0; vertical-align:top }
+    .build-table th { font-size:11px; color:#8a8a8a; font-weight:600; letter-spacing:.02em }
+    .badge {
+      display:inline-flex; align-items:center; height:22px; padding:0 8px; border-radius:999px;
+      font-size:11px; font-weight:700; background:#f3f3f3; color:#555;
+    }
+    .badge.active { background:#ecfdf5; color:#047857 }
+    .badge.disabled { background:#f3f4f6; color:#6b7280 }
+    .badge.cooling { background:#fff7ed; color:#c2410c }
+    .badge.expired { background:#fef2f2; color:#b91c1c }
+    .row-actions { display:flex; gap:6px; flex-wrap:wrap }
+    .row-actions button {
+      height:28px; padding:0 10px; border-radius:999px; border:1px solid #e6e6e6;
+      background:#fff; font-size:12px; font-weight:600; cursor:pointer; color:#444;
+    }
+    .row-actions button:hover { background:#f7f7f7 }
+    .empty { padding:28px 8px; text-align:center; color:#9a9a9a; font-size:13px }
+    .mono { font-variant-numeric:tabular-nums; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace }
+    .muted { color:#8a8a8a }
+    .progress {
+      display:none; margin-top:10px; padding:10px 12px; border-radius:10px; background:#f7f7f5; border:1px solid #ececec;
+      font-size:12px; color:#444; line-height:1.5;
+    }
+    .progress.show { display:block }
+    .progress .bar {
+      height:6px; background:#ececec; border-radius:999px; overflow:hidden; margin-top:8px;
+    }
+    .progress .bar > i { display:block; height:100%; width:0; background:#111; border-radius:999px; transition:width .2s }
+  </style>
+</head>
+<body>
+  <div id="admin-header" data-active="/admin/build"></div>
+  <main class="admin-main" style="max-width:1280px;margin:0 auto;padding:28px 20px 48px">
+    <div class="page-hd">
+      <div>
+        <div class="page-title">Build 账号</div>
+        <div class="page-sub">
+          独立 Build 池：Device OAuth / 分片导入 / 配额同步 / 过期清理。Token 不回显；开启 features.build_provider 后模型为 build/&lt;upstream&gt;。
+          Free 号上游 /billing 常为 0 额度；列表展示对齐 chenyme 的「约 used / 1,000,000 tokens」估算口径。
+        </div>
+      </div>
+      <div class="page-actions">
+        <button type="button" class="page-action-btn" id="btn-refresh">刷新列表</button>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <section class="card">
+        <div class="card-title">账号列表</div>
+        <div class="card-sub">支持状态 / 是否过期 / 是否已同步配额 / 关键词筛选。批量操作见下方工具条。</div>
+        <div class="list-toolbar" id="list-toolbar" role="toolbar" aria-label="Build 批量操作">
+          <span class="toolbar-label">批量操作</span>
+          <button type="button" class="page-action-btn page-action-btn-primary" id="btn-batch-billing">批量同步配额</button>
+          <button type="button" class="page-action-btn" id="btn-batch-refresh">批量刷新 Token</button>
+          <button type="button" class="page-action-btn" id="btn-cleanup-expired">清理过期</button>
+          <button type="button" class="page-action-btn" id="btn-cleanup-invalid">清理失效</button>
+        </div>
+        <div class="facets" id="facets"></div>
+        <div class="filters">
+          <select id="filter-status">
+            <option value="">全部状态</option>
+            <option value="active">active</option>
+            <option value="disabled">disabled</option>
+            <option value="cooling">cooling</option>
+            <option value="expired">expired</option>
+          </select>
+          <select id="filter-expired">
+            <option value="">过期不限</option>
+            <option value="true">已过期</option>
+            <option value="false">未过期</option>
+          </select>
+          <select id="filter-billing">
+            <option value="">配额不限</option>
+            <option value="true">已同步</option>
+            <option value="false">未同步</option>
+          </select>
+          <input id="filter-q" type="search" placeholder="搜索 name / email / user_id / id" autocomplete="off">
+          <button type="button" class="page-action-btn" id="btn-apply-filter">应用</button>
+        </div>
+        <div id="list-wrap">
+          <div class="empty">加载中…</div>
+        </div>
+        <div class="progress" id="task-progress">
+          <div id="task-progress-text">任务进行中…</div>
+          <div class="bar"><i id="task-progress-bar"></i></div>
+        </div>
+      </section>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <section class="card">
+          <div class="card-title">Device 登录</div>
+          <div class="card-sub">启动后在浏览器完成 xAI 授权，再轮询落库。</div>
+          <div class="field">
+            <label for="device-name">显示名（可选）</label>
+            <input id="device-name" type="text" placeholder="build-account" autocomplete="off">
+          </div>
+          <div class="page-actions">
+            <button type="button" class="page-action-btn page-action-btn-primary" id="btn-device-start">开始 Device 登录</button>
+            <button type="button" class="page-action-btn" id="btn-device-poll" disabled>轮询一次</button>
+          </div>
+          <div class="device-box" id="device-box">
+            <div class="device-meta">用户码</div>
+            <div class="device-code mono" id="device-user-code">—</div>
+            <div class="device-meta" id="device-uri-wrap"></div>
+            <div class="device-meta muted" id="device-status">等待授权…</div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-title">JSON 导入（异步分片）</div>
+          <div class="card-sub">兼容 chenyme 批量 accounts 或单对象；provider 须为 grok_build。大批量请用异步导入。</div>
+          <div class="field">
+            <label for="import-json">JSON</label>
+            <textarea id="import-json" spellcheck="false" placeholder='{"accounts":[{"provider":"grok_build","name":"...","access_token":"...","refresh_token":"..."}]}'></textarea>
+          </div>
+          <div class="page-actions">
+            <button type="button" class="page-action-btn page-action-btn-primary" id="btn-import-async">异步导入</button>
+            <button type="button" class="page-action-btn" id="btn-import-sync">同步导入（小批量）</button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/js/i18n.js?v={{APP_VERSION}}"></script>
+  <script src="/static/js/auth.js?v={{APP_VERSION}}"></script>
+  <script src="/static/js/toast.js?v={{APP_VERSION}}"></script>
+  <script src="/static/js/footer.js?v={{APP_VERSION}}"></script>
+  <script src="/static/js/admin-header.js?v={{APP_VERSION}}"></script>
+  <script>
+const esc = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+function waitI18n() {
+  return new Promise((resolve) => {
+    if (window.I18n && typeof I18n.onReady === 'function') {
+      I18n.onReady(resolve);
+      return;
+    }
+    resolve();
+  });
+}
+
+let deviceState = null;
+let pollTimer = null;
+let lastFacets = null;
+let activeTaskAbort = null;
+
+async function api(method, path, body) {
+  const key = await adminKey.get();
+  const headers = { Authorization: 'Bearer ' + key };
+  const opts = { method, headers };
+  if (body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+    opts.body = typeof body === 'string' ? body : JSON.stringify(body);
+  }
+  const res = await fetch(ADMIN_API + path, opts);
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text }; }
+  if (!res.ok) {
+    const msg = data?.error?.message || data?.message || data?.error || text || res.statusText;
+    throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+  }
+  return data;
+}
+
+function toastOk(msg) { window.showToast ? showToast(msg, 'success') : alert(msg); }
+function toastErr(msg) { window.showToast ? showToast(msg, 'error') : alert(msg); }
+
+function statusBadge(status) {
+  const s = String(status || 'unknown').toLowerCase();
+  return `<span class="badge ${esc(s)}">${esc(s)}</span>`;
+}
+
+function fmtTime(v) {
+  if (!v) return '—';
+  // RFC3339 string or unix
+  if (typeof v === 'string' && v.includes('T')) {
+    try { return new Date(v).toLocaleString(); } catch { return esc(v); }
+  }
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return esc(v);
+  const ms = n > 1e12 ? n : n * 1000;
+  try { return new Date(ms).toLocaleString(); } catch { return esc(v); }
+}
+
+function tokenFlags(row) {
+  return `${row.has_access_token ? 'AT' : '—'}/${row.has_refresh_token ? 'RT' : '—'}`;
+}
+
+// 对齐 chenyme estimatedFreeTokenLimit=1_000_000（limitKnown=false 时 UI 显示「约 used / 1M」）
+const ESTIMATED_FREE_TOKEN_LIMIT = 1000000;
+
+function fmtBilling(row) {
+  const b = row.billing || null;
+  const synced = row.billing_synced_at || (b && b.synced_at) || '';
+  if (!b && !synced) {
+    return `<span class="muted" style="font-size:12px">未同步</span>`;
+  }
+  const monthlyLimit = b ? (Number(b.monthly_limit) || 0) : 0;
+  const monthlyUsed = b ? (Number(b.used) || 0) : 0;
+  const odCap = b ? (Number(b.on_demand_cap) || 0) : 0;
+  const odUsed = b ? (Number(b.on_demand_used) || 0) : 0;
+  const prepaid = b ? (Number(b.prepaid_balance) || 0) : 0;
+  const unified = !!(b && b.is_unified_billing_user);
+  const planName = (b && (b.plan_name || b.plan_code)) || '';
+  // paid：有月额度；free：统一计费 / 无 plan / 月额度 0 —— 展示估算 1M tokens（与 chen 一致）
+  const isFreeProfile = !planName && monthlyLimit <= 0 && odCap <= 0 && prepaid <= 0;
+  const period = b && (b.usage_period_type || b.billing_period_start)
+    ? [b.usage_period_type, b.billing_period_start, b.billing_period_end].filter(Boolean).join(' ')
+    : '';
+
+  if (isFreeProfile) {
+    // 尚无 rolling 观测 used 时显示 0；文案对齐阿里云「约 0 / 1,000,000 tokens」
+    const usedTokens = 0;
+    const plan = unified ? 'Free' : 'Free';
+    return `<div style="font-size:12px;font-weight:600">${esc(plan)}</div>
+      <div class="mono" style="font-size:12px">约 ${usedTokens.toLocaleString()} / ${ESTIMATED_FREE_TOKEN_LIMIT.toLocaleString()} tokens</div>
+      <div class="muted" style="font-size:11px">估算额度 · 上游 billing 月额为 0</div>
+      ${period ? `<div class="muted" style="font-size:11px">${esc(period)}</div>` : ''}
+      <div class="muted" style="font-size:11px">${esc(fmtTime(synced))}</div>`;
+  }
+
+  const plan = planName || '付费/月度';
+  let usage = `${monthlyUsed.toFixed(2)} / ${monthlyLimit.toFixed(2)}`;
+  if (odCap > 0 || odUsed > 0) {
+    usage += ` · OD ${odUsed.toFixed(2)}/${odCap.toFixed(2)}`;
+  }
+  if (prepaid > 0) {
+    usage += ` · 预付 ${prepaid.toFixed(2)}`;
+  }
+  return `<div style="font-size:12px;font-weight:600">${esc(plan)}</div>
+    <div class="mono" style="font-size:12px">${esc(usage)}</div>
+    ${period ? `<div class="muted" style="font-size:11px">${esc(period)}</div>` : ''}
+    <div class="muted" style="font-size:11px">${esc(fmtTime(synced))}</div>`;
+}
+
+function currentFilterQuery() {
+  const params = new URLSearchParams();
+  const status = document.getElementById('filter-status').value;
+  const expired = document.getElementById('filter-expired').value;
+  const billing = document.getElementById('filter-billing').value;
+  const q = document.getElementById('filter-q').value.trim();
+  if (status) params.set('status', status);
+  if (expired) params.set('expired', expired);
+  if (billing) params.set('has_billing', billing);
+  if (q) params.set('q', q);
+  const s = params.toString();
+  return s ? `?${s}` : '';
+}
+
+function renderFacets(facets) {
+  lastFacets = facets || {};
+  const el = document.getElementById('facets');
+  const items = [
+    ['all', '全部', lastFacets.all],
+    ['active', 'active', lastFacets.active],
+    ['disabled', 'disabled', lastFacets.disabled],
+    ['cooling', 'cooling', lastFacets.cooling],
+    ['expired_token', 'token过期', lastFacets.expired_token],
+    ['with_billing', '已同步配额', lastFacets.with_billing],
+  ];
+  const cur = document.getElementById('filter-status').value;
+  el.innerHTML = items.map(([key, label, n]) => {
+    const active = (key === 'all' && !cur) || (key === cur);
+    return `<span class="facet-chip ${active ? 'active' : ''}" data-facet="${esc(key)}">${esc(label)} ${Number(n)||0}</span>`;
+  }).join('');
+  el.querySelectorAll('[data-facet]').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      const key = chip.dataset.facet;
+      if (key === 'all') document.getElementById('filter-status').value = '';
+      else if (key === 'expired_token') {
+        document.getElementById('filter-expired').value = 'true';
+        document.getElementById('filter-status').value = '';
+      } else if (key === 'with_billing') {
+        document.getElementById('filter-billing').value = 'true';
+      } else {
+        document.getElementById('filter-status').value = key;
+      }
+      loadList();
+    });
+  });
+}
+
+function renderList(rows) {
+  const wrap = document.getElementById('list-wrap');
+  if (!rows || !rows.length) {
+    wrap.innerHTML = `<div class="empty">暂无匹配的 Build 账号</div>`;
+    return;
+  }
+  const body = rows.map((row) => {
+    const id = row.id;
+    return `<tr>
+      <td class="mono">${esc(id)}</td>
+      <td>
+        <div>${esc(row.name || '—')}</div>
+        <div class="muted" style="font-size:12px">${esc(row.email || row.user_id || '')}</div>
+      </td>
+      <td>${statusBadge(row.status)}</td>
+      <td class="mono">${esc(tokenFlags(row))}</td>
+      <td>${fmtBilling(row)}</td>
+      <td class="muted" style="font-size:12px">${fmtTime(row.expires_at)}</td>
+      <td>
+        <div class="row-actions">
+          <button type="button" data-act="billing" data-id="${esc(id)}">同步配额</button>
+          <button type="button" data-act="active" data-id="${esc(id)}">启用</button>
+          <button type="button" data-act="disabled" data-id="${esc(id)}">禁用</button>
+          <button type="button" data-act="delete" data-id="${esc(id)}">删除</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  wrap.innerHTML = `<table class="build-table">
+    <thead>
+      <tr>
+        <th>ID</th><th>名称</th><th>状态</th><th>AT/RT</th><th>配额</th><th>过期</th><th>操作</th>
+      </tr>
+    </thead>
+    <tbody>${body}</tbody>
+  </table>`;
+  wrap.querySelectorAll('button[data-act]').forEach((btn) => {
+    btn.addEventListener('click', () => onRowAction(btn.dataset.act, Number(btn.dataset.id)));
+  });
+}
+
+async function loadList() {
+  const wrap = document.getElementById('list-wrap');
+  wrap.innerHTML = `<div class="empty">加载中…</div>`;
+  try {
+    const data = await api('GET', '/build-accounts' + currentFilterQuery());
+    renderFacets(data?.facets || {});
+    renderList(data?.accounts || []);
+  } catch (err) {
+    wrap.innerHTML = `<div class="empty">${esc(err.message || err)}</div>`;
+    toastErr(err.message || String(err));
+  }
+}
+
+async function onRowAction(act, id) {
+  if (!id) return;
+  try {
+    if (act === 'delete') {
+      if (!confirm('确认删除该 Build 账号？')) return;
+      await api('DELETE', `/build-accounts?id=${encodeURIComponent(id)}`);
+      toastOk('已删除');
+    } else if (act === 'billing') {
+      await api('POST', '/build-accounts/billing', { id });
+      toastOk('配额已同步');
+    } else {
+      await api('POST', '/build-accounts/status', { id, status: act, reason: 'admin' });
+      toastOk('状态已更新');
+    }
+    await loadList();
+  } catch (err) {
+    toastErr(err.message || String(err));
+  }
+}
+
+function showProgress(show, text, processed, total) {
+  const box = document.getElementById('task-progress');
+  const bar = document.getElementById('task-progress-bar');
+  const label = document.getElementById('task-progress-text');
+  if (!show) {
+    box.classList.remove('show');
+    return;
+  }
+  box.classList.add('show');
+  label.textContent = text || '任务进行中…';
+  const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
+  bar.style.width = pct + '%';
+}
+
+async function streamTask(taskId) {
+  if (!taskId) return;
+  if (activeTaskAbort) activeTaskAbort.abort();
+  activeTaskAbort = new AbortController();
+  const key = await adminKey.get();
+  const res = await fetch(ADMIN_API + `/batch/${encodeURIComponent(taskId)}/stream`, {
+    headers: { Authorization: 'Bearer ' + key },
+    signal: activeTaskAbort.signal,
+  });
+  if (!res.ok || !res.body) {
+    throw new Error('任务流连接失败: ' + res.status);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const chunks = buf.split('\n\n');
+    buf = chunks.pop() || '';
+    for (const chunk of chunks) {
+      const lines = chunk.split('\n');
+      let dataLine = '';
+      for (const line of lines) {
+        if (line.startsWith('data:')) dataLine += line.slice(5).trim();
+      }
+      if (!dataLine || dataLine.startsWith(':')) continue;
+      let ev;
+      try { ev = JSON.parse(dataLine); } catch { continue; }
+      const total = Number(ev.total) || 0;
+      const processed = Number(ev.processed) || 0;
+      const ok = Number(ev.ok) || 0;
+      const fail = Number(ev.fail) || 0;
+      if (ev.type === 'progress' || ev.type === 'snapshot') {
+        showProgress(true, `进度 ${processed}/${total} · 成功 ${ok} · 失败 ${fail}`, processed, total);
+      }
+      if (ev.type === 'done') {
+        const summary = ev.result?.summary || ev.result || {};
+        showProgress(true, `完成 · 成功 ${summary.ok ?? ok} · 失败 ${summary.fail ?? fail}`, total || processed, total || processed);
+        toastOk('任务完成');
+        await loadList();
+        setTimeout(() => showProgress(false), 2500);
+        return;
+      }
+      if (ev.type === 'error') {
+        showProgress(true, '失败: ' + (ev.error || 'unknown'), processed, total);
+        toastErr(ev.error || '任务失败');
+        return;
+      }
+      if (ev.type === 'cancelled') {
+        showProgress(true, '已取消', processed, total);
+        toastErr('任务已取消');
+        return;
+      }
+    }
+  }
+}
+
+async function runAsyncJob(path, body, label) {
+  try {
+    showProgress(true, (label || '任务') + ' 启动中…', 0, 1);
+    const data = await api('POST', path, body || {});
+    if (!data.task_id) {
+      toastOk((label || '任务') + '：无匹配项');
+      showProgress(false);
+      await loadList();
+      return;
+    }
+    toastOk((label || '任务') + ' 已启动');
+    await streamTask(data.task_id);
+  } catch (err) {
+    showProgress(false);
+    toastErr(err.message || String(err));
+  }
+}
+
+function clearPollTimer() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function showDeviceBox(payload) {
+  const box = document.getElementById('device-box');
+  box.classList.add('show');
+  document.getElementById('device-user-code').textContent = payload.user_code || '—';
+  const uri = payload.verification_uri_complete || payload.verification_uri || '';
+  const wrap = document.getElementById('device-uri-wrap');
+  if (uri) {
+    wrap.innerHTML = `打开: <a href="${esc(uri)}" target="_blank" rel="noopener">${esc(uri)}</a>`;
+  } else {
+    wrap.textContent = '';
+  }
+  document.getElementById('device-status').textContent = '等待授权…';
+  document.getElementById('btn-device-poll').disabled = !payload.device_code;
+}
+
+async function startDevice() {
+  clearPollTimer();
+  try {
+    const data = await api('POST', '/build-accounts/device/start', {});
+    deviceState = {
+      device_code: data.device_code,
+      interval: Math.max(3, Number(data.interval_seconds) || 5),
+      name: document.getElementById('device-name').value.trim(),
+    };
+    showDeviceBox(data);
+    toastOk('已启动 Device 登录');
+    pollTimer = setInterval(() => { pollDevice(true); }, deviceState.interval * 1000);
+  } catch (err) {
+    toastErr(err.message || String(err));
+  }
+}
+
+async function pollDevice(silent) {
+  if (!deviceState?.device_code) {
+    if (!silent) toastErr('请先开始 Device 登录');
+    return;
+  }
+  try {
+    const body = { device_code: deviceState.device_code };
+    if (deviceState.name) body.name = deviceState.name;
+    const data = await api('POST', '/build-accounts/device/poll', body);
+    const st = String(data.status || '').toLowerCase();
+    const el = document.getElementById('device-status');
+    if (st === 'pending') {
+      el.textContent = '授权中，请在浏览器完成…';
+      return;
+    }
+    if (st === 'slow_down') {
+      el.textContent = '请放慢轮询…';
+      if (pollTimer && deviceState.interval) {
+        clearPollTimer();
+        deviceState.interval += 2;
+        pollTimer = setInterval(() => { pollDevice(true); }, deviceState.interval * 1000);
+      }
+      return;
+    }
+    if (st === 'success') {
+      clearPollTimer();
+      el.textContent = '授权成功，已写入账号池';
+      deviceState = null;
+      document.getElementById('btn-device-poll').disabled = true;
+      toastOk('授权成功，已写入账号池');
+      await loadList();
+      return;
+    }
+    el.textContent = data.status || JSON.stringify(data);
+  } catch (err) {
+    if (!silent) toastErr(err.message || String(err));
+    document.getElementById('device-status').textContent = err.message || String(err);
+  }
+}
+
+async function importJSON(asyncMode) {
+  const raw = document.getElementById('import-json').value.trim();
+  if (!raw) {
+    toastErr('请粘贴 JSON');
+    return;
+  }
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch (err) { toastErr('JSON 无效: ' + err.message); return; }
+  try {
+    if (asyncMode) {
+      showProgress(true, '导入任务启动中…', 0, 1);
+      const data = await api('POST', '/build-accounts/import-async', parsed);
+      if (!data.task_id) {
+        toastOk('导入完成（空）');
+        showProgress(false);
+        return;
+      }
+      toastOk(`异步导入已启动（${data.total || '?'}）`);
+      document.getElementById('import-json').value = '';
+      await streamTask(data.task_id);
+      return;
+    }
+    const data = await api('POST', '/build-accounts/import', parsed);
+    const n = data?.imported ?? data?.count ?? data?.accounts?.length ?? '';
+    toastOk('导入完成' + (n !== '' ? ` (${n})` : ''));
+    document.getElementById('import-json').value = '';
+    await loadList();
+  } catch (err) {
+    showProgress(false);
+    toastErr(err.message || String(err));
+  }
+}
+
+function bind() {
+  document.getElementById('btn-refresh').addEventListener('click', loadList);
+  document.getElementById('btn-apply-filter').addEventListener('click', loadList);
+  document.getElementById('filter-q').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') loadList();
+  });
+  document.getElementById('btn-device-start').addEventListener('click', startDevice);
+  document.getElementById('btn-device-poll').addEventListener('click', () => pollDevice(false));
+  document.getElementById('btn-import-async').addEventListener('click', () => importJSON(true));
+  document.getElementById('btn-import-sync').addEventListener('click', () => importJSON(false));
+  document.getElementById('btn-batch-billing').addEventListener('click', () => {
+    if (!confirm('对当前默认范围（全部 active）批量同步配额？可能较慢。')) return;
+    runAsyncJob('/build-accounts/billing/batch', { all: true }, '批量同步配额');
+  });
+  document.getElementById('btn-batch-refresh').addEventListener('click', () => {
+    if (!confirm('对全部 active 账号批量 OAuth refresh？')) return;
+    runAsyncJob('/build-accounts/refresh/batch', { all: true }, '批量刷新 Token');
+  });
+  document.getElementById('btn-cleanup-expired').addEventListener('click', () => {
+    if (!confirm('软删除全部 token 已过期的 Build 账号？')) return;
+    runAsyncJob('/build-accounts/cleanup', { mode: 'expired' }, '清理过期');
+  });
+  document.getElementById('btn-cleanup-invalid').addEventListener('click', () => {
+    if (!confirm('软删除 status=expired / 失效账号？')) return;
+    runAsyncJob('/build-accounts/cleanup', { mode: 'invalid' }, '清理失效');
+  });
+}
+
+(async () => {
+  try {
+    await waitI18n();
+    if (typeof renderAdminHeader === 'function') await renderAdminHeader();
+    if (typeof renderSiteFooter === 'function') await renderSiteFooter();
+    const key = await adminKey.get();
+    if (!key || !await verifyKey(ADMIN_API + '/verify', key).catch(() => false)) {
+      location.href = '/admin/login';
+      return;
+    }
+    bind();
+    loadList();
+  } catch (err) {
+    console.error(err);
+    toastErr(err.message || String(err));
+  }
+})();
+  </script>
+</body>
+</html>

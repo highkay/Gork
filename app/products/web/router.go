@@ -50,6 +50,7 @@ func webRoutes() []webRoute {
 		webGet("/admin/account", serveWebPage("admin/account.html")),
 		webGet("/admin/config", serveWebPage("admin/config.html")),
 		webGet("/admin/cache", serveWebPage("admin/cache.html")),
+	webGet("/admin/build", serveWebPage("admin/build.html")),
 		webGet("/webui", redirectWeb("/webui/login")),
 		webGet("/webui/login", handleWebUILogin),
 		webGet("/webui/chat", serveWebUIPage("webui/chat.html")),

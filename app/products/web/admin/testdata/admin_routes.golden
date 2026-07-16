@@ -25,3 +25,13 @@ PUT /admin/api/tokens/edit
 POST /admin/api/tokens/disabled
 POST /admin/api/tokens/disabled/batch
 PUT /admin/api/tokens/pool
+DELETE|GET /admin/api/build-accounts
+POST /admin/api/build-accounts/import
+POST /admin/api/build-accounts/import-async
+POST /admin/api/build-accounts/status
+POST /admin/api/build-accounts/device/start
+POST /admin/api/build-accounts/device/poll
+POST /admin/api/build-accounts/billing
+POST /admin/api/build-accounts/billing/batch
+POST /admin/api/build-accounts/refresh/batch
+POST /admin/api/build-accounts/cleanup

@@ -6,6 +6,7 @@ GET /admin/login
 GET /admin/account
 GET /admin/config
 GET /admin/cache
+GET /admin/build
 GET /webui
 GET /webui/login
 GET /webui/chat

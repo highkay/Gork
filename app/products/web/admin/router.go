@@ -176,6 +176,19 @@ func adminRoutes() []adminRoute {
 		adminRouteOne(http.MethodPost, "/admin/api/tokens/disabled", handleAdminTokensToggle),
 		adminRouteOne(http.MethodPost, "/admin/api/tokens/disabled/batch", handleAdminTokensToggleBatch),
 		adminRouteOne(http.MethodPut, "/admin/api/tokens/pool", handleAdminTokensPool),
+		// Build 独立账号池（features.build_provider；token 不回显）
+		adminRouteMany("/admin/api/build-accounts", map[string]http.HandlerFunc{
+			http.MethodGet: handleAdminBuildAccountsList, http.MethodDelete: handleAdminBuildAccountsDelete,
+		}),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/import", handleAdminBuildAccountsImport),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/import-async", handleAdminBuildAccountsImportAsync),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/status", handleAdminBuildAccountsStatus),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/device/start", handleAdminBuildDeviceStart),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/device/poll", handleAdminBuildDevicePoll),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/billing", handleAdminBuildAccountsBilling),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/billing/batch", handleAdminBuildAccountsBillingBatch),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/refresh/batch", handleAdminBuildAccountsRefreshBatch),
+		adminRouteOne(http.MethodPost, "/admin/api/build-accounts/cleanup", handleAdminBuildAccountsCleanup),
 	}
 }
 

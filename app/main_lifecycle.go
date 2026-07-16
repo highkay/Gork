@@ -14,11 +14,17 @@ import (
 )
 
 type appMainLifecycleState struct {
-	runtimeStore *platformruntime.RedisRuntimeStore
-	repository   accountcontrol.AccountRepository
-	directory    *accountdataplane.AccountDirectory
-	schedulerKey appMainSchedulerLease
-	adminCleanup func()
+	runtimeStore      *platformruntime.RedisRuntimeStore
+	repository        accountcontrol.AccountRepository
+	directory         *accountdataplane.AccountDirectory
+	buildAccountStore buildAccountStoreCloser
+	schedulerKey      appMainSchedulerLease
+	adminCleanup      func()
+}
+
+// buildAccountStoreCloser 收窄生命周期持有的 Build 账号库（实现在 main_lifecycle_build.go）。
+type buildAccountStoreCloser interface {
+	Close() error
 }
 
 type appMainSchedulerLease interface {
@@ -44,14 +50,15 @@ var (
 	appMainRuntimeClientFactory       platformruntime.RedisRuntimeClientFactory
 	appMainStartRuntimeStore          appMainLifecycleStep                = defaultAppMainStartRuntimeStore
 	appMainConfigureTaskSnapshotStore appMainLifecycleStep                = defaultAppMainConfigureTaskSnapshotStore
-	appMainInitializeRepository       appMainLifecycleStep                = defaultAppMainInitializeRepository
-	appMainRunStartupMigrations       appMainLifecycleStep                = defaultAppMainRunStartupMigrations
-	appMainReconcileLocalMediaCache   appMainLifecycleStep                = defaultAppMainReconcileLocalMediaCache
-	appMainStartAccountDirectory      appMainLifecycleStep                = defaultAppMainStartAccountDirectory
-	appMainStartRefreshRuntime        appMainLifecycleStep                = defaultAppMainStartRefreshRuntime
-	appMainStartProxyScheduler        appMainLifecycleStep                = defaultAppMainStartProxyScheduler
-	appMainAcquireSchedulerFileLock   func(context.Context) (Hook, error) = acquireAppMainSchedulerFileLock
-	appMainConsoleResetInterval                                           = 30 * time.Second
+	appMainInitializeRepository        appMainLifecycleStep                = defaultAppMainInitializeRepository
+	appMainInitializeBuildAccountStore appMainLifecycleStep                = defaultAppMainInitializeBuildAccountStore
+	appMainRunStartupMigrations        appMainLifecycleStep                = defaultAppMainRunStartupMigrations
+	appMainReconcileLocalMediaCache    appMainLifecycleStep                = defaultAppMainReconcileLocalMediaCache
+	appMainStartAccountDirectory       appMainLifecycleStep                = defaultAppMainStartAccountDirectory
+	appMainStartRefreshRuntime         appMainLifecycleStep                = defaultAppMainStartRefreshRuntime
+	appMainStartProxyScheduler         appMainLifecycleStep                = defaultAppMainStartProxyScheduler
+	appMainAcquireSchedulerFileLock    func(context.Context) (Hook, error) = acquireAppMainSchedulerFileLock
+	appMainConsoleResetInterval                                            = 30 * time.Second
 )
 
 func defaultLifecycleHooks() ([]Hook, []Hook) {
@@ -62,6 +69,7 @@ func defaultLifecycleHooks() ([]Hook, []Hook) {
 			appMainStartRuntimeStore,
 			appMainConfigureTaskSnapshotStore,
 			appMainInitializeRepository,
+			appMainInitializeBuildAccountStore,
 			appMainRunStartupMigrations,
 			appMainReconcileLocalMediaCache,
 			appMainStartAccountDirectory,

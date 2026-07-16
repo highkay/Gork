@@ -35,6 +35,10 @@ func (s ModelSpec) IsConsoleChat() bool {
 	return s.Capability&CapabilityConsoleChat != 0
 }
 
+func (s ModelSpec) IsBuildChat() bool {
+	return s.Capability&CapabilityBuildChat != 0
+}
+
 func (s ModelSpec) PoolName() string {
 	if s.Tier == TierSuper {
 		return "super"

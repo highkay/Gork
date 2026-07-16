@@ -34,7 +34,8 @@
     "versionNotesEmpty": "No release notes available.",
     "versionOpenRelease": "Open Release",
     "versionClose": "Close",
-    "assetVersionChanged": "Static assets changed. Refresh this page to load the latest UI."
+    "assetVersionChanged": "Static assets changed. Refresh this page to load the latest UI.",
+    "build": "Build"
   },
   "webui": {
     "header": {

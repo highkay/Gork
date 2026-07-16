@@ -69,6 +69,10 @@ func (e *AppError) ToDict() map[string]any {
 	if param, ok := e.Details["param"]; ok {
 		err["param"] = param
 	}
+	// Surface client-facing rate-limit hints (e.g. console cooldown).
+	if retryAfter, ok := e.Details["retry_after"]; ok {
+		err["retry_after"] = retryAfter
+	}
 	return map[string]any{"error": err}
 }
 

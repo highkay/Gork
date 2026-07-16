@@ -85,11 +85,20 @@ func streamImagineRound(ctx context.Context, ws ImagineWebSocketConnection, opti
 }
 
 func sendImagineRoundStart(ctx context.Context, ws ImagineWebSocketConnection, options imagineRoundOptions) error {
-	if err := ws.SendJSON(ctx, protocol.BuildImagineResetMessage(protocol.ImagineMessageOptions{})); err != nil {
+	// 对齐 chenyme WriteDeadline：发送阶段单独限时，避免底层 conn 写阻塞拖死整轮。
+	// 接口层无 net.Conn，用 context 超时等价约束 SendJSON。
+	writeTimeout := options.StreamTimeout
+	if writeTimeout <= 0 {
+		writeTimeout = defaultImagineStreamTimeout
+	}
+	writeCtx, cancel := context.WithTimeout(ctx, writeTimeout)
+	defer cancel()
+
+	if err := ws.SendJSON(writeCtx, protocol.BuildImagineResetMessage(protocol.ImagineMessageOptions{})); err != nil {
 		return err
 	}
 	enableNSFW := options.EnableNSFW
-	return ws.SendJSON(ctx, protocol.BuildImagineRequestMessage(
+	return ws.SendJSON(writeCtx, protocol.BuildImagineRequestMessage(
 		newImagineRequestID(),
 		options.Prompt,
 		protocol.ImagineMessageOptions{

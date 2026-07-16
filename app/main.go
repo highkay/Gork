@@ -171,6 +171,14 @@ func newAppRouter(options AppOptions) http.Handler {
 			serveAppPprof(w, r)
 		case r.URL.Path == "/health":
 			writeAppJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+		case r.URL.Path == "/readyz":
+			// Readiness: config loadable + account pool non-empty. 503 when not ready.
+			snapshot := evaluateAppReadiness(r.Context())
+			status := http.StatusOK
+			if !snapshot.Ready {
+				status = http.StatusServiceUnavailable
+			}
+			writeAppJSON(w, status, snapshot)
 		case r.URL.Path == "/favicon.ico":
 			serveAppFavicon(w, r, options.StaticsRoot)
 		case strings.HasPrefix(r.URL.Path, "/static/"):

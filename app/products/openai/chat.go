@@ -26,6 +26,14 @@ func Completions(ctx context.Context, options chatCompletionOptions) (chatComple
 }
 
 func (deps chatRuntimeDependencies) Completions(ctx context.Context, options chatCompletionOptions) (chatCompletionResult, error) {
+	// Build 通道：开关关闭时与未知模型一致（不进入 prepare，避免误报空消息等）。
+	if controlmodel.IsBuildModelName(options.Model) {
+		if !buildFeatureEnabled() {
+			return chatCompletionResult{}, fmt.Errorf("Unknown model: '%s'", options.Model)
+		}
+		return buildCompletions(ctx, options)
+	}
+
 	plan, err := prepareChatCompletion(options)
 	if err != nil {
 		return chatCompletionResult{}, err

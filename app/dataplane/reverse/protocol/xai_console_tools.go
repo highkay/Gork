@@ -36,8 +36,10 @@ var consoleInternalToolNames = map[string]struct{}{
 	"view_image":                  {},
 	"view_x_video":                {},
 	"code_execution":              {},
+	"code_interpreter":            {},
 	"file_search":                 {},
 	"chatroom_send":               {},
+	"collections_search":          {},
 	"generate_image":              {},
 	"create_image":                {},
 	"edit_image":                  {},
@@ -48,6 +50,53 @@ var consoleInternalToolNames = map[string]struct{}{
 func isConsoleInternalToolName(name string) bool {
 	_, ok := consoleInternalToolNames[strings.TrimSpace(name)]
 	return ok
+}
+
+// IsConsoleBuiltinTool reports whether name is a console-managed internal tool
+// that must not be exposed to or accepted from clients.
+func IsConsoleBuiltinTool(name string) bool {
+	return isConsoleInternalToolName(name)
+}
+
+// FilterClientConsoleTools returns only client function tools that are not
+// console built-ins (safe to forward upstream).
+func FilterClientConsoleTools(tools []map[string]any) []map[string]any {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(tools))
+	for _, tool := range tools {
+		if IsConsoleBuiltinTool(consoleToolName(tool)) {
+			continue
+		}
+		out = append(out, tool)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// ClientConsoleToolNames returns non-builtin function tool names from a client tools list.
+func ClientConsoleToolNames(tools []map[string]any) map[string]struct{} {
+	names := map[string]struct{}{}
+	for _, tool := range tools {
+		name := consoleToolName(tool)
+		if name == "" || IsConsoleBuiltinTool(name) {
+			continue
+		}
+		names[name] = struct{}{}
+	}
+	return names
+}
+
+func consoleToolName(tool map[string]any) string {
+	if fn, ok := tool["function"].(map[string]any); ok {
+		if name := stringFromAny(fn["name"]); name != "" {
+			return name
+		}
+	}
+	return stringFromAny(tool["name"])
 }
 
 func consoleToolPayloads(tools []map[string]any, allowFunctionTools bool) []map[string]any {
