@@ -61,6 +61,8 @@ type HTTPResponse struct {
 	Body       []byte
 	Headers    map[string]string
 	Stream     io.ReadCloser
+	// FinalURL is the URL after redirects (when the client followed them).
+	FinalURL string
 }
 
 type HTTPLineStream struct {

@@ -20,8 +20,15 @@ func runGorkCommand(ctx context.Context, args []string, stdout io.Writer, stderr
 	if args[0] == "config" {
 		return runConfigCommand(ctx, args[1:], stdout, stderr)
 	}
-	if args[0] != "account" || len(args) < 2 || args[1] != "check" {
+	if args[0] != "account" || len(args) < 2 {
 		return true, 2, fmt.Errorf("unknown command: %s", strings.Join(args, " "))
 	}
-	return runAccountCheckCommand(ctx, args[2:], stdout, stderr)
+	switch args[1] {
+	case "check":
+		return runAccountCheckCommand(ctx, args[2:], stdout, stderr)
+	case "sso-sweep":
+		return runAccountSSOSweepCommand(ctx, args[2:], stdout, stderr)
+	default:
+		return true, 2, fmt.Errorf("unknown command: %s", strings.Join(args, " "))
+	}
 }

@@ -25,6 +25,9 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 		UsageConcurrency: platformconfig.GlobalConfig.GetInt("account.refresh.usage_concurrency", 50),
 		PerTokenTimeout:  appMainConfigDurationSeconds("account.refresh.per_token_timeout_sec", 30),
 		BatchTimeout:     appMainConfigDurationSeconds("account.refresh.batch_timeout_sec", 600),
+		// Session probe is authoritative for SSO liveness (accounts.x.ai final URL).
+		// ListModels remains available as optional secondary tooling, not the primary gate.
+		SSOSessionProber: reversetransport.SSOSessionProber{ProxyRuntime: usageProxyRuntime},
 		SSOModelVerifier: accountcontrol.SSOModelVerifierFunc(openaiproduct.ProbeConsoleListModels),
 	})
 	scheduler := accountcontrol.GetAccountRefreshScheduler(service)

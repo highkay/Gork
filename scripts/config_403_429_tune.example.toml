@@ -1,0 +1,41 @@
+# 针对日志中 403(blocked-user) + 429(console team RPM/RPS) 的推荐运行时配置片段。
+# 通过 Admin API 或合并进 data/config.toml 使用；不要整文件覆盖生产配置。
+#
+# 应用示例:
+#   curl -sS -X POST http://127.0.0.1:8008/admin/api/config \
+#     -H 'Authorization: Bearer <app_key>' \
+#     -H 'Content-Type: application/json' \
+#     -d @- <<'JSON'
+#   {"account":{"selection":{"max_inflight":2}},"chat":{...}}
+#   JSON
+
+[account.selection]
+# multi-agent 上游常见 RPS=2 / RPM=60；8 容易顶穿
+max_inflight = 2
+
+[account.invalid_credentials]
+# blocked-user 无需多次确认；1 可快速淘汰废号
+max_failures = 1
+
+[account.refresh]
+# 需要按配额选号时再开 true；random 模式靠冷却
+enabled = false
+
+[chat]
+# 全局 console 节流：约 20 RPM 上限（配合 pacer）
+console_min_interval_ms = 3000
+console_cooldown_ms = 90000
+console_max_queue_wait_ms = 30000
+
+# multi-agent 主力模型单独更严
+console_multi_agent_min_interval_ms = 3000
+console_multi_agent_cooldown_ms = 90000
+console_multi_agent_max_queue_wait_ms = 30000
+
+[retry]
+# 保持 403 不在 on_codes：blocked-user 换号只会加速烧池
+# 429 仅在确认「不同 token = 不同 team 限额」时再加回
+max_retries = 1
+on_codes = "502,401,503"
+retry_status_codes = "502,401,503"
+reset_session_status_codes = [403]

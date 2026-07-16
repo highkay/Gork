@@ -56,6 +56,18 @@ func (f SSOModelVerifierFunc) ProbeListModels(ctx context.Context, token string)
 	return f(ctx, token)
 }
 
+// SSOSessionProber validates SSO by probing accounts.x.ai with the sso cookie.
+// Authority is the final redirect URL (session accepted vs sign-in/auth-error).
+type SSOSessionProber interface {
+	ProbeSession(context.Context, string) error
+}
+
+type SSOSessionProberFunc func(context.Context, string) error
+
+func (f SSOSessionProberFunc) ProbeSession(ctx context.Context, token string) error {
+	return f(ctx, token)
+}
+
 type AccountRefreshOptions struct {
 	Fetcher                  protocol.UsageFetcher
 	UsageConcurrency         int
@@ -63,6 +75,7 @@ type AccountRefreshOptions struct {
 	BatchTimeout             time.Duration
 	OnDemandMinInterval      time.Duration
 	SSOModelVerifier         SSOModelVerifier
+	SSOSessionProber         SSOSessionProber
 	SSOValidationConcurrency int
 	SSOValidationMaxFailures int
 }
@@ -75,6 +88,7 @@ type AccountRefreshService struct {
 	batchTimeout             time.Duration
 	onDemandMinInterval      time.Duration
 	ssoModelVerifier         SSOModelVerifier
+	ssoSessionProber         SSOSessionProber
 	ssoValidationConcurrency int
 	ssoValidationMaxFailures int
 	mu                       sync.Mutex
@@ -96,6 +110,7 @@ func NewAccountRefreshService(repo AccountRefreshRepository, options AccountRefr
 		batchTimeout:             options.BatchTimeout,
 		onDemandMinInterval:      minInterval,
 		ssoModelVerifier:         options.SSOModelVerifier,
+		ssoSessionProber:         options.SSOSessionProber,
 		ssoValidationConcurrency: options.SSOValidationConcurrency,
 		ssoValidationMaxFailures: options.SSOValidationMaxFailures,
 	}

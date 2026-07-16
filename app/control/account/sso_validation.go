@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/dslzl/gork/app/dataplane/reverse/protocol"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
@@ -22,6 +24,8 @@ var (
 	ssoValidationBatchSize = func() int {
 		return platformconfig.GlobalConfig.GetInt("account.sso_validation.batch_size", 100)
 	}
+	// ssoValidationNow allows tests to freeze local JWT expiry checks.
+	ssoValidationNow = func() time.Time { return time.Now() }
 )
 
 type SSOValidationResult struct {
@@ -119,21 +123,21 @@ func (s *AccountRefreshService) runSSOValidationRecords(ctx context.Context, rec
 	return results, nil
 }
 
+// validateSSOAccount follows sso2gropcpa two-layer logic:
+//  1. local precheck (empty / JWT expired) — no HTTP
+//  2. online accounts.x.ai session probe (final redirect URL is authority)
+//
+// Terminal session death expires immediately (subject to max_failures).
+// Cloudflare / rate limit / WAF / network are soft fails and do not delete.
 func (s *AccountRefreshService) validateSSOAccount(ctx context.Context, record AccountRecord) (RefreshResult, error) {
 	if record.IsDeleted() {
 		return RefreshResult{}, nil
 	}
-	if ok, err := s.probeSSORefresh(ctx, record); err != nil {
-		return s.recordSSOValidationFailure(ctx, record, "refresh", err)
-	} else if !ok {
-		return s.recordSSOValidationFailure(ctx, record, "refresh", errors.New("refresh returned no usable quota windows"))
+	if reason := protocol.SSOLocalInvalidReason(record.Token, ssoValidationNow()); reason != "" {
+		return s.recordSSOValidationFailure(ctx, record, "local", protocol.NewSessionInvalidError(reason, "local"))
 	}
-	verifier := s.ssoModelVerifier
-	if verifier == nil {
-		return RefreshResult{}, errors.New("sso model verifier is not configured")
-	}
-	if err := verifier.ProbeListModels(ctx, record.Token); err != nil {
-		return s.recordSSOValidationFailure(ctx, record, "list_models", err)
+	if err := s.probeSSOSession(ctx, record.Token); err != nil {
+		return s.recordSSOValidationFailure(ctx, record, ssoFailureStage(err), err)
 	}
 	if err := s.recordSSOValidationSuccess(ctx, record); err != nil {
 		return RefreshResult{}, err
@@ -141,19 +145,39 @@ func (s *AccountRefreshService) validateSSOAccount(ctx context.Context, record A
 	return RefreshResult{Checked: 1, Refreshed: 1}, nil
 }
 
-func (s *AccountRefreshService) probeSSORefresh(ctx context.Context, record AccountRecord) (bool, error) {
-	windows, err := s.fetchAllQuotas(ctx, record.Token, record.Pool, false)
-	if err != nil {
-		return false, err
+func (s *AccountRefreshService) probeSSOSession(ctx context.Context, token string) error {
+	prober := s.ssoSessionProber
+	if prober == nil {
+		// Backward-compatible fallback: ListModels only if session prober not wired.
+		// Prefer configuring SSOSessionProber in production.
+		if s.ssoModelVerifier == nil {
+			return fmt.Errorf("sso session prober is not configured")
+		}
+		return s.ssoModelVerifier.ProbeListModels(ctx, token)
 	}
-	if windows == nil {
-		return false, nil
+	return prober.ProbeSession(ctx, token)
+}
+
+func ssoFailureStage(err error) string {
+	var sessionErr *protocol.SessionInvalidError
+	if errors.As(err, &sessionErr) && sessionErr != nil {
+		if sessionErr.Stage != "" {
+			return sessionErr.Stage
+		}
+		return "session"
 	}
-	result, err := s.applyFetchedWindows(ctx, record, windows, false)
-	if err != nil {
-		return false, err
+	// Non-terminal classes from ErrorFromSSOBrowserClass messages.
+	msg := strings.ToLower(fmt.Sprint(err))
+	switch {
+	case strings.Contains(msg, "cloudflare"):
+		return "cloudflare"
+	case strings.Contains(msg, "rate limited"):
+		return "rate_limited"
+	case strings.Contains(msg, "http block"):
+		return "http_block"
+	default:
+		return "session"
 	}
-	return result.Refreshed > 0 && result.Failed == 0, nil
 }
 
 func (s *AccountRefreshService) recordSSOValidationFailure(
@@ -182,7 +206,9 @@ func (s *AccountRefreshService) recordSSOValidationFailure(
 	if _, err := s.repo.PatchAccounts(ctx, []AccountPatch{patch}); err != nil {
 		return RefreshResult{}, err
 	}
-	if !protocol.IsInvalidCredentialsError(cause) || count < s.validationMaxFailures() {
+	// Only permanent SSO death (session invalid / invalid credentials) can expire.
+	// CF / rate limit / WAF / network stay soft-fail.
+	if !protocol.IsTerminalSSOFailure(cause) || count < s.validationMaxFailures() {
 		return RefreshResult{Checked: 1, Failed: 1}, nil
 	}
 	if _, err := s.repo.DeleteAccounts(ctx, []string{record.Token}); err != nil {
@@ -201,6 +227,12 @@ func (s *AccountRefreshService) recordSSOValidationSuccess(ctx context.Context, 
 				"last_ok_at":    now,
 			},
 		},
+	}
+	// Clear stale sso_validation_* fail markers so health views stay accurate.
+	if record.LastFailReason != nil && strings.HasPrefix(*record.LastFailReason, "sso_validation_") {
+		empty := ""
+		patch.LastFailReason = &empty
+		patch.StateReason = &empty
 	}
 	_, err := s.repo.PatchAccounts(ctx, []AccountPatch{patch})
 	return err

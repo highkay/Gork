@@ -58,6 +58,7 @@ func (c netHTTPClient) do(ctx context.Context, method string, request HTTPReques
 		cancel()
 		return HTTPResponse{}, err
 	}
+	finalURL := httpResponseFinalURL(response)
 	if request.Stream && response.StatusCode == 200 {
 		stream, err := decodeHTTPResponseStream(response)
 		if err != nil {
@@ -68,6 +69,7 @@ func (c netHTTPClient) do(ctx context.Context, method string, request HTTPReques
 			StatusCode: response.StatusCode,
 			Headers:    firstHeaderValues(response.Header),
 			Stream:     &cancelOnCloseReader{ReadCloser: stream, cancel: cancel},
+			FinalURL:   finalURL,
 		}, nil
 	}
 	defer cancel()
@@ -76,7 +78,19 @@ func (c netHTTPClient) do(ctx context.Context, method string, request HTTPReques
 	if err != nil {
 		return HTTPResponse{}, err
 	}
-	return HTTPResponse{StatusCode: response.StatusCode, Body: body, Headers: firstHeaderValues(response.Header)}, nil
+	return HTTPResponse{
+		StatusCode: response.StatusCode,
+		Body:       body,
+		Headers:    firstHeaderValues(response.Header),
+		FinalURL:   finalURL,
+	}, nil
+}
+
+func httpResponseFinalURL(response *http.Response) string {
+	if response == nil || response.Request == nil || response.Request.URL == nil {
+		return ""
+	}
+	return response.Request.URL.String()
 }
 
 func (c netHTTPClient) httpDoer() HTTPDoer {
