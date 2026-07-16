@@ -184,6 +184,8 @@ func isSessionInvalidURL(urlLower string) bool {
 }
 
 func isCloudflareBrowserResponse(status int, bodyLower, urlLower string) bool {
+	// Strong signals only — avoid treating normal pages that mention "cloudflare"
+	// in analytics/scripts as challenges (that previously caused false CF soft-fails).
 	if strings.Contains(urlLower, "cdn-cgi") || strings.Contains(urlLower, "challenges.cloudflare") {
 		return true
 	}
@@ -191,8 +193,11 @@ func isCloudflareBrowserResponse(status int, bodyLower, urlLower string) bool {
 		strings.Contains(bodyLower, "cf-browser-verification") ||
 		strings.Contains(bodyLower, "just a moment") ||
 		strings.Contains(bodyLower, "attention required") ||
-		strings.Contains(bodyLower, "enable javascript and cookies") ||
-		(strings.Contains(bodyLower, "cloudflare") && (status == 403 || status == 503 || strings.Contains(bodyLower, "challenge"))) {
+		strings.Contains(bodyLower, "enable javascript and cookies to continue") ||
+		strings.Contains(bodyLower, "checking your browser before accessing") {
+		return true
+	}
+	if (status == 403 || status == 503) && strings.Contains(bodyLower, "cloudflare") {
 		return true
 	}
 	return false

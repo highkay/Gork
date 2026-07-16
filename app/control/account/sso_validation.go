@@ -126,9 +126,11 @@ func (s *AccountRefreshService) runSSOValidationRecords(ctx context.Context, rec
 // validateSSOAccount follows sso2gropcpa two-layer logic:
 //  1. local precheck (empty / JWT expired) — no HTTP
 //  2. online accounts.x.ai session probe (final redirect URL is authority)
+//  3. if session probe is inconclusive (CF / WAF / network), fall back to
+//     console ListModels so dead SSO can still be expired when console works
 //
 // Terminal session death expires immediately (subject to max_failures).
-// Cloudflare / rate limit / WAF / network are soft fails and do not delete.
+// Cloudflare / rate limit / WAF / network alone do not delete.
 func (s *AccountRefreshService) validateSSOAccount(ctx context.Context, record AccountRecord) (RefreshResult, error) {
 	if record.IsDeleted() {
 		return RefreshResult{}, nil
@@ -137,7 +139,18 @@ func (s *AccountRefreshService) validateSSOAccount(ctx context.Context, record A
 		return s.recordSSOValidationFailure(ctx, record, "local", protocol.NewSessionInvalidError(reason, "local"))
 	}
 	if err := s.probeSSOSession(ctx, record.Token); err != nil {
-		return s.recordSSOValidationFailure(ctx, record, ssoFailureStage(err), err)
+		if protocol.IsTerminalSSOFailure(err) {
+			return s.recordSSOValidationFailure(ctx, record, ssoFailureStage(err), err)
+		}
+		// Inconclusive browser probe → console ListModels (same path runtime uses).
+		if fallbackErr := s.probeSSOListModelsFallback(ctx, record.Token); fallbackErr != nil {
+			return s.recordSSOValidationFailure(ctx, record, "list_models", fallbackErr)
+		}
+		// ListModels OK despite CF/WAF on accounts page → treat as usable for now.
+		if err := s.recordSSOValidationSuccess(ctx, record); err != nil {
+			return RefreshResult{}, err
+		}
+		return RefreshResult{Checked: 1, Refreshed: 1}, nil
 	}
 	if err := s.recordSSOValidationSuccess(ctx, record); err != nil {
 		return RefreshResult{}, err
@@ -149,13 +162,21 @@ func (s *AccountRefreshService) probeSSOSession(ctx context.Context, token strin
 	prober := s.ssoSessionProber
 	if prober == nil {
 		// Backward-compatible fallback: ListModels only if session prober not wired.
-		// Prefer configuring SSOSessionProber in production.
 		if s.ssoModelVerifier == nil {
 			return fmt.Errorf("sso session prober is not configured")
 		}
 		return s.ssoModelVerifier.ProbeListModels(ctx, token)
 	}
 	return prober.ProbeSession(ctx, token)
+}
+
+func (s *AccountRefreshService) probeSSOListModelsFallback(ctx context.Context, token string) error {
+	if s.ssoModelVerifier == nil {
+		// No fallback verifier: keep the original non-terminal probe error path
+		// by returning a soft transport-style error without credentials death.
+		return fmt.Errorf("sso list_models fallback is not configured")
+	}
+	return s.ssoModelVerifier.ProbeListModels(ctx, token)
 }
 
 func ssoFailureStage(err error) string {

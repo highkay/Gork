@@ -99,7 +99,7 @@ func TestValidateSSOAccountSessionInvalidExpires(t *testing.T) {
 	}
 }
 
-func TestValidateSSOAccountCloudflareIsSoftFail(t *testing.T) {
+func TestValidateSSOAccountCloudflareFallsBackToListModelsOK(t *testing.T) {
 	oldNow := refreshNowMS
 	refreshNowMS = func() int64 { return 3000 }
 	t.Cleanup(func() { refreshNowMS = oldNow })
@@ -115,9 +115,47 @@ func TestValidateSSOAccountCloudflareIsSoftFail(t *testing.T) {
 		Ext:    map[string]any{"sso_validation": map[string]any{"failure_count": 5}},
 	}
 	repo := &fakeRefreshRepo{records: []AccountRecord{record}}
+	verifier := &fakeSSOModelVerifier{}
 	service := NewAccountRefreshService(repo, AccountRefreshOptions{
 		SSOSessionProber: &fakeSSOSessionProber{
 			err: platform.NewUpstreamError("sso probe cloudflare challenge", 403, "just a moment"),
+		},
+		SSOModelVerifier:         verifier,
+		SSOValidationMaxFailures: 1,
+	})
+
+	result, err := service.validateSSOAccount(context.Background(), record)
+	if err != nil {
+		t.Fatalf("error: %v", err)
+	}
+	if result.Refreshed != 1 || result.Failed != 0 || result.Expired != 0 {
+		t.Fatalf("CF + list_models ok should succeed: %#v", result)
+	}
+	if len(verifier.calls) != 1 {
+		t.Fatalf("list models fallback calls = %#v", verifier.calls)
+	}
+	validation := repo.patches[0].ExtMerge["sso_validation"].(map[string]any)
+	if validation["failure_count"] != 0 {
+		t.Fatalf("success should clear failures: %#v", validation)
+	}
+}
+
+func TestValidateSSOAccountCloudflareFallbackListModelsInvalidExpires(t *testing.T) {
+	oldNow := refreshNowMS
+	refreshNowMS = func() int64 { return 3100 }
+	t.Cleanup(func() { refreshNowMS = oldNow })
+	oldClock := ssoValidationNow
+	ssoValidationNow = func() time.Time { return time.Unix(1_700_000_000, 0) }
+	t.Cleanup(func() { ssoValidationNow = oldClock })
+
+	record := AccountRecord{Token: "tok-cf-dead", Pool: "basic", Status: AccountStatusActive, Quota: DefaultQuotaSet("basic").ToDict()}
+	repo := &fakeRefreshRepo{records: []AccountRecord{record}}
+	service := NewAccountRefreshService(repo, AccountRefreshOptions{
+		SSOSessionProber: &fakeSSOSessionProber{
+			err: platform.NewUpstreamError("sso probe cloudflare challenge", 403, "just a moment"),
+		},
+		SSOModelVerifier: &fakeSSOModelVerifier{
+			err: platform.NewUpstreamError("blocked", 403, "blocked-user"),
 		},
 		SSOValidationMaxFailures: 1,
 	})
@@ -126,11 +164,11 @@ func TestValidateSSOAccountCloudflareIsSoftFail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("error: %v", err)
 	}
-	if result.Failed != 1 || result.Expired != 0 || len(repo.deletedTokens) != 0 {
-		t.Fatalf("cloudflare must soft-fail: result=%#v deleted=%#v", result, repo.deletedTokens)
+	if result.Expired != 1 || len(repo.deletedTokens) != 1 {
+		t.Fatalf("blocked-user via list_models fallback should expire: %#v deleted=%#v", result, repo.deletedTokens)
 	}
 	validation := repo.patches[0].ExtMerge["sso_validation"].(map[string]any)
-	if validation["last_fail_stage"] != "cloudflare" {
+	if validation["last_fail_stage"] != "list_models" {
 		t.Fatalf("stage = %#v", validation)
 	}
 }
