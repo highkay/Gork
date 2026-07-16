@@ -2,6 +2,9 @@
 
 本文覆盖部署、升级、备份、恢复和常见运行时组件选择。
 
+**开发、提交与镜像发布的正确链路**见 [development.md](./development.md)。  
+镜像默认由 **GitHub Actions 构建并推送到 GHCR**；运维侧只 pull 指定 `sha-<commit>` 并升级，不要用本机 `docker build/push` 替代正式发布。
+
 ## Docker and Compose
 
 标准版优先使用：
@@ -63,25 +66,44 @@ ACCOUNT_POSTGRESQL_URL=postgres://user:password@db.example.com:5432/gork?sslmode
 
 ## Upgrade and Rollback
 
+升级顺序（与 [development.md](./development.md) 一致）：
+
+1. 代码已 push 到部署用远程的 `main`，且 **GitHub Actions 构建成功**。  
+2. 在 GHCR Packages 确认存在目标 tag（推荐 `sha-<commit>`）。  
+3. 写入 `.env` 的 `GORK_IMAGE`，再 pull + up。
+
 升级标准版：
 
 ```bash
+# 先固定 .env，例如:
+# GORK_IMAGE=ghcr.io/<owner>/gork:sha-<commit>
 docker compose pull gork
 docker compose up -d
+```
+
+本机防封/warpplus 示例：
+
+```bash
+# 确认 Actions 已产出 ghcr.io/highkay/gork:sha-<commit> 后再执行
+# 编辑 .env → GORK_IMAGE=ghcr.io/highkay/gork:sha-<commit>
+docker compose -f docker-compose.warpplus.yml pull gork
+docker compose -f docker-compose.warpplus.yml up -d gork
 ```
 
 回滚镜像：
 
 ```bash
-GORK_IMAGE=ghcr.io/dslzl/gork:<previous-tag> docker compose up -d
+# 改回上一成功 tag 后
+GORK_IMAGE=ghcr.io/<owner>/gork:sha-<previous> docker compose -f docker-compose.warpplus.yml up -d gork
 ```
 
 升级前建议：
 
-1. 固定当前镜像 tag 或 digest。
+1. 固定当前镜像 tag 或 digest（写入变更记录）。
 2. 备份 `.env`、`data/config.toml`、`data/accounts.db` 或外部数据库。
 3. 记录当前 commit/image tag，可从镜像 tag、Compose `.env` 或部署平台版本记录查看。
-4. 跑 `/health`、`/meta`、`/v1/models` 和一次最小 chat smoke。
+4. 确认 GitHub Actions 对应 run 为 success，再改 `GORK_IMAGE`。
+5. 跑 `/health`、`/meta`、`/v1/models` 和一次最小 chat smoke。
 
 ## Backup and Restore
 

@@ -56,6 +56,8 @@ Gork 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 OpenA
 
 镜像发布会同时生成 `latest`、分支 tag、语义化版本 tag 和 `sha-<commit>` tag，并附带 SBOM 与 provenance attestation。生产部署建议在 `.env` 中设置 `GORK_IMAGE=ghcr.io/dslzl/gork:<version|sha-tag>`，需要完全固定供应链时可改为 `GORK_IMAGE=ghcr.io/dslzl/gork@sha256:<digest>`。
 
+**发布链路：代码 push → GitHub Actions 构建 GHCR → 再 pull/升级。** 不要用本机 `docker build/push` 替代 CI。详见 [docs/development.md](docs/development.md)。
+
 ### privoxy-warp 镜像（防封版专用）
 
 | 项 | 值 |
