@@ -28,10 +28,11 @@ type SSOSessionProber struct {
 
 func (p SSOSessionProber) ProbeSession(ctx context.Context, token string) error {
 	option := normalizeSSOSessionProber(p)
+	// Clearance must target accounts.x.ai (not grok.com); CF cookies are host-scoped.
 	lease, err := option.ProxyRuntime.Acquire(ctx, controlproxy.AcquireOptions{
 		Scope:           controlproxy.ProxyScopeApp,
 		Kind:            controlproxy.RequestKindHTTP,
-		ClearanceOrigin: option.Origin,
+		ClearanceOrigin: option.Endpoint,
 	})
 	if err != nil {
 		errText := redactedTransportError(err)
@@ -121,11 +122,13 @@ func normalizeSSOSessionProber(options SSOSessionProber) SSOSessionProber {
 		}
 		options.Endpoint = stringsTrimRightSlash(base) + "/"
 	}
+	// Origin/Referer for accounts session probe should stay on accounts.x.ai so
+	// proxy clearance affinity and browser-like headers match the probe host.
 	if options.Origin == "" {
-		options.Origin = table.Resolve("base")
+		options.Origin = stringsTrimRightSlash(options.Endpoint)
 	}
 	if options.Referer == "" {
-		options.Referer = table.Resolve("base_referer")
+		options.Referer = options.Endpoint
 	}
 	return options
 }

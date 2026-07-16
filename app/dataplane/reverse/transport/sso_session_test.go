@@ -10,9 +10,15 @@ import (
 
 type fakeSSOSessionProxyRuntime struct {
 	feedbacks []controlproxy.ProxyFeedback
+	acquires  []controlproxy.AcquireOptions
 }
 
-func (f *fakeSSOSessionProxyRuntime) Acquire(context.Context, ...controlproxy.AcquireOptions) (controlproxy.ProxyLease, error) {
+func (f *fakeSSOSessionProxyRuntime) Acquire(_ context.Context, options ...controlproxy.AcquireOptions) (controlproxy.ProxyLease, error) {
+	if len(options) > 0 {
+		f.acquires = append(f.acquires, options[0])
+	} else {
+		f.acquires = append(f.acquires, controlproxy.AcquireOptions{})
+	}
 	return controlproxy.ProxyLease{}, nil
 }
 
@@ -43,6 +49,9 @@ func TestSSOSessionProberClassifiesSignInAsSessionInvalid(t *testing.T) {
 	}
 	if req.Headers["Sec-Fetch-Mode"] != "navigate" {
 		t.Fatalf("headers = %#v", req.Headers)
+	}
+	if len(runtime.acquires) != 1 || runtime.acquires[0].ClearanceOrigin != "https://accounts.x.ai/" {
+		t.Fatalf("clearance origin = %#v, want accounts.x.ai endpoint", runtime.acquires)
 	}
 }
 
