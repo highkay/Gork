@@ -75,6 +75,41 @@
 3. 调高 `proxy.clearance.timeout_sec`。
 4. 手动模式下重新采集 `cf_clearance` 与 User-Agent。
 
+## SSO 校验大量 Cloudflare / 未删无效号
+
+表现：
+
+- Admin 或 `scripts/sso_sweep_progress.py` 里 `last_fail_stage=cloudflare` 暴涨。
+- `sso-sweep` 的 `cf` 计数很高，但 `session_invalid` / `deleted` 很少。
+- 定时 `account.sso_validation` 几乎不 expire，号池里仍有大量 dead SSO。
+
+可能原因：
+
+- 探针 clearance 绑到了 `grok.com` 而不是 `accounts.x.ai`（cookie 按 host 隔离）。
+- 出口 IP / 代理被 Cloudflare 挑战，accounts 导航无法完成。
+- 把 soft-fail（CF/WAF/限流）误当成 session 死亡批量删除策略过激或反过来从不清理。
+
+处理：
+
+1. 确认运行镜像包含 SSO 会话探针修复（clearance `ClearanceOrigin` = accounts 端点；CF 时 scheduler 回退 ListModels）。见 [operations.md · SSO](./operations.md#sso-账号校验与号池清理)。
+2. 先 `--dry-run` 跑 `account sso-sweep`，看 `ok` / `session_invalid` / `cf` 比例是否合理。
+3. 防封版检查 proxy + Byparr clearance；必要时降 `concurrency`。
+4. 仅对 **session invalid / local JWT expired / invalid credentials** 做删除；CF soft-fail 保留并重试。
+5. 用 `python3 scripts/account_health.py` 看 `sso_validation_*` fail reason 分布，再决定是否 `cleanup_bad_accounts.py`。
+
+## 号池「扫完了吗」
+
+快速判断：
+
+```bash
+docker cp gork:/app/data/accounts.db /tmp/accounts.db
+python3 scripts/sso_sweep_progress.py /tmp/accounts.db --minutes 30
+```
+
+- `validated_ok` + `sso_fail_markers` 接近 total，且近窗口 `updated≈0` → 批量扫号已停或已完成。
+- live active 中仍有大量无 `ext.sso_validation` → 未扫完，补 `sso-sweep` 或开 scheduler。
+- 近窗口仍有大量 `sso_validation_session` 更新 → 仍在淘汰或运行时删号，不一定是全量 sweep。
+
 ## LiveKit and WebSocket
 
 可能原因：

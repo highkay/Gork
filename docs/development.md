@@ -154,9 +154,22 @@ docker compose -f docker-compose.warpplus.yml up -d gork
 # 配置校验
 go run ./cmd/gork config validate
 
-# 账号仓储一致性
+# 账号仓储一致性（snapshot/list 对齐，不是上游 SSO 探针）
 go run ./cmd/gork account check
+go run ./cmd/gork account check --json
 
-# SSO 会话扫号（运维工具；全量清号仍建议用已部署镜像内的 scheduler / 同版本 CLI）
+# SSO 会话扫号（运维工具）
+# 全量清号建议用已部署镜像内同版本 CLI，保证 config/代理/clearance 与线上一致
 go run ./cmd/gork account sso-sweep --help
+go run ./cmd/gork account sso-sweep --dry-run --concurrency 4 --limit 50
+
+# 相关单测（改 SSO 探针时优先）
+go test ./app/control/account/ ./app/dataplane/reverse/protocol/ ./app/dataplane/reverse/transport/ ./cmd/gork/
+```
+
+号池健康与进度脚本（需先 `docker cp` 出 `accounts.db`，见 [operations.md](./operations.md#sso-账号校验与号池清理)）：
+
+```bash
+python3 scripts/account_health.py /tmp/accounts.db
+python3 scripts/sso_sweep_progress.py /tmp/accounts.db
 ```

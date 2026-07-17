@@ -255,7 +255,8 @@ To use free accounts you need both an SSO Token and a CF Clearance:
 | Refresh intervals | `basic_interval_sec`, `super_interval_sec`, and `heavy_interval_sec` control refresh cadence per pool. |
 | Invalid credentials | Accounts are expired after `account.invalid_credentials.max_failures` consecutive invalid-credential failures. |
 | Rate limited | 429 responses push accounts into cooldown or lower selection priority, depending on quota/random mode. |
-| SSO validation | `account.sso_validation.*` schedules validation for console.x.ai free-account SSO credentials. |
+| SSO validation | `account.sso_validation.*` schedules checks for console free-account SSO: local JWT precheck → `accounts.x.ai` session probe → ListModels fallback on CF/WAF; only terminal session/credential death accumulates toward delete. |
+| SSO bulk sweep | CLI `gork account sso-sweep` (prefer `--dry-run` first). Progress/health: `scripts/sso_sweep_progress.py`, `scripts/account_health.py`. See [operations.md](./operations.md#sso-账号校验与号池清理). |
 
 <br>
 

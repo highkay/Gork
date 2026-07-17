@@ -12,11 +12,11 @@
 | `account.refresh.super_interval_sec` | `int` | `7200` | `GROK_ACCOUNT_REFRESH_SUPER_INTERVAL_SEC` | `true` | `false` | Super pool quota refresh interval in seconds. |
 | `account.refresh.usage_concurrency` | `int` | `50` | `GROK_ACCOUNT_REFRESH_USAGE_CONCURRENCY` | `true` | `false` | Concurrency for background usage refresh workers. |
 | `account.selection.max_inflight` | `int` | `8` | `GROK_ACCOUNT_SELECTION_MAX_INFLIGHT` | `true` | `false` | Maximum concurrent requests leased to one account. |
-| `account.sso_validation.batch_size` | `int` | `100` | `GROK_ACCOUNT_SSO_VALIDATION_BATCH_SIZE` | `true` | `false` | Number of SSO accounts validated per scheduled batch. |
-| `account.sso_validation.concurrency` | `int` | `10` | `GROK_ACCOUNT_SSO_VALIDATION_CONCURRENCY` | `true` | `false` | Concurrency for scheduled SSO validation. |
-| `account.sso_validation.enabled` | `bool` | `false` | `GROK_ACCOUNT_SSO_VALIDATION_ENABLED` | `true` | `false` | Enables scheduled validation for console.x.ai SSO accounts. |
+| `account.sso_validation.batch_size` | `int` | `100` | `GROK_ACCOUNT_SSO_VALIDATION_BATCH_SIZE` | `true` | `false` | Number of SSO accounts validated per scheduled batch (local JWT precheck + accounts.x.ai session probe; ListModels fallback on CF/WAF). |
+| `account.sso_validation.concurrency` | `int` | `10` | `GROK_ACCOUNT_SSO_VALIDATION_CONCURRENCY` | `true` | `false` | Concurrency for scheduled SSO validation probes. |
+| `account.sso_validation.enabled` | `bool` | `false` | `GROK_ACCOUNT_SSO_VALIDATION_ENABLED` | `true` | `false` | Enables scheduled validation for console.x.ai free-account SSO cookies (session probe authority, not JWT alone). |
 | `account.sso_validation.interval_sec` | `int` | `300` | `GROK_ACCOUNT_SSO_VALIDATION_INTERVAL_SEC` | `true` | `false` | Scheduled SSO validation interval in seconds. |
-| `account.sso_validation.max_failures` | `int` | `3` | `GROK_ACCOUNT_SSO_VALIDATION_MAX_FAILURES` | `true` | `false` | Consecutive SSO validation failures before an account is marked invalid. |
+| `account.sso_validation.max_failures` | `int` | `3` | `GROK_ACCOUNT_SSO_VALIDATION_MAX_FAILURES` | `true` | `false` | Consecutive terminal SSO failures (session invalid / invalid credentials) before delete; CF/rate-limit soft-fails alone are not terminal. |
 | `account.storage` | `string` | `local` | `GROK_ACCOUNT_STORAGE` | `false` | `false` | Account repository backend: local, redis, mysql, postgresql, or sqlite. |
 | `app.admin_key` | `string` | `` | `GROK_APP_ADMIN_KEY` | `true` | `true` | Legacy Admin console password key; app.app_key is preferred. |
 | `app.api_key` | `string` | `` | `GROK_APP_API_KEY` | `true` | `true` | API bearer token for /v1/* routes; empty disables API authentication. |

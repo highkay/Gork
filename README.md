@@ -32,8 +32,9 @@ Gork 是一个基于 **Go** 构建的 Grok 网关，将 Grok Web 能力以 OpenA
 | [Configuration](docs/configuration.md) | 由配置 schema 生成的完整 TOML / `GROK_` 环境变量表 |
 | [API Compatibility](docs/api-compatibility.md) | OpenAI、Anthropic、Admin/WebUI 私有 API 兼容程度和限制 |
 | [Security](docs/security.md) | 密钥、鉴权、CORS、媒体 URL、日志脱敏、TLS 和容器加固 |
-| [Operations](docs/operations.md) | Docker、Compose、防封版、Redis、SQL、日志、升级、备份、恢复 |
-| [Troubleshooting](docs/troubleshooting.md) | 401、403、429、5xx、Cloudflare、LiveKit/WebSocket、asset upload 排查 |
+| [Operations](docs/operations.md) | Docker、Compose、防封版、Redis、SQL、日志、升级、备份、恢复、SSO 扫号与号池清理 |
+| [Troubleshooting](docs/troubleshooting.md) | 401、403、429、5xx、Cloudflare、SSO 校验、LiveKit/WebSocket、asset upload 排查 |
+| [Development](docs/development.md) | 开发发布链路（Actions → GHCR）、本地测试与 CLI |
 | [Demo Compose](docs/demo-compose.md) | `docker-compose.demo.yml` 的 demo 限定用途和 reset 行为 |
 | [English README](docs/README.en.md) | 英文快速入口 |
 
@@ -338,7 +339,8 @@ server {
 | refresh interval | `basic_interval_sec`、`super_interval_sec`、`heavy_interval_sec` 控制不同账号池的刷新周期。 |
 | invalid credentials | 连续达到 `account.invalid_credentials.max_failures` 后账号会被自动标记失效。 |
 | rate limited | 429 会让账号进入冷却或降低选号优先级，具体行为取决于 quota/random 模式。 |
-| SSO validation | `account.sso_validation.*` 用于定期验证 console.x.ai 免费账号的 SSO 可用性。 |
+| SSO validation | `account.sso_validation.*` 定时校验 console 免费账号：本地 JWT 预检 → `accounts.x.ai` 会话探针 → CF/WAF 时回退 `ListModels`；仅 session/凭证死亡会累计至删除。 |
+| SSO 全量扫号 | CLI `gork account sso-sweep`（建议 `--dry-run` 先看）；进度/健康见 `scripts/sso_sweep_progress.py`、`scripts/account_health.py`。运维细节见 [docs/operations.md](docs/operations.md#sso-账号校验与号池清理)。 |
 
 <br>
 

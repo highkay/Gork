@@ -137,3 +137,138 @@ SQL 模式：
 - `/meta/update` 会检查 GitHub release，并缓存结果。
 - 更新检查失败不会影响主服务请求。
 - 如需完全固定版本，生产部署使用镜像 tag、`sha-<commit>` tag 或 digest。
+
+## SSO 账号校验与号池清理
+
+console.x.ai 免费账号（SSO cookie）的有效性由两套机制维护：
+
+| 机制 | 入口 | 用途 |
+| :-- | :-- | :-- |
+| 定时 SSO validation | `account.sso_validation.*` + 进程内 scheduler | 周期性分批探针，写 `ext.sso_validation`，终端失效可软删 |
+| 全量 CLI 扫号 | `gork account sso-sweep` | 运维一次性扫 active 账号；仅 session/local 无效走 Admin 删除 |
+| 运行时失败 | 请求路径 invalid credentials | 连续失败达 `account.invalid_credentials.max_failures` 后 expire/删除 |
+
+### 探针逻辑（与代码一致）
+
+校验顺序（`app/control/account/sso_validation.go` + `dataplane/reverse`）：
+
+1. **本地预检**（无 HTTP）：空 cookie → `empty`；JWT `exp` 早于 `now-60s` → `jwt_expired`；非 JWT 形态则继续在线探针。
+2. **在线会话探针**：对 `accounts.x.ai` 做浏览器式导航，以**最终跳转 URL** 判定会话是否仍被接受（不是只看 JWT 是否未过期）。
+3. **Clearance 绑定**：探针 `Acquire` 的 `ClearanceOrigin` 必须是 accounts 端点，不能用 `grok.com` 的 CF cookie 打 accounts（否则会整批 Cloudflare soft-fail）。
+4. **Cloudflare / WAF / 限流 / 网络**：单独不删号；scheduler 路径会 **回退 console `ListModels`**，若 ListModels 仍判定凭证死亡则记失败；仅 session 探针路径在 CLI `sso-sweep` 中只把 **session invalid / local invalid** 送去删除。
+5. **终端失败**：`session_invalid` / invalid credentials 累计到 `account.sso_validation.max_failures`（默认 3）后 Delete；CF、rate limit、http_block、传输错误只写 soft-fail 标记。
+
+浏览器响应分类（`protocol.ClassifySSOBrowserResponse`）大致为：`ok` / `cloudflare` / `rate_limited` / `session_invalid` / `http_block` / `unknown`。
+
+### 配置
+
+```toml
+[account.sso_validation]
+enabled = false          # 默认关闭；大规模号池建议按出口与 CF 压力评估后再开
+interval_sec = 300
+batch_size = 100
+concurrency = 10
+max_failures = 3
+```
+
+对应环境变量：`GROK_ACCOUNT_SSO_VALIDATION_*`（见 [configuration.md](./configuration.md)）。
+
+### CLI：`account sso-sweep`
+
+在**已部署且配置/代理与线上一致**的环境执行（推荐容器内同版本二进制，而不是本机旧 build）：
+
+```bash
+# 帮助
+docker exec gork /app/gork account sso-sweep --help
+# 或本机（需能加载同一 config / 代理）
+go run ./cmd/gork account sso-sweep --help
+
+# 只探针、不删除
+docker exec gork /app/gork account sso-sweep \
+  --dry-run --concurrency 8 --progress-every 100
+
+# 正式清理（通过 Admin API 批量 DELETE /admin/api/tokens）
+docker exec gork /app/gork account sso-sweep \
+  --concurrency 8 \
+  --admin-url http://127.0.0.1:8000 \
+  --admin-auth "<app.app_key 或 Admin Bearer>" \
+  --delete-batch 100
+
+# 分页/限量（大库分批）
+docker exec gork /app/gork account sso-sweep --offset 0 --limit 5000 --dry-run
+```
+
+常用 flag：
+
+| Flag | 默认 | 说明 |
+| :-- | :-- | :-- |
+| `--concurrency` | `8` | 探针并发 |
+| `--limit` / `--offset` | `0` / `0` | `limit=0` 表示全部 active |
+| `--dry-run` | off | 只探针不删 |
+| `--admin-url` | `http://127.0.0.1:8000` | 删除用 Admin 基址 |
+| `--admin-auth` | `gork` | Bearer token |
+| `--delete-batch` | `100` | 批量删除大小 |
+| `--page-size` | `500` | 列举 active 分页 |
+| `--progress-every` | `100` | 进度日志间隔 |
+
+输出示例字段：`checked` / `ok` / `session_invalid` / `local_invalid` / `cf` / `rate` / `http_block` / `other` / `deleted`。
+
+仓储一致性（非 SSO 探针）仍用：
+
+```bash
+go run ./cmd/gork account check
+# 或
+docker exec gork /app/gork account check --json
+```
+
+### 运维脚本（只读库 / Admin 清理）
+
+容器内 `accounts.db` 常为 root/容器用户权限，宿主机只读打开可能失败；先拷贝再分析：
+
+```bash
+docker cp gork:/app/data/accounts.db /tmp/accounts.db
+
+# 号池健康摘要（status / fail reason / quota 等）
+python3 scripts/account_health.py /tmp/accounts.db
+python3 scripts/account_health.py /tmp/accounts.db --json
+
+# SSO 扫号进度（ext.sso_validation、近期更新速率、粗算 ETA）
+python3 scripts/sso_sweep_progress.py /tmp/accounts.db
+python3 scripts/sso_sweep_progress.py /tmp/accounts.db --minutes 30
+
+# 仅本地 JWT/空 cookie 预检 + 可选删 expired（无在线探针）
+python3 scripts/sso_offline_cleanup.py /tmp/accounts.db --dry-run
+python3 scripts/sso_offline_cleanup.py /tmp/accounts.db --auth gork
+
+# 清理 expired；可选禁用 SSO soft-fail 号
+python3 scripts/cleanup_bad_accounts.py /tmp/accounts.db --dry-run
+python3 scripts/cleanup_bad_accounts.py /tmp/accounts.db --disable-sso-soft-fail
+
+# 403/429 运营分析（配合 config 调参示例）
+python3 scripts/analyze_403_429.py --help
+# 参考: scripts/config_403_429_tune.example.toml
+```
+
+`ext.sso_validation` 常见字段：
+
+| 字段 | 含义 |
+| :-- | :-- |
+| `last_ok_at` | 最近一次探针成功（毫秒时间戳） |
+| `failure_count` | 连续失败次数 |
+| `last_fail_stage` | `local` / `session` / `list_models` / `cloudflare` / `rate_limited` / `http_block` / `refresh` 等 |
+| `last_fail_reason` | 人类可读原因（日志/脚本里已脱敏 token） |
+
+`last_fail_reason` / `state_reason` 前缀 `sso_validation_*` 表示来自 SSO 校验路径；成功探针会清空这些 stale 标记。
+
+### 进度判断建议
+
+- **几乎扫完**：live active（`status=active` 且 `deleted_at IS NULL`）中带 `sso_validation` 的 ok/fail 覆盖率接近 100%，且无独立 `sso-sweep` 进程、更新速率接近 0。
+- **仍在扫**：`sso_sweep_progress.py` 近 N 分钟 `updated` 与 `sso ok/fail` 持续增长；或 CLI 仍在打印 `progress checked=`。
+- **漏检**：无 `sso_validation` 且非 soft-deleted 的 active 数量 > 0 → 补跑 `sso-sweep` 或打开 scheduler。
+- **不要**把 Cloudflare soft-fail 当成「号已死」批量硬删；先确认代理 clearance 与 accounts 绑定是否正确。
+
+### 安全注意
+
+- 不要把完整 SSO / cookie 贴进 issue、日志汇总或文档。
+- `account check` / 脚本输出已尽量脱敏 token；导出 db 副本时同样按密钥处理。
+- 全量 `sso-sweep` 会打上游 accounts/console，注意并发、代理容量与 rate limit。

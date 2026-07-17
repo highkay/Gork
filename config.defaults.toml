@@ -209,6 +209,8 @@ on_demand_min_interval_sec = 300
 [startup.migration]
 account_batch_size = 500
 
+# console.x.ai SSO：定时探针（本地 JWT 预检 → accounts.x.ai 会话 → CF 时 ListModels 回退）
+# 全量一次性扫号用 CLI: gork account sso-sweep（见 docs/operations.md）
 [account.sso_validation]
 enabled = false
 interval_sec = 300

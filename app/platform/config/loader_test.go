@@ -163,7 +163,7 @@ func TestDefaultSchemaCoversDefaultsExampleAndDeepEnv(t *testing.T) {
 	for _, entry := range DefaultSchema(defaults) {
 		schemaDescriptions[entry.Key] = entry.Desc
 	}
-	if got := schemaDescriptions["account.sso_validation.enabled"]; got != "Enables scheduled validation for console.x.ai SSO accounts." {
+	if got := schemaDescriptions["account.sso_validation.enabled"]; got != "Enables scheduled validation for console.x.ai free-account SSO cookies (session probe authority, not JWT alone)." {
 		t.Fatalf("sso validation description = %q", got)
 	}
 	loaded, err := LoadConfig(defaultsPath, LoadConfigOptions{Env: map[string]string{
