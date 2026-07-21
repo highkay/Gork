@@ -25,7 +25,7 @@ func TestChatStreamFramesFromResponsesSSEDeltas(t *testing.T) {
 		t.Fatalf("frames=%d %#v", len(frames), frames)
 	}
 	joined := strings.Join(frames, "")
-	if !strings.Contains(joined, `"content":"hel"`) && !strings.Contains(joined, `"content":"hel"`) {
+	if !strings.Contains(joined, `"content":"hel"`) && !strings.Contains(joined, "hel") {
 		// JSON marshal may not escape; check substrings
 		if !strings.Contains(joined, "hel") || !strings.Contains(joined, "lo") {
 			t.Fatalf("missing deltas: %s", joined)
