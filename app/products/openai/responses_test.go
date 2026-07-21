@@ -35,6 +35,39 @@ func TestResponsesParseInputMatchesPythonShapes(t *testing.T) {
 	}
 }
 
+func TestResponsesPreserveMultimodalFunctionCallOutput(t *testing.T) {
+	// 对齐 chenyme #713：function_call_output 可携带图片 parts，不得被压成空字符串。
+	messages := parseResponseInput([]any{
+		map[string]any{
+			"type":    "function_call_output",
+			"call_id": "call_img",
+			"output": []any{
+				map[string]any{"type": "input_text", "text": "see image"},
+				map[string]any{"type": "input_image", "image_url": map[string]any{"url": "https://img/tool.png"}},
+			},
+		},
+	})
+	if len(messages) != 1 {
+		t.Fatalf("messages=%d", len(messages))
+	}
+	content, ok := messages[0]["content"].([]any)
+	if !ok || len(content) != 2 {
+		t.Fatalf("content=%#v", messages[0]["content"])
+	}
+	textPart, _ := content[0].(map[string]any)
+	imgPart, _ := content[1].(map[string]any)
+	if textPart["type"] != "text" || textPart["text"] != "see image" {
+		t.Fatalf("text part=%#v", textPart)
+	}
+	if imgPart["type"] != "image_url" {
+		t.Fatalf("image part=%#v", imgPart)
+	}
+	url := imgPart["image_url"].(map[string]any)["url"]
+	if url != "https://img/tool.png" {
+		t.Fatalf("image url=%v", url)
+	}
+}
+
 func TestResponsesToolHelpersMatchResponsesAPIShape(t *testing.T) {
 	tools := toResponseChatTools([]map[string]any{
 		{"type": "function", "name": "lookup", "description": "Lookup", "parameters": map[string]any{"type": "object"}},

@@ -100,7 +100,11 @@ type chatCompletionOptions struct {
 	Temperature      float64
 	TopP             float64
 	RequestOverrides map[string]any
-	StreamFrame      func(string) error
+	// PromptCacheSeed 来自客户端 Header/body 的会话亲和种子（Claude Code / Codex 等）。
+	PromptCacheSeed string
+	// GrokTurnIndex 来自 x-grok-turn-idx；仅 Build 通道在有稳定 session 时透传。
+	GrokTurnIndex string
+	StreamFrame   func(string) error
 }
 
 type chatCompletionPlan struct {

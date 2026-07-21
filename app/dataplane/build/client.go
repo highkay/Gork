@@ -4,12 +4,16 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+
+	"github.com/google/uuid"
 )
 
 // RequestMeta 是单次 Build 上游调用的鉴权与路由头字段。
@@ -21,7 +25,11 @@ type RequestMeta struct {
 	SessionID      string
 	ConversationID string
 	RequestID      string
-	Stream         bool
+	// PromptCacheKey 用于派生稳定 x-grok-session-id；空则不设置 session（禁止随机伪造）。
+	PromptCacheKey string
+	// TurnIndex 仅在已有稳定 session 时透传 x-grok-turn-idx；空/非法则省略。
+	TurnIndex string
+	Stream    bool
 }
 
 // APIClient 出站 cli-chat-proxy（标准 HTTP/2，无 browser reverse）。
@@ -125,15 +133,29 @@ func (c *APIClient) applyHeaders(req *http.Request, meta RequestMeta) error {
 	req.Header.Set("User-Agent", c.config.UserAgent)
 	req.Header.Set("Accept-Encoding", "gzip")
 
-	agentID := firstNonEmpty(meta.AgentID, newOpaqueID("agent"))
-	sessionID := firstNonEmpty(meta.SessionID, newOpaqueID("session"))
+	// agent-id 可固定为客户端标识；req-id 每次请求独立即可。
+	// session-id 必须由稳定 prompt_cache_key 派生，禁止每请求随机 UUID（会打断 xAI 缓存亲和）。
+	agentID := firstNonEmpty(meta.AgentID, c.config.ClientIdentifier, "grok-shell")
 	reqID := firstNonEmpty(meta.RequestID, newOpaqueID("req"))
 	req.Header.Set("x-grok-agent-id", agentID)
-	req.Header.Set("x-grok-session-id", sessionID)
 	req.Header.Set("x-grok-req-id", reqID)
 	req.Header.Set("traceparent", "00-"+strings.ReplaceAll(reqID, "-", "")+"-"+hex8()+"-01")
 
-	if conv := strings.TrimSpace(meta.ConversationID); conv != "" {
+	sessionID := strings.TrimSpace(meta.SessionID)
+	if sessionID == "" {
+		sessionID = GrokSessionID(meta.PromptCacheKey)
+	}
+	if sessionID != "" {
+		req.Header.Set("x-grok-session-id", sessionID)
+		// 无显式 conv 时与 session 对齐，保持多轮归属一致。
+		if conv := strings.TrimSpace(meta.ConversationID); conv != "" {
+			req.Header.Set("x-grok-conv-id", conv)
+			req.Header.Set("x-grok-conversation-id", conv)
+		} else {
+			req.Header.Set("x-grok-conv-id", sessionID)
+		}
+		applyGrokTurnIndexHeader(req, meta.TurnIndex)
+	} else if conv := strings.TrimSpace(meta.ConversationID); conv != "" {
 		req.Header.Set("x-grok-conv-id", conv)
 		req.Header.Set("x-grok-conversation-id", conv)
 	}
@@ -149,6 +171,47 @@ func (c *APIClient) applyHeaders(req *http.Request, meta RequestMeta) error {
 		req.Header.Set("Accept", "application/json")
 	}
 	return nil
+}
+
+// GrokSessionID 从 prompt_cache_key 派生稳定 session UUID。
+// 空键返回空串（调用方不得再伪造随机 session）。对齐 chenyme/grok2api grokSessionID。
+func GrokSessionID(promptCacheKey string) string {
+	key := strings.TrimSpace(promptCacheKey)
+	if key == "" {
+		return ""
+	}
+	if parsed, err := uuid.Parse(key); err == nil {
+		return parsed.String()
+	}
+	return uuid.NewHash(sha256.New(), uuid.NameSpaceURL, []byte("gork:session:"+key), 5).String()
+}
+
+// applyGrokTurnIndexHeader 只在请求已有稳定 Grok session 时透传真实客户端轮次。
+func applyGrokTurnIndexHeader(request *http.Request, value string) {
+	if request == nil || request.Header.Get("x-grok-session-id") == "" {
+		return
+	}
+	if turnIndex := normalizeGrokTurnIndex(value); turnIndex != "" {
+		request.Header.Set("x-grok-turn-idx", turnIndex)
+	}
+}
+
+// normalizeGrokTurnIndex 只接受官方客户端生成的非负十进制 u64。
+// 空值或非法值直接省略，避免网关根据历史/工具循环伪造轮次。
+func normalizeGrokTurnIndex(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 20 {
+		return ""
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return ""
+		}
+	}
+	if _, err := strconv.ParseUint(value, 10, 64); err != nil {
+		return ""
+	}
+	return value
 }
 
 func normalizeGzipResponse(resp *http.Response) error {

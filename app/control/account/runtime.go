@@ -11,6 +11,7 @@ var refreshRuntimeState = struct {
 	service                accountScheduledRefresher
 	scheduler              *AccountRefreshScheduler
 	ssoValidationScheduler *SSOValidationScheduler
+	autoCleanScheduler     *AutoCleanScheduler
 	schedulerLeader        bool
 	strategy               string
 }{
@@ -57,6 +58,18 @@ func GetSSOValidationSchedulerRuntime() *SSOValidationScheduler {
 	return refreshRuntimeState.ssoValidationScheduler
 }
 
+func SetAutoCleanScheduler(scheduler *AutoCleanScheduler) {
+	refreshRuntimeState.Lock()
+	defer refreshRuntimeState.Unlock()
+	refreshRuntimeState.autoCleanScheduler = scheduler
+}
+
+func GetAutoCleanSchedulerRuntime() *AutoCleanScheduler {
+	refreshRuntimeState.Lock()
+	defer refreshRuntimeState.Unlock()
+	return refreshRuntimeState.autoCleanScheduler
+}
+
 func SetRefreshSchedulerLeader(isLeader bool) {
 	refreshRuntimeState.Lock()
 	defer refreshRuntimeState.Unlock()
@@ -93,7 +106,7 @@ func ReconcileRefreshRuntime(enabled ...bool) string {
 	if refreshEnabled {
 		targetStrategy = "quota"
 	}
-	scheduler, validationScheduler, leader := runtimeSchedulerState()
+	scheduler, validationScheduler, autoClean, leader := runtimeSchedulerState()
 	SetAccountSelectionStrategy(targetStrategy)
 	if scheduler != nil && leader {
 		if refreshEnabled && !scheduler.IsRunning() {
@@ -104,13 +117,14 @@ func ReconcileRefreshRuntime(enabled ...bool) string {
 		}
 	}
 	reconcileSSOValidationScheduler(validationScheduler, leader)
+	reconcileAutoCleanScheduler(autoClean, leader)
 	return targetStrategy
 }
 
-func runtimeSchedulerState() (*AccountRefreshScheduler, *SSOValidationScheduler, bool) {
+func runtimeSchedulerState() (*AccountRefreshScheduler, *SSOValidationScheduler, *AutoCleanScheduler, bool) {
 	refreshRuntimeState.Lock()
 	defer refreshRuntimeState.Unlock()
-	return refreshRuntimeState.scheduler, refreshRuntimeState.ssoValidationScheduler, refreshRuntimeState.schedulerLeader
+	return refreshRuntimeState.scheduler, refreshRuntimeState.ssoValidationScheduler, refreshRuntimeState.autoCleanScheduler, refreshRuntimeState.schedulerLeader
 }
 
 func reconcileSSOValidationScheduler(scheduler *SSOValidationScheduler, leader bool) {
@@ -118,6 +132,19 @@ func reconcileSSOValidationScheduler(scheduler *SSOValidationScheduler, leader b
 		return
 	}
 	enabled := ssoValidationEnabled()
+	if enabled && !scheduler.IsRunning() {
+		scheduler.Start()
+	}
+	if !enabled && scheduler.IsRunning() {
+		scheduler.Stop()
+	}
+}
+
+func reconcileAutoCleanScheduler(scheduler *AutoCleanScheduler, leader bool) {
+	if scheduler == nil || !leader {
+		return
+	}
+	enabled := autoCleanEnabled()
 	if enabled && !scheduler.IsRunning() {
 		scheduler.Start()
 	}

@@ -12,18 +12,28 @@ import (
 )
 
 type responseOptions struct {
-	Model        string
-	Input        any
-	Instructions string
-	Stream       bool
-	EmitThink    bool
-	Temperature  float64
-	TopP         float64
-	Tools        []map[string]any
-	ToolChoice   any
+	Model            string
+	Input            any
+	Instructions     string
+	Stream           bool
+	EmitThink        bool
+	Temperature      float64
+	TopP             float64
+	Tools            []map[string]any
+	ToolChoice       any
+	PromptCacheSeed  string
+	GrokTurnIndex    string
+	RequestOverrides map[string]any
 }
 
 func Responses(ctx context.Context, options responseOptions) (chatCompletionResult, error) {
+	// Build 原生 Responses 路径（不经 web/console SSO 池）。
+	if model.IsBuildModelName(options.Model) {
+		if !buildFeatureEnabled() {
+			return chatCompletionResult{}, fmt.Errorf("Unknown model: '%s'", options.Model)
+		}
+		return BuildResponses(ctx, options)
+	}
 	spec, err := model.Resolve(options.Model)
 	if err != nil {
 		return chatCompletionResult{}, err

@@ -17,6 +17,7 @@ import (
 	accountcontrol "github.com/dslzl/gork/app/control/account"
 	proxycontrol "github.com/dslzl/gork/app/control/proxy"
 	accountdataplane "github.com/dslzl/gork/app/dataplane/account"
+	"github.com/dslzl/gork/app/dataplane/build"
 	proxydataplane "github.com/dslzl/gork/app/dataplane/proxy"
 	reverse "github.com/dslzl/gork/app/dataplane/reverse"
 	"github.com/dslzl/gork/app/platform"
@@ -385,6 +386,42 @@ func defaultAdminSchedulerStatus() map[string]any {
 			}
 		}
 		out["refresh"] = refresh
+	}
+	// SSO 探针调度
+	if sso := accountcontrol.GetSSOValidationSchedulerRuntime(); sso != nil {
+		out["sso_validation"] = map[string]any{
+			"running": sso.IsRunning(),
+			"enabled": config.GlobalConfig.GetBool("account.sso_validation.enabled", false),
+		}
+	} else {
+		out["sso_validation"] = map[string]any{
+			"running": false,
+			"enabled": config.GlobalConfig.GetBool("account.sso_validation.enabled", false),
+		}
+	}
+	// 过期账号 auto-clean（SSO + Build）
+	if clean := accountcontrol.GetAutoCleanSchedulerRuntime(); clean != nil {
+		out["auto_clean"] = map[string]any{
+			"running":           clean.IsRunning(),
+			"enabled":           config.GlobalConfig.GetBool("account.auto_clean.enabled", false),
+			"interval_sec":      config.GlobalConfig.GetInt("account.auto_clean.interval_sec", 3600),
+			"min_age_sec":       config.GlobalConfig.GetInt("account.auto_clean.min_age_sec", 86400),
+			"include_disabled":  config.GlobalConfig.GetBool("account.auto_clean.include_disabled", false),
+			"max_deletes_tick":  config.GlobalConfig.GetInt("account.auto_clean.max_deletes_per_tick", 50),
+			"build_store_bound": accountcontrol.BuildAutoCleanStoreBound(),
+		}
+	} else {
+		out["auto_clean"] = map[string]any{
+			"running":           false,
+			"enabled":           config.GlobalConfig.GetBool("account.auto_clean.enabled", false),
+			"build_store_bound": accountcontrol.BuildAutoCleanStoreBound(),
+		}
+	}
+	// Build reasoning replay 后端
+	out["reasoning_replay"] = map[string]any{
+		"enabled": config.GlobalConfig.GetBool("provider.build.reasoning_replay_enabled", true),
+		"backend": build.ReasoningReplayBackend(),
+		"ttl_sec": config.GlobalConfig.GetInt("provider.build.reasoning_replay_ttl_sec", 3600),
 	}
 	return out
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	accountcontrol "github.com/dslzl/gork/app/control/account"
 	"github.com/dslzl/gork/app/control/buildaccount"
 	"github.com/dslzl/gork/app/platform"
 	platformconfig "github.com/dslzl/gork/app/platform/config"
@@ -46,7 +47,10 @@ func defaultAppMainInitializeBuildAccountStore(ctx context.Context, state *appMa
 	state.buildAccountStore = store
 	openaiproduct.SetBuildAccountDirectory(store)
 	restoreAdmin := adminproduct.SetBuildAccountStore(store)
+	// 过期 Build 账号纳入 auto_clean（与 SSO 共用开关，默认关闭）。
+	accountcontrol.SetBuildAutoCleanStore(buildaccount.AutoCleanAdapter{Store: store})
 	return func(context.Context) error {
+		accountcontrol.SetBuildAutoCleanStore(nil)
 		restoreAdmin()
 		openaiproduct.SetBuildAccountDirectory(nil)
 		state.buildAccountStore = nil

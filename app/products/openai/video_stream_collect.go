@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	reverseruntime "github.com/dslzl/gork/app/dataplane/reverse/runtime"
 	"github.com/dslzl/gork/app/dataplane/reverse/transport"
 	"github.com/dslzl/gork/app/platform"
+	"github.com/dslzl/gork/app/platform/redact"
 )
 
 func defaultVideoStreamLines(ctx context.Context, token string, payload map[string]any, referer string, timeoutS float64) ([]string, error) {
@@ -124,8 +126,71 @@ func extractVideoFileAttachments(obj map[string]any) []string {
 	return result
 }
 
+const (
+	videoDiagnosticBodyLimit    = 64 << 10
+	videoDiagnosticSummaryLimit = 256
+)
+
+// newVideoUpstreamError 构造视频上游错误；Body 经脱敏与长度截断，避免密钥/Cookie 落入日志与任务记录。
+// 对齐 chenyme/grok2api video upload diagnostics（#727/#723）。
 func newVideoUpstreamError(message string, status int, code string, body string) *platform.UpstreamError {
-	err := platform.NewUpstreamError(message, status, body)
+	summary := summarizeVideoUpstreamError(message, status, body)
+	safeBody := redact.Excerpt(body, videoDiagnosticBodyLimit)
+	if safeBody == "-" {
+		safeBody = ""
+	}
+	err := platform.NewUpstreamError(summary, status, safeBody)
 	err.Code = code
 	return err
+}
+
+func summarizeVideoUpstreamError(message string, status int, body string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = fmt.Sprintf("Grok video upstream returned %d", status)
+	}
+	// 从 JSON body 提取 code/message 作为补充诊断（已脱敏）。
+	if code, detail, ok := extractVideoUpstreamErrorFields(body); ok {
+		parts := []string{message}
+		if code != "" {
+			parts = append(parts, code)
+		}
+		if detail != "" && !strings.Contains(message, detail) {
+			parts = append(parts, detail)
+		}
+		message = strings.Join(parts, ": ")
+	}
+	return redact.Excerpt(message, videoDiagnosticSummaryLimit)
+}
+
+func extractVideoUpstreamErrorFields(body string) (code, message string, ok bool) {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return "", "", false
+	}
+	var root map[string]any
+	if err := json.Unmarshal([]byte(body), &root); err != nil {
+		return "", "", false
+	}
+	if errorObject, mapped := root["error"].(map[string]any); mapped {
+		code = firstNonEmpty(stringValue(errorObject["code"], ""), stringValue(errorObject["type"], ""))
+		message = firstNonEmpty(stringValue(errorObject["message"], ""), stringValue(errorObject["detail"], ""))
+	} else if errorText, isString := root["error"].(string); isString {
+		message = errorText
+	}
+	if code == "" {
+		code = firstNonEmpty(stringValue(root["code"], ""), stringValue(root["error_code"], ""))
+	}
+	if message == "" {
+		message = firstNonEmpty(stringValue(root["message"], ""), stringValue(root["error_message"], ""), stringValue(root["detail"], ""))
+	}
+	code = redact.Excerpt(code, 64)
+	if code == "-" {
+		code = ""
+	}
+	message = redact.Excerpt(message, 160)
+	if message == "-" {
+		message = ""
+	}
+	return code, message, code != "" || message != ""
 }

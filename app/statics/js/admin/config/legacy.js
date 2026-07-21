@@ -145,6 +145,17 @@ const SCHEMA_DEF = [
         ]
       },
       {
+        title: '过期账号自动清理',
+        section: 'account.auto_clean',
+        fields: [
+          { key: 'enabled', label: '启用过期账号硬删', type: 'bool', desc: '默认关闭。启用后周期扫描 status=expired（可选 disabled）且超过 min_age 的 SSO/Build 账号并硬删。启用后首轮扫描等待一个 interval，不会立即删除。', help: '安全建议：先用 sso-sweep dry-run 与较大 min_age 验证；每 tick 有 max_deletes 预算上限。' },
+          { key: 'interval_sec', label: '扫描间隔（秒）', type: 'number', min: 60, desc: '两次清理扫描的间隔；启用后第一次扫描也先等待该间隔。', showIf: 'account.auto_clean.enabled' },
+          { key: 'min_age_sec', label: '最小过期年龄（秒）', type: 'number', min: 60, desc: '账号标记 expired 后至少经过该时间才可被删除（默认 86400 = 24h）。', showIf: 'account.auto_clean.enabled' },
+          { key: 'include_disabled', label: '同时清理 disabled', type: 'bool', desc: '开启后也将超龄 disabled 账号纳入硬删候选。', showIf: 'account.auto_clean.enabled' },
+          { key: 'max_deletes_per_tick', label: '每轮最大删除数', type: 'number', min: 1, desc: '单次扫描硬删预算，防止一次扫空大量账号。', showIf: 'account.auto_clean.enabled' },
+        ]
+      },
+      {
         title: '选号并发限制', titleKey: 'config.schema.groups.selection',
         section: 'account.selection',
         fields: [

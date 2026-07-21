@@ -32,6 +32,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 	})
 	scheduler := accountcontrol.GetAccountRefreshScheduler(service)
 	validationScheduler := accountcontrol.GetSSOValidationScheduler(service)
+	autoCleanScheduler := accountcontrol.GetAutoCleanScheduler(state.repository)
 	leader := true
 	var localLockCleanup Hook
 	if state.runtimeStore != nil {
@@ -64,6 +65,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 	accountcontrol.SetRefreshService(service)
 	accountcontrol.SetRefreshScheduler(scheduler)
 	accountcontrol.SetSSOValidationScheduler(validationScheduler)
+	accountcontrol.SetAutoCleanScheduler(autoCleanScheduler)
 	accountcontrol.SetRefreshSchedulerLeader(leader)
 	if leader && state.schedulerKey != nil {
 		leaseRenewalCleanup = appMainStartSchedulerLeaderLeaseRenewal(
@@ -80,6 +82,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 		}
 		scheduler.Stop()
 		validationScheduler.Stop()
+		autoCleanScheduler.Stop()
 		if leaseRenewalCleanup != nil {
 			if err := leaseRenewalCleanup(ctx); err != nil {
 				return err
@@ -98,6 +101,7 @@ func defaultAppMainStartRefreshRuntime(ctx context.Context, state *appMainLifecy
 		}
 		accountcontrol.SetRefreshScheduler(nil)
 		accountcontrol.SetSSOValidationScheduler(nil)
+		accountcontrol.SetAutoCleanScheduler(nil)
 		accountcontrol.SetRefreshSchedulerLeader(false)
 		accountcontrol.SetRefreshService(nil)
 		state.bindAdminRuntime()

@@ -110,8 +110,12 @@ func normalizeVideoCreateOptions(options VideoCreateOptions) (normalizedVideoCre
 		return normalizedVideoCreate{}, platform.NewValidationError("Model '"+options.Model+"' is not a video model", "model", "")
 	}
 	prompt := strings.TrimSpace(options.Prompt)
-	if prompt == "" {
-		return normalizedVideoCreate{}, platform.NewValidationError("prompt cannot be empty", "prompt", "")
+	// 图生视频可省略 prompt；纯文生视频必须提供。
+	if prompt == "" && len(options.InputReferences) == 0 {
+		return normalizedVideoCreate{}, platform.NewValidationError("prompt cannot be empty for text-to-video; image-to-video may omit prompt", "prompt", "")
+	}
+	if err := validateVideoInputReferences(options.InputReferences); err != nil {
+		return normalizedVideoCreate{}, err
 	}
 	seconds := options.Seconds
 	if seconds == 0 {

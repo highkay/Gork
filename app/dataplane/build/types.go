@@ -9,10 +9,11 @@ const (
 	DefaultDeviceURL     = "https://auth.x.ai/oauth2/device/code"
 	DefaultTokenURL      = "https://auth.x.ai/oauth2/token"
 	DefaultBaseURL       = "https://cli-chat-proxy.grok.com/v1"
-	DefaultClientVersion = "0.2.99"
+	// 与 chenyme/grok2api v3.0.6（Build 0.2.106）协议对齐。
+	DefaultClientVersion = "0.2.106"
 	DefaultClientIDName  = "grok-shell"
 	DefaultTokenAuth     = "xai-grok-cli"
-	DefaultUserAgent     = "grok-shell/0.2.99 (linux; x86_64)"
+	DefaultUserAgent     = "grok-shell/" + DefaultClientVersion + " (linux; x86_64)"
 	CredentialProvider   = "grok_build"
 )
 

@@ -28,6 +28,37 @@ func (s *toolCallStreamState) empty() bool {
 	return s == nil || len(s.order) == 0
 }
 
+// snapshot 返回已聚合的 tool_calls（OpenAI function 形态）。
+func (s *toolCallStreamState) snapshot() []map[string]any {
+	if s == nil || len(s.order) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(s.order))
+	for _, idx := range s.order {
+		acc := s.byIndex[idx]
+		if acc == nil {
+			continue
+		}
+		args := acc.Args
+		if args == "" && len(acc.ArgDeltas) > 0 {
+			args = strings.Join(acc.ArgDeltas, "")
+		}
+		if args == "" {
+			args = "{}"
+		}
+		id := acc.ID
+		if id == "" {
+			id = "call_" + firstNonEmpty(acc.Name, "tool")
+		}
+		out = append(out, map[string]any{
+			"id":        id,
+			"name":      acc.Name,
+			"arguments": args,
+		})
+	}
+	return out
+}
+
 func (s *toolCallStreamState) ensure(index int) *toolCallAccum {
 	if s.byIndex == nil {
 		s.byIndex = map[int]*toolCallAccum{}

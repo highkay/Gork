@@ -120,15 +120,19 @@ build_provider = false
 # ==================== Build 上游（features.build_provider=true 时生效）====================
 [provider.build]
 base_url = "https://cli-chat-proxy.grok.com/v1"
-client_version = "0.2.99"
+client_version = "0.2.106"
 client_identifier = "grok-shell"
 token_auth = "xai-grok-cli"
-user_agent = "grok-shell/0.2.99 (linux; x86_64)"
+user_agent = "grok-shell/0.2.106 (linux; x86_64)"
 oauth_client_id = "b1a00492-073a-47ea-816f-4c329264a828"
 oauth_scope = "openid profile email offline_access grok-cli:access api:access"
 oauth_device_url = "https://auth.x.ai/oauth2/device/code"
 oauth_token_url = "https://auth.x.ai/oauth2/token"
 timeout_seconds = 120
+# 多轮 opaque reasoning 服务端回放（默认开；session 键 = 解析后的 prompt_cache_key）
+reasoning_replay_enabled = true
+reasoning_replay_ttl_sec = 3600
+reasoning_replay_max_entries = 10240
 
 
 # ==================== 本地缓存 ====================
@@ -221,6 +225,15 @@ max_failures = 3
 [account.invalid_credentials]
 # 运行时发现 invalid credentials 连续达到该次数后才自动 expire
 max_failures = 3
+
+# 过期账号自动硬删（默认关闭，对齐 chenyme reauth auto-clean）
+# 启用后首轮扫描等待一个 interval；仅删除 status=expired 且 expired_at 超过 min_age 的账号
+[account.auto_clean]
+enabled = false
+interval_sec = 3600
+min_age_sec = 86400
+include_disabled = false
+max_deletes_per_tick = 50
 
 
 [account.selection]

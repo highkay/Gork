@@ -57,8 +57,12 @@ func TestClientCreateResponseJSON(t *testing.T) {
 		if r.Header.Get("x-userid") != "user-9" {
 			t.Fatalf("x-userid=%q", r.Header.Get("x-userid"))
 		}
-		if r.Header.Get("x-grok-agent-id") == "" || r.Header.Get("x-grok-session-id") == "" {
-			t.Fatal("missing agent/session ids")
+		if r.Header.Get("x-grok-agent-id") == "" {
+			t.Fatal("missing agent id")
+		}
+		// 无 prompt_cache_key 时不得伪造随机 session（缓存亲和要求）。
+		if r.Header.Get("x-grok-session-id") != "" {
+			t.Fatalf("unexpected random session-id=%q", r.Header.Get("x-grok-session-id"))
 		}
 		body, _ := io.ReadAll(r.Body)
 		gotBody = body
@@ -186,4 +190,100 @@ func asUpstream(err error, target **UpstreamError) bool {
 	}
 	*target = ue
 	return true
+}
+
+func TestClientStableSessionFromPromptCacheKey(t *testing.T) {
+	cacheKey := ResolvePromptCacheKey("sess-stable", "", "grok-4")
+	wantSession := GrokSessionID(cacheKey)
+	if wantSession == "" {
+		t.Fatal("expected derived session id")
+	}
+	var gotSession, gotTurn, gotConv string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSession = r.Header.Get("x-grok-session-id")
+		gotTurn = r.Header.Get("x-grok-turn-idx")
+		gotConv = r.Header.Get("x-grok-conv-id")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"ok"}`))
+	}))
+	defer srv.Close()
+
+	client := NewAPIClient(srv.Client(), ClientConfig{BaseURL: srv.URL + "/v1"}.Normalize())
+	resp, err := client.CreateResponse(context.Background(), RequestMeta{
+		AccessToken:    "access",
+		Model:          "grok-4",
+		PromptCacheKey: cacheKey,
+		TurnIndex:      "7",
+	}, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if gotSession != wantSession {
+		t.Fatalf("session-id=%q want %q", gotSession, wantSession)
+	}
+	if gotConv != wantSession {
+		t.Fatalf("conv-id=%q want %q", gotConv, wantSession)
+	}
+	if gotTurn != "7" {
+		t.Fatalf("turn-idx=%q want 7", gotTurn)
+	}
+
+	// Same cache key must yield same session across calls.
+	resp2, err := client.CreateResponse(context.Background(), RequestMeta{
+		AccessToken:    "access",
+		PromptCacheKey: cacheKey,
+	}, strings.NewReader(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp2.Body.Close()
+}
+
+func TestNormalizeGrokTurnIndex(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"0", "0"},
+		{"7", "7"},
+		{" 12 ", "12"},
+		{"-1", ""},
+		{"1.5", ""},
+		{"abc", ""},
+		{strings.Repeat("9", 21), ""},
+	}
+	for _, tc := range cases {
+		if got := normalizeGrokTurnIndex(tc.in); got != tc.want {
+			t.Fatalf("normalizeGrokTurnIndex(%q)=%q want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+func TestApplyGrokTurnIndexRequiresSession(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://x", nil)
+	applyGrokTurnIndexHeader(req, "7")
+	if got := req.Header.Get("x-grok-turn-idx"); got != "" {
+		t.Fatalf("turn without session = %q", got)
+	}
+	req.Header.Set("x-grok-session-id", "session-1")
+	applyGrokTurnIndexHeader(req, "7")
+	if got := req.Header.Get("x-grok-turn-idx"); got != "7" {
+		t.Fatalf("turn with session = %q", got)
+	}
+}
+
+func TestGrokSessionIDStable(t *testing.T) {
+	a := GrokSessionID("my-session")
+	b := GrokSessionID("my-session")
+	c := GrokSessionID("other")
+	if a == "" || a != b {
+		t.Fatalf("unstable session: %q vs %q", a, b)
+	}
+	if a == c {
+		t.Fatal("different keys must differ")
+	}
+	if GrokSessionID("") != "" {
+		t.Fatal("empty key must yield empty session")
+	}
 }

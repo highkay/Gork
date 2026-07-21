@@ -39,10 +39,11 @@ func parseResponseInput(input any) []map[string]any {
 				}},
 			})
 		case "function_call_output":
+			// 保留多模态 tool output（文本 + 图片 parts），对齐 chenyme #713。
 			messages = append(messages, map[string]any{
 				"role":         "tool",
 				"tool_call_id": stringValue(item["call_id"], ""),
-				"content":      stringValue(item["output"], ""),
+				"content":      normalizeFunctionCallOutput(item["output"]),
 			})
 		case "message":
 			messages = append(messages, map[string]any{
@@ -52,6 +53,25 @@ func parseResponseInput(input any) []map[string]any {
 		}
 	}
 	return messages
+}
+
+// normalizeFunctionCallOutput 保留字符串输出；数组/多模态 content 走 normalizeResponseContent。
+func normalizeFunctionCallOutput(output any) any {
+	if output == nil {
+		return ""
+	}
+	switch typed := output.(type) {
+	case string:
+		return typed
+	case []any, []map[string]any:
+		return normalizeResponseContent(typed)
+	default:
+		// 非字符串标量：尽量转文本；结构化对象保留 normalize 路径。
+		if text := stringValue(output, ""); text != "" {
+			return text
+		}
+		return normalizeResponseContent(output)
+	}
 }
 
 func responseInputItems(input any) []map[string]any {

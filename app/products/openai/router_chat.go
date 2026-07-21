@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/dslzl/gork/app/control/model"
+	"github.com/dslzl/gork/app/dataplane/build"
 	"github.com/dslzl/gork/app/platform"
 	"github.com/dslzl/gork/app/platform/httpbody"
 	"github.com/dslzl/gork/app/platform/logging"
@@ -229,16 +231,31 @@ func dispatchChatText(r *http.Request, req ChatCompletionRequest, messages []map
 		value := *req.ReasoningEffort != "none"
 		emitThink = &value
 	}
+	// 从 Header 提取会话亲和种子；body.prompt_cache_key 走 RequestOverrides。
+	// 优先 Header（Claude Code / Codex 官方信号）。
+	var seed string
+	var turnIdx string
+	if r != nil {
+		seed = build.ExtractPromptCacheSeed(r.Header, nil)
+		turnIdx = build.ExtractGrokTurnIndex(r.Header)
+	}
+	var overrides map[string]any
+	if key := strings.TrimSpace(req.PromptCacheKey); key != "" {
+		overrides = map[string]any{"prompt_cache_key": key}
+	}
 	return routerCompletions(r.Context(), chatCompletionOptions{
-		Model:          req.Model,
-		Messages:       messages,
-		Stream:         &isStream,
-		EmitThink:      emitThink,
-		Tools:          req.Tools,
-		ToolChoice:     req.ToolChoice,
-		ResponseFormat: req.ResponseFormat,
-		Temperature:    routerFloatDefault(req.Temperature, 0.8),
-		TopP:           routerFloatDefault(req.TopP, 0.95),
-		StreamFrame:    streamFrame,
+		Model:            req.Model,
+		Messages:         messages,
+		Stream:           &isStream,
+		EmitThink:        emitThink,
+		Tools:            req.Tools,
+		ToolChoice:       req.ToolChoice,
+		ResponseFormat:   req.ResponseFormat,
+		Temperature:      routerFloatDefault(req.Temperature, 0.8),
+		TopP:             routerFloatDefault(req.TopP, 0.95),
+		RequestOverrides: overrides,
+		PromptCacheSeed:  seed,
+		GrokTurnIndex:    turnIdx,
+		StreamFrame:      streamFrame,
 	})
 }

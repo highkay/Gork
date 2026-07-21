@@ -61,6 +61,8 @@ type ChatCompletionRequest struct {
 	ResponseFormat    any              `json:"response_format,omitempty"`
 	ParallelToolCalls *bool            `json:"parallel_tool_calls,omitempty"`
 	MaxTokens         *int             `json:"max_tokens,omitempty"`
+	// PromptCacheKey 透传为 Build 官方 prompt_cache_key 会话亲和信号。
+	PromptCacheKey string `json:"prompt_cache_key,omitempty"`
 }
 
 func (r *ChatCompletionRequest) UnmarshalJSON(raw []byte) error {
@@ -139,4 +141,6 @@ type ResponsesCreateRequest struct {
 	ParallelToolCalls  *bool          `json:"parallel_tool_calls,omitempty"`
 	Include            []string       `json:"include,omitempty"`
 	Background         *bool          `json:"background,omitempty"`
+	// PromptCacheKey 透传 Build 会话亲和与 reasoning replay 键。
+	PromptCacheKey string `json:"prompt_cache_key,omitempty"`
 }

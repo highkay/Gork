@@ -2,6 +2,7 @@ package build
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -79,5 +80,50 @@ func TestChatStreamIgnoresEventsAfterError(t *testing.T) {
 	}
 	if strings.Count(joined, "data: [DONE]") != 1 {
 		t.Fatalf("expected one DONE: %s", joined)
+	}
+}
+
+func TestExtractPromptCacheSeedFromClaudeCodeHeader(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("X-Claude-Code-Session-Id", "sess-abc")
+	headers.Set("X-Claude-Code-Agent-Id", "worker-1")
+	got := ExtractPromptCacheSeed(headers, nil)
+	if got != "claude:sess-abc:agent:worker-1" {
+		t.Fatalf("seed=%q", got)
+	}
+}
+
+func TestExtractPromptCacheSeedFromCodexWindow(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("X-Codex-Window-Id", "win-9")
+	got := ExtractPromptCacheSeed(headers, nil)
+	if got != "codex:window:win-9" {
+		t.Fatalf("seed=%q", got)
+	}
+}
+
+func TestExtractPromptCacheSeedFromCodexTurnMetadata(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("X-Codex-Turn-Metadata", `{"prompt_cache_key":"codex-key-1","window_id":"w"}`)
+	got := ExtractPromptCacheSeed(headers, nil)
+	if got != "codex-key-1" {
+		t.Fatalf("seed=%q", got)
+	}
+}
+
+func TestExtractPromptCacheSeedSkipsClaudeTitleRequest(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("X-Claude-Code-Session-Id", "sess-title")
+	body := []byte(`{"system":"Generate a concise title for this coding session"}`)
+	if got := ExtractPromptCacheSeed(headers, body); got != "" {
+		t.Fatalf("title request seed=%q, want empty", got)
+	}
+}
+
+func TestExtractGrokTurnIndex(t *testing.T) {
+	headers := http.Header{}
+	headers.Set("x-grok-turn-idx", "42")
+	if got := ExtractGrokTurnIndex(headers); got != "42" {
+		t.Fatalf("turn=%q", got)
 	}
 }
