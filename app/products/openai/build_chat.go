@@ -50,13 +50,15 @@ type buildTokenRefresher interface {
 }
 
 func defaultBuildAPIClient() buildHTTPClient {
+	headerTimeoutSec := platformconfig.GlobalConfig.GetFloat("provider.build.response_header_timeout_sec", build.DefaultResponseHeaderTimeout.Seconds())
 	cfg := build.ClientConfig{
-		BaseURL:          platformconfig.GlobalConfig.GetStr("provider.build.base_url", build.DefaultBaseURL),
-		ClientVersion:    platformconfig.GlobalConfig.GetStr("provider.build.client_version", build.DefaultClientVersion),
-		ClientIdentifier: platformconfig.GlobalConfig.GetStr("provider.build.client_identifier", build.DefaultClientIDName),
-		TokenAuth:        platformconfig.GlobalConfig.GetStr("provider.build.token_auth", build.DefaultTokenAuth),
-		UserAgent:        platformconfig.GlobalConfig.GetStr("provider.build.user_agent", build.DefaultUserAgent),
-		Timeout:          time.Duration(platformconfig.GlobalConfig.GetFloat("provider.build.timeout_seconds", 120)) * time.Second,
+		BaseURL:               platformconfig.GlobalConfig.GetStr("provider.build.base_url", build.DefaultBaseURL),
+		ClientVersion:         platformconfig.GlobalConfig.GetStr("provider.build.client_version", build.DefaultClientVersion),
+		ClientIdentifier:      platformconfig.GlobalConfig.GetStr("provider.build.client_identifier", build.DefaultClientIDName),
+		TokenAuth:             platformconfig.GlobalConfig.GetStr("provider.build.token_auth", build.DefaultTokenAuth),
+		UserAgent:             platformconfig.GlobalConfig.GetStr("provider.build.user_agent", build.DefaultUserAgent),
+		Timeout:               time.Duration(platformconfig.GlobalConfig.GetFloat("provider.build.timeout_seconds", 120)) * time.Second,
+		ResponseHeaderTimeout: time.Duration(headerTimeoutSec * float64(time.Second)),
 	}
 	return build.NewAPIClient(nil, cfg)
 }

@@ -89,3 +89,14 @@ func TestMessagesToolAndResponseHelpers(t *testing.T) {
 		t.Fatalf("finish reason mapping mismatch")
 	}
 }
+
+func TestAnthropicUsageClampsCacheRead(t *testing.T) {
+	usage := anthropicUsageFromTotals(10, 2, 12)
+	if usage["input_tokens"] != 0 || usage["cache_read_input_tokens"] != 10 {
+		t.Fatalf("usage=%#v", usage)
+	}
+	usage = anthropicUsageFromTotals(100, 5, 40)
+	if usage["input_tokens"] != 60 || usage["cache_read_input_tokens"] != 40 {
+		t.Fatalf("usage=%#v", usage)
+	}
+}

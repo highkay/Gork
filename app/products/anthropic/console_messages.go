@@ -353,12 +353,39 @@ func consoleMessagesStart(options ConsoleMessagesOptions) map[string]any {
 }
 
 func consoleMessagesUsage(adapter *protocol.ConsoleStreamAdapter, messages []map[string]any, text string) map[string]any {
-	return map[string]any{"input_tokens": inputTokensFor(adapter, messages), "output_tokens": outputTokensFor(adapter, text)}
+	// 对齐 chenyme #751：input_tokens 为非缓存部分，cache_read_input_tokens 钳制到总 input。
+	totalInput := int64(inputTokensFor(adapter, messages))
+	cacheRead := int64(0)
+	if adapter != nil && adapter.Usage != nil {
+		cacheRead = int64(intFromAny(adapter.Usage["cache_read_input_tokens"]))
+		if cacheRead == 0 {
+			cacheRead = int64(intFromAny(adapter.Usage["cached_tokens"]))
+		}
+		if details, ok := adapter.Usage["input_tokens_details"].(map[string]any); ok {
+			if v := intFromAny(details["cached_tokens"]); v > 0 {
+				cacheRead = int64(v)
+			}
+		}
+	}
+	if cacheRead < 0 {
+		cacheRead = 0
+	}
+	if totalInput < 0 {
+		totalInput = 0
+	}
+	if cacheRead > totalInput {
+		cacheRead = totalInput
+	}
+	return anthropicUsageFromTotals(totalInput, int64(outputTokensFor(adapter, text)), cacheRead)
 }
 
 func inputTokensFor(adapter *protocol.ConsoleStreamAdapter, messages []map[string]any) int {
 	if adapter.Usage != nil {
 		if value := intFromAny(adapter.Usage["input_tokens"]); value != 0 {
+			return value
+		}
+		// 部分上游把 total 放在 prompt_tokens
+		if value := intFromAny(adapter.Usage["prompt_tokens"]); value != 0 {
 			return value
 		}
 	}
@@ -368,6 +395,9 @@ func inputTokensFor(adapter *protocol.ConsoleStreamAdapter, messages []map[strin
 func outputTokensFor(adapter *protocol.ConsoleStreamAdapter, text string) int {
 	if adapter.Usage != nil {
 		if value := intFromAny(adapter.Usage["output_tokens"]); value != 0 {
+			return value
+		}
+		if value := intFromAny(adapter.Usage["completion_tokens"]); value != 0 {
 			return value
 		}
 	}

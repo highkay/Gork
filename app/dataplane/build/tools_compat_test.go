@@ -82,3 +82,33 @@ func TestExtractToolCallsFromResponses(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNormalizeWebSearchExternalAccessFalseDropsTool(t *testing.T) {
+	out, err := NormalizeChatTools([]map[string]any{
+		{"type": "web_search", "external_web_access": false},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 0 {
+		t.Fatalf("expected tool dropped, got %#v", out)
+	}
+}
+
+func TestNormalizeXSearchDateValidation(t *testing.T) {
+	_, err := NormalizeChatTools([]map[string]any{
+		{"type": "x_search", "from_date": "2026-07-20", "to_date": "2026-07-10"},
+	})
+	if err == nil {
+		t.Fatal("expected from_date > to_date error")
+	}
+	out, err := NormalizeChatTools([]map[string]any{
+		{"type": "x_search", "from_date": "2026-07-01", "to_date": "2026-07-10"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0]["type"] != "x_search" {
+		t.Fatalf("out=%#v", out)
+	}
+}

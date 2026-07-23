@@ -9,12 +9,17 @@ const (
 	DefaultDeviceURL     = "https://auth.x.ai/oauth2/device/code"
 	DefaultTokenURL      = "https://auth.x.ai/oauth2/token"
 	DefaultBaseURL       = "https://cli-chat-proxy.grok.com/v1"
-	// 与 chenyme/grok2api v3.0.6（Build 0.2.106）协议对齐。
-	DefaultClientVersion = "0.2.106"
+	// 与 chenyme/grok2api v3.0.7（Build 0.2.110）协议对齐。
+	DefaultClientVersion = "0.2.110"
 	DefaultClientIDName  = "grok-shell"
 	DefaultTokenAuth     = "xai-grok-cli"
 	DefaultUserAgent     = "grok-shell/" + DefaultClientVersion + " (linux; x86_64)"
 	CredentialProvider   = "grok_build"
+
+	// DefaultResponseHeaderTimeout 等待上游响应头的默认超时（对齐 chenyme #750）。
+	DefaultResponseHeaderTimeout = 5 * time.Minute
+	MinResponseHeaderTimeout     = 30 * time.Second
+	MaxResponseHeaderTimeout     = 30 * time.Minute
 )
 
 // OAuthConfig 控制 Device OAuth 端点与 client 身份。
@@ -76,12 +81,13 @@ type Credential struct {
 
 // ClientConfig 是 Build 上游 HTTP 客户端配置（B-b 将使用；B-a 仅定义）。
 type ClientConfig struct {
-	BaseURL          string
-	ClientVersion    string
-	ClientIdentifier string
-	TokenAuth        string
-	UserAgent        string
-	Timeout          time.Duration
+	BaseURL               string
+	ClientVersion         string
+	ClientIdentifier      string
+	TokenAuth             string
+	UserAgent             string
+	Timeout               time.Duration
+	ResponseHeaderTimeout time.Duration
 }
 
 // Normalize 填入默认值。
@@ -103,6 +109,15 @@ func (c ClientConfig) Normalize() ClientConfig {
 	}
 	if c.Timeout <= 0 {
 		c.Timeout = 120 * time.Second
+	}
+	if c.ResponseHeaderTimeout <= 0 {
+		c.ResponseHeaderTimeout = DefaultResponseHeaderTimeout
+	}
+	if c.ResponseHeaderTimeout < MinResponseHeaderTimeout {
+		c.ResponseHeaderTimeout = MinResponseHeaderTimeout
+	}
+	if c.ResponseHeaderTimeout > MaxResponseHeaderTimeout {
+		c.ResponseHeaderTimeout = MaxResponseHeaderTimeout
 	}
 	return c
 }

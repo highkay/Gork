@@ -117,15 +117,17 @@ build_provider = false
 # ==================== Build 上游（features.build_provider=true 时生效）====================
 [provider.build]
 base_url = "https://cli-chat-proxy.grok.com/v1"
-client_version = "0.2.106"
+client_version = "0.2.110"
 client_identifier = "grok-shell"
 token_auth = "xai-grok-cli"
-user_agent = "grok-shell/0.2.106 (linux; x86_64)"
+user_agent = "grok-shell/0.2.110 (linux; x86_64)"
 oauth_client_id = "b1a00492-073a-47ea-816f-4c329264a828"
 oauth_scope = "openid profile email offline_access grok-cli:access api:access"
 oauth_device_url = "https://auth.x.ai/oauth2/device/code"
 oauth_token_url = "https://auth.x.ai/oauth2/token"
 timeout_seconds = 120
+# 等待上游响应头超时（秒）；对齐 chenyme #750，默认 300s
+response_header_timeout_sec = 300
 # 多轮 opaque reasoning 服务端回放（默认开；session 键 = 解析后的 prompt_cache_key）
 reasoning_replay_enabled = true
 reasoning_replay_ttl_sec = 3600

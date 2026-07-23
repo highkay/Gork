@@ -176,12 +176,12 @@ func (s *messagesStreamState) finish(ctx context.Context, options MessagesOption
 	if s.textStarted {
 		s.frames = append(s.frames, anthropicSSE("content_block_stop", map[string]any{"type": "content_block_stop", "index": s.blockIndex}))
 	}
-	// message_delta 补 input_tokens（对齐 chenyme #614；web 路径无 upstream usage 时用估算）
+	// message_delta 补 usage（#614 + #751 cache 拆分）
 	inputTokens := platform.EstimatePromptTokens(plan.Message, platform.PromptOverhead)
 	outputTokens := platform.EstimateTokens(strings.Join(s.textParts, "")) + platform.EstimateTokens(strings.Join(s.thinkParts, ""))
 	s.frames = append(s.frames, anthropicSSE("message_delta", map[string]any{
 		"type": "message_delta", "delta": s.finalDelta(),
-		"usage": map[string]any{"input_tokens": inputTokens, "output_tokens": outputTokens},
+		"usage": anthropicUsageFromTotals(int64(inputTokens), int64(outputTokens), 0),
 	}))
 	s.frames = append(s.frames, anthropicSSE("message_stop", map[string]any{"type": "message_stop"}), "data: [DONE]\n\n")
 	_ = options
@@ -217,7 +217,7 @@ func (s *messagesStreamState) finishToolStream(plan messagesPlan) {
 	inputTokens := platform.EstimatePromptTokens(plan.Message, platform.PromptOverhead)
 	s.frames = append(s.frames, anthropicSSE("message_delta", map[string]any{
 		"type": "message_delta", "delta": delta,
-		"usage": map[string]any{"input_tokens": inputTokens, "output_tokens": s.toolOutputTokens},
+		"usage": anthropicUsageFromTotals(int64(inputTokens), int64(s.toolOutputTokens), 0),
 	}))
 	s.frames = append(s.frames, anthropicSSE("message_stop", map[string]any{"type": "message_stop"}), "data: [DONE]\n\n")
 }
@@ -226,6 +226,6 @@ func messagesStreamStart(plan messagesPlan) map[string]any {
 	return map[string]any{
 		"id": plan.MessageID, "type": "message", "role": "assistant", "model": plan.Spec.ModelName,
 		"content": []any{}, "stop_reason": nil,
-		"usage": map[string]any{"input_tokens": platform.EstimatePromptTokens(plan.Message, platform.PromptOverhead), "output_tokens": 0},
+		"usage": anthropicUsageFromTotals(int64(platform.EstimatePromptTokens(plan.Message, platform.PromptOverhead)), 0, 0),
 	}
 }

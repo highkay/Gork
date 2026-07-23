@@ -53,6 +53,10 @@ func (f *fakeBuildAccountStore) Delete(_ context.Context, id int64) error {
 	return nil
 }
 
+func (f *fakeBuildAccountStore) SetStatusUntil(ctx context.Context, id int64, status string, reason string, _ time.Time) error {
+	return f.SetStatus(ctx, id, status, reason)
+}
+
 func (f *fakeBuildAccountStore) SetStatus(_ context.Context, id int64, status string, _ string) error {
 	for i, acc := range f.accounts {
 		if acc.ID == id {

@@ -278,17 +278,30 @@ WHERE id=? AND deleted_at IS NULL`,
 	return err
 }
 
-// SetStatus 更新状态。
+// SetStatus 更新状态；cooling 且未指定冷却截止时默认 2h。
 func (s *SQLiteStore) SetStatus(ctx context.Context, id int64, status string, reason string) error {
+	return s.SetStatusUntil(ctx, id, status, reason, time.Time{})
+}
+
+// SetStatusUntil 更新状态并可指定 cooling_until（status=cooling 时生效）。
+func (s *SQLiteStore) SetStatusUntil(ctx context.Context, id int64, status string, reason string, until time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	db, err := s.dbOrErr()
 	if err != nil {
 		return err
 	}
+	now := time.Now().UTC()
+	var cooling sql.NullInt64
+	if status == StatusCooling {
+		if until.IsZero() {
+			until = now.Add(build.FreeQuotaRecoveryPause)
+		}
+		cooling = sql.NullInt64{Int64: until.Unix(), Valid: true}
+	}
 	_, err = db.ExecContext(ctx, `
-UPDATE build_accounts SET status=?, state_reason=?, updated_at=? WHERE id=? AND deleted_at IS NULL`,
-		status, reason, time.Now().UTC().Unix(), id,
+UPDATE build_accounts SET status=?, state_reason=?, cooling_until=?, updated_at=? WHERE id=? AND deleted_at IS NULL`,
+		status, reason, cooling, now.Unix(), id,
 	)
 	return err
 }

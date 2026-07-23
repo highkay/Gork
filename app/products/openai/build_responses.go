@@ -135,11 +135,7 @@ func invokeBuildResponsesOnce(
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-		upErr := &build.UpstreamError{Status: resp.StatusCode, Body: string(raw), Op: "create_response"}
-		if build.IsRateLimited(upErr) {
-			_ = dir.SetStatus(ctx, acc.ID, buildaccount.StatusCooling, fmt.Sprintf("upstream %d", resp.StatusCode))
-		}
-		return chatCompletionResult{}, upErr
+		return chatCompletionResult{}, handleBuildUpstreamFailure(ctx, dir, acc, resp.StatusCode, string(raw), "create_response")
 	}
 	return readBuildResponsesResult(publicModel, meta.Model, meta.PromptCacheKey, meta.Stream, resp, cacheRoute, outcome)
 }

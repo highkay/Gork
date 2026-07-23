@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -38,13 +40,29 @@ type APIClient struct {
 	config ClientConfig
 }
 
-// NewAPIClient 创建上游客户端；httpClient 为空则用默认超时客户端。
+// NewAPIClient 创建上游客户端；httpClient 为空则用带 ResponseHeaderTimeout 的默认客户端。
 func NewAPIClient(httpClient *http.Client, cfg ClientConfig) *APIClient {
 	cfg = cfg.Normalize()
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: cfg.Timeout}
+		httpClient = newBuildHTTPClient(cfg)
 	}
 	return &APIClient{http: httpClient, config: cfg}
+}
+
+// newBuildHTTPClient 构造支持整体 Timeout + 响应头超时的 HTTP 客户端。
+func newBuildHTTPClient(cfg ClientConfig) *http.Client {
+	dialer := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: cfg.ResponseHeaderTimeout,
+	}
+	return &http.Client{Timeout: cfg.Timeout, Transport: transport}
 }
 
 // ListModels GET /models，返回 data[].id。

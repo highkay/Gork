@@ -230,7 +230,30 @@ func buildAnthropicMessageResponse(id, modelName string, content []map[string]an
 	return map[string]any{
 		"id": id, "type": "message", "role": "assistant", "model": modelName,
 		"content": content, "stop_reason": stopReason, "stop_sequence": nil,
-		"usage": map[string]any{"input_tokens": inputTokens, "output_tokens": outputTokens},
+		"usage": anthropicUsageFromTotals(int64(inputTokens), int64(outputTokens), 0),
+	}
+}
+
+// anthropicUsageFromTotals 对齐 chenyme #751：cache_read 钳制到总 input，input_tokens 为非缓存部分。
+// 数值用 int 保持与既有响应/测试一致。
+func anthropicUsageFromTotals(totalInput, output, cacheRead int64) map[string]any {
+	if totalInput < 0 {
+		totalInput = 0
+	}
+	if output < 0 {
+		output = 0
+	}
+	if cacheRead < 0 {
+		cacheRead = 0
+	}
+	if cacheRead > totalInput {
+		cacheRead = totalInput
+	}
+	return map[string]any{
+		"input_tokens":                int(totalInput - cacheRead),
+		"output_tokens":               int(output),
+		"cache_creation_input_tokens": 0,
+		"cache_read_input_tokens":     int(cacheRead),
 	}
 }
 
